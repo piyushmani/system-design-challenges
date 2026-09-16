@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reducing Latency in Database-Heavy Applications Under Load — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <span class="topbar-date">30 AUG 2025</span>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Database Performance</span>
+      <span class="tag tag--green">Scalability</span>
+      <span class="tag tag--amber">Query Optimization</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Reducing Latency in Database-Heavy Applications Under Load</h1>
+      <p class="q-scenario"><strong>Priya</strong>, a senior backend developer, is investigating performance bottlenecks in a production system that serves <strong>millions of requests daily</strong>. During peak traffic windows, database query response times degrade significantly, leading to <strong>timeouts</strong> and a poor end-user experience. She needs to choose the most effective strategy to enhance query throughput and minimize response latency.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Create composite (multi-column) indexes tailored to the most common query patterns.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Introduce a caching layer (e.g., Redis or Memcached) to serve repeated query results from memory.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Apply table partitioning to spread data across multiple nodes and balance the read/write workload.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Denormalize selected tables to eliminate expensive join operations and speed up read-heavy queries.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Caching Layer</h3>
+        <p>Introducing a <strong>caching layer</strong> (such as Redis or Memcached) is the most impactful single strategy for a system already suffering latency spikes under peak load. Here's why it stands out:</p>
+        <ul>
+          <li>**Immediate latency reduction:** Cache hits return data in <strong>sub-millisecond</strong> time versus tens or hundreds of milliseconds for a database query. For hot data paths, this can reduce p99 latency by <strong>10×–100×</strong>.</li>
+          <li>**Load shedding:** By intercepting repeated reads before they reach the database, caching dramatically reduces the number of queries hitting the DB during peak hours — exactly when the system struggles.</li>
+          <li>**Non-invasive:** Unlike schema changes (denormalization) or infrastructure changes (partitioning), a cache can be layered on top of the existing architecture with minimal refactoring.</li>
+          <li>**Battle-tested at scale:** Companies like Twitter, Instagram, and GitHub use read-through and write-behind caching as a cornerstone of their high-traffic architectures.</li>
+        </ul>
+        <p>A well-designed caching strategy includes <strong>TTL-based expiry</strong>, <strong>cache invalidation on writes</strong>, and a <strong>cache-aside or read-through pattern</strong> to keep data fresh while absorbing the majority of read traffic.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📇</div>
+          <h4>A — Composite Indexes</h4>
+          <p>Indexes speed up <strong>individual query execution</strong>, but they don't reduce the <em>volume</em> of queries hitting the database. Under peak load with millions of identical reads, every request still round-trips to the DB. Indexes also add write overhead (every INSERT/UPDATE must maintain the index B-tree).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧩</div>
+          <h4>C — Table Partitioning</h4>
+          <p>Partitioning helps when a <strong>single table is too large</strong> to scan efficiently or when you need to shard writes across nodes. But it introduces significant operational complexity (cross-partition queries, rebalancing, migration) and doesn't help if the bottleneck is repeated reads of the same data.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📋</div>
+          <h4>D — Denormalization</h4>
+          <p>Removing JOINs speeds up reads, but it <strong>duplicates data</strong>, complicates writes, and risks inconsistency. It's a permanent schema change that's hard to reverse. For Priya's scenario (peak-hour spikes on a working system), this is a heavy-handed structural change when a simpler layer can solve the problem.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Caching Layer ✓</h4>
+          <p>Introduce a caching layer (e.g., Redis or Memcached) to serve repeated query results from memory.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, senior engineers rarely pick <em>just one</em> strategy. The optimal production setup layers <strong>multiple techniques</strong> together:</p>
+        <ul>
+          <li>**Layer 1 — Caching:** Intercept hot reads with Redis/Memcached (biggest immediate win).</li>
+          <li>**Layer 2 — Indexing:** Ensure all remaining DB queries are well-indexed (steady-state performance).</li>
+          <li>**Layer 3 — Partitioning:** Shard only when single-node DB storage or write throughput becomes the bottleneck.</li>
+          <li>**Layer 4 — Denormalization:** Apply surgically to specific read-heavy paths where JOINs are proven bottlenecks via query profiling.</li>
+        </ul>
+        <p>Priya's first move should be caching because it yields the <strong>highest impact with the lowest risk</strong>. She can then layer in other optimizations based on profiling data.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When facing latency spikes under peak traffic, <strong>reduce demand on the database first</strong> — don't just make the database faster. A caching layer absorbs the thundering herd, buys time, and is the highest-ROI first step in any database performance toolkit.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

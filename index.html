@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <span class="topbar-date">Practice &amp; Learn</span>
+    </header>
+
+    <section class="hero">
+      <h1>System Design Challenges</h1>
+      <p>Sharpen your system design skills with real-world engineering scenarios. Pick a challenge, think through the
+        trade-offs, and reveal the expert analysis.</p>
+    </section>
+
+    <div class="stats-bar">
+      <div class="stat">
+        <div class="stat-num" id="visibleCount">1</div>
+        <div class="stat-label">Challenges</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">3</div>
+        <div class="stat-label">Topics</div>
+      </div>
+    </div>
+
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" class="search-input" id="searchInput" placeholder="Search by title or tag…"
+        autocomplete="off" />
+    </div>
+
+    <div class="filter-bar">
+      <span class="filter-tag" data-tag="Database Performance">Database Performance</span>
+      <span class="filter-tag" data-tag="Query Optimization">Query Optimization</span>
+      <span class="filter-tag" data-tag="Scalability">Scalability</span>
+    </div>
+
+    <div class="problem-grid">
+      <a href="questions/reducing-latency-in-database-heavy-applications-under-load.html" class="problem-card"
+        data-title="reducing latency in database-heavy applications under load"
+        data-tags="database performance,scalability,query optimization">
+        <span class="card-date">30 AUG 2026</span>
+        <span class="card-title">Reducing Latency in Database-Heavy Applications Under Load</span>
+        <span class="card-tags"><span class="tag tag--purple">Database Performance</span> <span
+            class="tag tag--green">Scalability</span> <span class="tag tag--amber">Query Optimization</span></span>
+        <span class="card-arrow">→</span>
+      </a>
+
+      <div class="no-results" id="noResults" style="display:none">
+        <div class="nr-icon">🔎</div>
+        <p>No challenges match your search. Try a different keyword.</p>
+      </div>
+    </div>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="js/main.js"></script>
+</body>
+
+</html>

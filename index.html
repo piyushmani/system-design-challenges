@@ -8,15 +8,27 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
 </head>
 <body>
-  <div class="page">
+  <div class="page home">
     <header class="topbar">
       <a href="index.html" class="topbar-brand">
         <span class="logo">SD</span>
         System Design Challenges
       </a>
-      <span class="topbar-date">Practice &amp; Learn</span>
+      <div class="topbar-right">
+        <span class="topbar-date">Engineering Case Studies</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
     </header>
 
     <section class="hero">
@@ -63,44 +75,54 @@
     </div>
 
     <div class="problem-grid">
-      <a href="questions/reducing-latency-in-database-heavy-applications-under-load.html" class="problem-card"
-         data-title="reducing latency in database-heavy applications under load"
-         data-tags="database performance,scalability,query optimization">
-        <span class="card-date">30 AUG 2025</span>
-        <span class="card-title">Reducing Latency in Database-Heavy Applications Under Load</span>
-        <span class="card-tags"><span class="tag tag--purple">Database Performance</span> <span class="tag tag--green">Scalability</span> <span class="tag tag--amber">Query Optimization</span></span>
-        <span class="card-arrow">→</span>
-      </a>
-      <a href="questions/navigating-the-cap-trade-off-in-real-time-distributed-messaging.html" class="problem-card"
-         data-title="navigating the cap trade-off in real-time distributed messaging"
-         data-tags="cap theorem,distributed systems,system architecture,conflict resolution,crdts">
-        <span class="card-date">31 AUG 2025</span>
-        <span class="card-title">Navigating the CAP Trade-Off in Real-Time Distributed Messaging</span>
-        <span class="card-tags"><span class="tag tag--purple">CAP Theorem</span> <span class="tag tag--green">Distributed Systems</span> <span class="tag tag--amber">System Architecture</span> <span class="tag tag--blue">Conflict Resolution</span> <span class="tag tag--red">CRDTs</span></span>
-        <span class="card-arrow">→</span>
-      </a>
-      <a href="questions/multi-region-data-replication-for-inventory-systems-under-consistency-pressure.html" class="problem-card"
-         data-title="multi-region data replication for inventory systems under consistency pressure"
-         data-tags="data replication,consistency models,multi-region architecture,e-commerce infrastructure">
-        <span class="card-date">01 SEP 2025</span>
-        <span class="card-title">Multi-Region Data Replication for Inventory Systems Under Consistency Pressure</span>
-        <span class="card-tags"><span class="tag tag--purple">Data Replication</span> <span class="tag tag--green">Consistency Models</span> <span class="tag tag--amber">Multi-Region Architecture</span> <span class="tag tag--blue">E-Commerce Infrastructure</span></span>
+      <a href="questions/building-resilient-microservices-the-error-handling-architecture-decision.html" class="problem-card"
+         data-title="building resilient microservices: the error handling architecture decision"
+         data-tags="error handling,microservices resilience,system architecture,fault tolerance">
+        <span class="card-title">Building Resilient Microservices: The Error Handling Architecture Decision</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Error Handling</span> <span class="tag tag--green">Microservices Resilience</span> <span class="tag tag--amber">System Architecture</span>
+          <span class="card-date">24 FEB 2026</span>
+        </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/balancing-read-and-write-throughput-in-a-dual-traffic-pattern-platform.html" class="problem-card"
          data-title="balancing read and write throughput in a dual-traffic-pattern platform"
          data-tags="read vs write scaling,distributed systems,database architecture,performance trade-offs">
-        <span class="card-date">02 SEP 2025</span>
         <span class="card-title">Balancing Read and Write Throughput in a Dual-Traffic-Pattern Platform</span>
-        <span class="card-tags"><span class="tag tag--purple">Read vs Write Scaling</span> <span class="tag tag--green">Distributed Systems</span> <span class="tag tag--amber">Database Architecture</span> <span class="tag tag--blue">Performance Trade-offs</span></span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Read vs Write Scaling</span> <span class="tag tag--green">Distributed Systems</span> <span class="tag tag--amber">Database Architecture</span>
+          <span class="card-date">23 FEB 2026</span>
+        </div>
         <span class="card-arrow">→</span>
       </a>
-      <a href="questions/building-resilient-microservices-the-error-handling-architecture-decision.html" class="problem-card"
-         data-title="building resilient microservices: the error handling architecture decision"
-         data-tags="error handling,microservices resilience,system architecture,fault tolerance">
-        <span class="card-date">03 SEP 2025</span>
-        <span class="card-title">Building Resilient Microservices: The Error Handling Architecture Decision</span>
-        <span class="card-tags"><span class="tag tag--purple">Error Handling</span> <span class="tag tag--green">Microservices Resilience</span> <span class="tag tag--amber">System Architecture</span> <span class="tag tag--blue">Fault Tolerance</span></span>
+      <a href="questions/multi-region-data-replication-for-inventory-systems-under-consistency-pressure.html" class="problem-card"
+         data-title="multi-region data replication for inventory systems under consistency pressure"
+         data-tags="data replication,consistency models,multi-region architecture,e-commerce infrastructure">
+        <span class="card-title">Multi-Region Data Replication for Inventory Systems Under Consistency Pressure</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Data Replication</span> <span class="tag tag--green">Consistency Models</span> <span class="tag tag--amber">Multi-Region Architecture</span>
+          <span class="card-date">22 FEB 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/navigating-the-cap-trade-off-in-real-time-distributed-messaging.html" class="problem-card"
+         data-title="navigating the cap trade-off in real-time distributed messaging"
+         data-tags="cap theorem,distributed systems,system architecture,conflict resolution,crdts">
+        <span class="card-title">Navigating the CAP Trade-Off in Real-Time Distributed Messaging</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">CAP Theorem</span> <span class="tag tag--green">Distributed Systems</span> <span class="tag tag--amber">System Architecture</span>
+          <span class="card-date">21 FEB 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/reducing-latency-in-database-heavy-applications-under-load.html" class="problem-card"
+         data-title="reducing latency in database-heavy applications under load"
+         data-tags="database performance,scalability,query optimization">
+        <span class="card-title">Reducing Latency in Database-Heavy Applications Under Load</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Database Performance</span> <span class="tag tag--green">Scalability</span> <span class="tag tag--amber">Query Optimization</span>
+          <span class="card-date">20 FEB 2026</span>
+        </div>
         <span class="card-arrow">→</span>
       </a>
 

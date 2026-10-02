@@ -113,7 +113,24 @@
     }
   }
 
+  // ── Theme Toggle ───────────────────────────────
+  function initTheme() {
+    const toggleBtns = document.querySelectorAll('.theme-toggle');
+    if (!toggleBtns.length) return;
+
+    toggleBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+      });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
     init();
     initHome();
   });

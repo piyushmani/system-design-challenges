@@ -1,18 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>System Design Challenges</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
-
 <body>
   <div class="page">
     <header class="topbar">
@@ -25,41 +21,86 @@
 
     <section class="hero">
       <h1>System Design Challenges</h1>
-      <p>Sharpen your system design skills with real-world engineering scenarios. Pick a challenge, think through the
-        trade-offs, and reveal the expert analysis.</p>
+      <p>Sharpen your system design skills with real-world engineering scenarios. Pick a challenge, think through the trade-offs, and reveal the expert analysis.</p>
     </section>
 
     <div class="stats-bar">
       <div class="stat">
-        <div class="stat-num" id="visibleCount">1</div>
+        <div class="stat-num" id="visibleCount">5</div>
         <div class="stat-label">Challenges</div>
       </div>
       <div class="stat">
-        <div class="stat-num">3</div>
+        <div class="stat-num">18</div>
         <div class="stat-label">Topics</div>
       </div>
     </div>
 
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
-      <input type="text" class="search-input" id="searchInput" placeholder="Search by title or tag…"
-        autocomplete="off" />
+      <input type="text" class="search-input" id="searchInput"
+             placeholder="Search by title or tag…" autocomplete="off" />
     </div>
 
     <div class="filter-bar">
+      <span class="filter-tag" data-tag="CAP Theorem">CAP Theorem</span>
+      <span class="filter-tag" data-tag="CRDTs">CRDTs</span>
+      <span class="filter-tag" data-tag="Conflict Resolution">Conflict Resolution</span>
+      <span class="filter-tag" data-tag="Consistency Models">Consistency Models</span>
+      <span class="filter-tag" data-tag="Data Replication">Data Replication</span>
+      <span class="filter-tag" data-tag="Database Architecture">Database Architecture</span>
       <span class="filter-tag" data-tag="Database Performance">Database Performance</span>
+      <span class="filter-tag" data-tag="Distributed Systems">Distributed Systems</span>
+      <span class="filter-tag" data-tag="E-Commerce Infrastructure">E-Commerce Infrastructure</span>
+      <span class="filter-tag" data-tag="Error Handling">Error Handling</span>
+      <span class="filter-tag" data-tag="Fault Tolerance">Fault Tolerance</span>
+      <span class="filter-tag" data-tag="Microservices Resilience">Microservices Resilience</span>
+      <span class="filter-tag" data-tag="Multi-Region Architecture">Multi-Region Architecture</span>
+      <span class="filter-tag" data-tag="Performance Trade-offs">Performance Trade-offs</span>
       <span class="filter-tag" data-tag="Query Optimization">Query Optimization</span>
+      <span class="filter-tag" data-tag="Read vs Write Scaling">Read vs Write Scaling</span>
       <span class="filter-tag" data-tag="Scalability">Scalability</span>
+      <span class="filter-tag" data-tag="System Architecture">System Architecture</span>
     </div>
 
     <div class="problem-grid">
       <a href="questions/reducing-latency-in-database-heavy-applications-under-load.html" class="problem-card"
-        data-title="reducing latency in database-heavy applications under load"
-        data-tags="database performance,scalability,query optimization">
-        <span class="card-date">30 AUG 2026</span>
+         data-title="reducing latency in database-heavy applications under load"
+         data-tags="database performance,scalability,query optimization">
+        <span class="card-date">30 AUG 2025</span>
         <span class="card-title">Reducing Latency in Database-Heavy Applications Under Load</span>
-        <span class="card-tags"><span class="tag tag--purple">Database Performance</span> <span
-            class="tag tag--green">Scalability</span> <span class="tag tag--amber">Query Optimization</span></span>
+        <span class="card-tags"><span class="tag tag--purple">Database Performance</span> <span class="tag tag--green">Scalability</span> <span class="tag tag--amber">Query Optimization</span></span>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/navigating-the-cap-trade-off-in-real-time-distributed-messaging.html" class="problem-card"
+         data-title="navigating the cap trade-off in real-time distributed messaging"
+         data-tags="cap theorem,distributed systems,system architecture,conflict resolution,crdts">
+        <span class="card-date">31 AUG 2025</span>
+        <span class="card-title">Navigating the CAP Trade-Off in Real-Time Distributed Messaging</span>
+        <span class="card-tags"><span class="tag tag--purple">CAP Theorem</span> <span class="tag tag--green">Distributed Systems</span> <span class="tag tag--amber">System Architecture</span> <span class="tag tag--blue">Conflict Resolution</span> <span class="tag tag--red">CRDTs</span></span>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/multi-region-data-replication-for-inventory-systems-under-consistency-pressure.html" class="problem-card"
+         data-title="multi-region data replication for inventory systems under consistency pressure"
+         data-tags="data replication,consistency models,multi-region architecture,e-commerce infrastructure">
+        <span class="card-date">01 SEP 2025</span>
+        <span class="card-title">Multi-Region Data Replication for Inventory Systems Under Consistency Pressure</span>
+        <span class="card-tags"><span class="tag tag--purple">Data Replication</span> <span class="tag tag--green">Consistency Models</span> <span class="tag tag--amber">Multi-Region Architecture</span> <span class="tag tag--blue">E-Commerce Infrastructure</span></span>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/balancing-read-and-write-throughput-in-a-dual-traffic-pattern-platform.html" class="problem-card"
+         data-title="balancing read and write throughput in a dual-traffic-pattern platform"
+         data-tags="read vs write scaling,distributed systems,database architecture,performance trade-offs">
+        <span class="card-date">02 SEP 2025</span>
+        <span class="card-title">Balancing Read and Write Throughput in a Dual-Traffic-Pattern Platform</span>
+        <span class="card-tags"><span class="tag tag--purple">Read vs Write Scaling</span> <span class="tag tag--green">Distributed Systems</span> <span class="tag tag--amber">Database Architecture</span> <span class="tag tag--blue">Performance Trade-offs</span></span>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/building-resilient-microservices-the-error-handling-architecture-decision.html" class="problem-card"
+         data-title="building resilient microservices: the error handling architecture decision"
+         data-tags="error handling,microservices resilience,system architecture,fault tolerance">
+        <span class="card-date">03 SEP 2025</span>
+        <span class="card-title">Building Resilient Microservices: The Error Handling Architecture Decision</span>
+        <span class="card-tags"><span class="tag tag--purple">Error Handling</span> <span class="tag tag--green">Microservices Resilience</span> <span class="tag tag--amber">System Architecture</span> <span class="tag tag--blue">Fault Tolerance</span></span>
         <span class="card-arrow">→</span>
       </a>
 
@@ -75,5 +116,4 @@
   </div>
   <script src="js/main.js"></script>
 </body>
-
 </html>

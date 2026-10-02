@@ -113,6 +113,65 @@
       </div>
 
       <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read Latency Impact</th><th>Write Overhead</th><th>Implementation Complexity</th><th>Reversibility</th><th>Scales with Traffic</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Composite Indexes</td><td>Moderate ⬆</td><td>High ⬇</td><td>Low ✅</td><td>Easy ✅</td><td>No ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Caching ✓</td><td>Very High ⬆⬆</td><td>None ✅</td><td>Medium</td><td>Easy ✅</td><td>Yes ✅</td></tr>
+            <tr><td class="tt-option">C — Table Partitioning</td><td>Moderate ⬆</td><td>Medium</td><td>High ⬇</td><td>Hard ❌</td><td>Yes ✅</td></tr>
+            <tr><td class="tt-option">D — Denormalization</td><td>High ⬆</td><td>High ⬇</td><td>High ⬇</td><td>Very Hard ❌</td><td>Partial</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Composite Indexes</h4>
+          <p>Queries are diverse (not repeated identical reads) and the database itself is the bottleneck due to full table scans or missing index coverage. Works best when your query patterns are stable and predictable.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">✅</div>
+          <h4>B — Caching</h4>
+          <p>Read-heavy workload with high temporal locality — the same data is requested thousands of times between changes. Ideal when the system is already functional but drowning under peak traffic volume.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Table Partitioning</h4>
+          <p>Table has grown to billions of rows and queries naturally partition by a dimension (date, tenant, region). Also critical when write throughput on a single node is the limiting factor.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Denormalization</h4>
+          <p>Analytics or reporting dashboards that run complex multi-table JOINs and can tolerate slight data staleness. Best applied surgically after profiling proves JOINs are the dominant cost.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li>**Caching everything blindly** — Without analyzing access patterns, you end up with a bloated cache full of cold keys. Cache only hot paths identified through query profiling.</li>
+          <li>**Ignoring cache invalidation** — Serving stale data after writes is the #1 caching bug. Always pair cache writes with an invalidation strategy (write-through, write-behind, or explicit eviction on mutation).</li>
+          <li>**Cache stampede on expiry** — When a popular key expires, hundreds of concurrent requests all hit the DB simultaneously. Use request coalescing (singleflight), probabilistic early expiry, or lock-based refresh.</li>
+          <li>**Adding indexes to every column** — Indexes aren't free. Each one adds storage and slows writes. Profile your actual slow queries with EXPLAIN ANALYZE before adding indexes.</li>
+          <li>**Premature denormalization** — Duplicating data before proving JOINs are the bottleneck creates permanent write complexity for a problem that might not exist.</li>
+          <li>**Partitioning by the wrong key** — Choosing the wrong partition key (e.g., alphabetical instead of time-based for logs) creates hot partitions that are worse than no partitioning.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
         <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
         <p>In practice, senior engineers rarely pick <em>just one</em> strategy. The optimal production setup layers <strong>multiple techniques</strong> together:</p>
         <ul>

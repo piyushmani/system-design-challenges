@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Balancing Read and Write Throughput in a Dual-Traffic-Pattern Platform — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <span class="topbar-date">02 SEP 2025</span>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Read vs Write Scaling</span>
+      <span class="tag tag--green">Distributed Systems</span>
+      <span class="tag tag--amber">Database Architecture</span>
+      <span class="tag tag--blue">Performance Trade-offs</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Balancing Read and Write Throughput in a Dual-Traffic-Pattern Platform</h1>
+      <p class="q-scenario"><strong>Sarah</strong>, a software engineer at a fast-growing social media platform, is tackling a <strong>dual-traffic-pattern problem</strong>: during peak hours, the system is hammered with <strong>write-heavy traffic</strong> (posts, comments, reactions, stories) while off-peak periods are dominated by <strong>read-heavy traffic</strong> (timeline browsing, search, profile views). The current single-database architecture is buckling under both patterns, and Sarah needs to choose a scaling strategy that optimizes for <strong>both read and write throughput</strong> without over-engineering for one at the expense of the other.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Deploy a write-through cache layer to absorb write operations into memory while simultaneously serving cached data for faster reads.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Implement horizontal sharding to distribute write traffic across multiple independent database instances based on a partition key.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Introduce materialized views to precompute and persist the results of complex read queries, reducing query execution time for common access patterns.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Adopt a primary-replica (master-slave) database topology that routes all writes to a dedicated primary node while distributing read traffic across multiple read replicas.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Primary-Replica Topology</h3>
+        <p>Adopting a <strong>primary-replica topology</strong> is the most effective single architectural decision for Sarah's dual-traffic-pattern workload. It directly addresses the core problem — <strong>read and write traffic competing for the same resources</strong> — by physically separating them into dedicated paths. Here's why it stands out:</p>
+        <ul>
+          <li>**Direct separation of concerns:** The primary node is optimized exclusively for write throughput (indexes tuned for inserts/updates, write-ahead log configuration, minimal read contention). Read replicas are optimized for query performance (additional read-oriented indexes, query caching, connection pooling). Neither path degrades the other.</li>
+          <li>**Elastic read scaling:** During off-peak read-heavy periods, Sarah can spin up additional read replicas to absorb the load — this scales <strong>horizontally and independently</strong> of write capacity. During peak write hours, read replicas continue serving stale-but-recent data (typically seconds behind) while the primary absorbs the write surge without read contention.</li>
+          <li>**Minimal architectural disruption:** Primary-replica is natively supported by every major database (PostgreSQL streaming replication, MySQL replication, MongoDB replica sets). It requires no schema changes, no application-level sharding logic, and no data model restructuring. Sarah can deploy it <strong>incrementally</strong> — add one replica, route read traffic, measure, add more.</li>
+          <li>**Battle-tested at social media scale:** Twitter, Instagram, and LinkedIn all use primary-replica as the foundational layer of their database architecture. It's the first scaling step before more complex patterns (sharding, CQRS) become necessary, and it often <strong>buys 6–18 months of headroom</strong> before the next architecture evolution is needed.</li>
+        </ul>
+        <p>Sarah should implement primary-replica with a <strong>connection-aware routing layer</strong> (e.g., ProxySQL, PgBouncer with read/write splitting, or application-level routing). Reads that tolerate slight staleness (timelines, profiles, search) go to replicas. Reads that require freshness (user's own just-posted content, notification counts) go to the primary with a <strong>read-your-writes consistency</strong> guarantee. This gives users the perception of strong consistency while distributing 80–90% of read traffic to replicas.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">💾</div>
+          <h4>A — Write-Through Cache</h4>
+          <p>Write-through caching writes data to both cache and database simultaneously. This <strong>adds latency to every write</strong> (two write operations instead of one) — exactly the wrong trade-off during peak write hours. It also doesn't reduce database write load at all; every write still hits the DB. The read benefits are real (cache hits are fast), but a write-through cache is optimized for <strong>read-after-write consistency</strong>, not write throughput. For Sarah's peak write surges, this makes the write path slower while only helping reads that hit cached keys.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔪</div>
+          <h4>B — Horizontal Sharding</h4>
+          <p>Sharding distributes writes across multiple database instances, which does improve write throughput. But it introduces <strong>massive complexity</strong>: cross-shard queries (e.g., a user's timeline pulling posts from friends on different shards), shard rebalancing as data grows unevenly, application-level routing logic, and distributed transactions. Sharding is the right tool when a <strong>single node can't handle write volume</strong> — but Sarah's problem is read/write contention, not single-node write saturation. Sharding is a Layer 2 optimization after primary-replica has been exhausted.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📊</div>
+          <h4>C — Materialized Views</h4>
+          <p>Materialized views precompute expensive read queries, which dramatically speeds up specific read patterns (e.g., 'top posts this week', 'follower count'). But they <strong>only help reads</strong> — they do nothing for write throughput during peak hours. Worse, materialized views must be <strong>refreshed on write</strong>, which adds write overhead. They're also rigid: each view is tailored to one query pattern, so new read patterns require new views. Materialized views are a powerful <strong>tactical optimization</strong> for known hot queries, but they're not a scaling architecture — they're a query-level optimization layered on top of one.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>D — Primary-Replica Topology ✓</h4>
+          <p>Adopt a primary-replica (master-slave) database topology that routes all writes to a dedicated primary node while distributing read traffic across multiple read replicas.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Throughput Impact</th><th>Read Throughput Impact</th><th>Implementation Complexity</th><th>Schema Changes Required</th><th>Incremental Deployability</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Write-Through Cache</td><td>Negative (adds write latency) ❌</td><td>High ⬆</td><td>Medium</td><td>None ✅</td><td>Yes ✅</td></tr>
+            <tr><td class="tt-option">B — Horizontal Sharding</td><td>High ⬆⬆</td><td>Complex (cross-shard) ⬇</td><td>Very High ⬇</td><td>Significant ❌</td><td>No (big-bang) ❌</td></tr>
+            <tr><td class="tt-option">C — Materialized Views</td><td>Negative (refresh cost) ❌</td><td>High for specific queries ⬆</td><td>Low-Medium</td><td>None ✅</td><td>Yes ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Primary-Replica ✓</td><td>Neutral (dedicated primary) ✅</td><td>High (horizontal scaling) ⬆⬆</td><td>Low ✅</td><td>None ✅</td><td>Yes ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Write-Through Cache</h4>
+          <p>Read-after-write consistency is critical (e.g., user profile updates that must be immediately visible) and write volume is moderate. Best used as a complement to primary-replica, not as a standalone scaling strategy.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Horizontal Sharding</h4>
+          <p>Single-node write throughput is the proven bottleneck (>50K writes/sec), or the dataset is too large for a single node's storage. Natural fit when data partitions cleanly by a dimension (user ID, tenant, region) with minimal cross-shard queries.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Materialized Views</h4>
+          <p>Specific read queries are expensive (multi-table JOINs, aggregations, ranking algorithms) and their results can tolerate staleness. Ideal for dashboards, analytics, recommendation feeds, and trending content where precomputation is more efficient than real-time computation.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Primary-Replica</h4>
+          <p>Read and write traffic have different volumes or temporal patterns, and the database is struggling with contention between the two. The default first-step scaling architecture for any application that has outgrown a single database instance.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li>**Sending all reads to the primary** — After setting up replicas, engineers often forget to actually route read traffic. Use a connection proxy or application-level routing to ensure reads hit replicas by default. Monitor primary vs. replica query ratios.</li>
+          <li>**Ignoring replication lag** — Read replicas are asynchronously behind the primary. If a user posts content and immediately refreshes, they might not see their own post. Implement <strong>read-your-writes consistency</strong> by routing the authoring user's reads to the primary for a brief window after writes.</li>
+          <li>**Sharding prematurely** — Sharding is irreversible and dramatically increases operational complexity. Most platforms can serve 10–100M users on primary-replica + caching alone. Don't shard until you've proven that single-primary write throughput is the bottleneck via load testing.</li>
+          <li>**Caching writes instead of separating paths** — Write-through and write-behind caches don't reduce database write load — they just add another write target. If write throughput is the problem, you need write path optimization (batching, async processing, event sourcing), not caching.</li>
+          <li>**Over-indexing replicas** — Adding too many indexes to read replicas speeds up some queries but slows down replication (every replicated write must update all indexes). Profile actual slow queries before adding indexes, and consider different index configurations per replica if your DB supports it.</li>
+          <li>**Not monitoring replica drift during peak writes** — During write surges, replication lag can spike from milliseconds to seconds. If your application assumes near-real-time replica freshness, this creates subtle bugs. Set up alerts on replication lag and have a fallback strategy (route to primary) when lag exceeds thresholds.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In production social media platforms, senior engineers don't rely on a single scaling strategy. They <strong>layer complementary patterns</strong> to address different dimensions of the read/write scaling challenge:</p>
+        <ul>
+          <li>**Layer 1 — Primary-replica separation:** Route writes to a primary, reads to replicas. This is the foundational layer that buys immediate headroom and is the biggest single architectural win.</li>
+          <li>**Layer 2 — Read-through caching (Redis/Memcached):** Cache hot read paths (timelines, trending content, user profiles) to intercept reads before they even reach replicas. This reduces replica load by 60–80% for typical social media access patterns.</li>
+          <li>**Layer 3 — Materialized views for analytics:** Precompute expensive aggregations (engagement metrics, trending algorithms, recommendation scores) as materialized views refreshed on a schedule. These never hit the primary or real-time replicas.</li>
+          <li>**Layer 4 — Sharding when single-primary saturates:** When write volume exceeds what a single primary can handle (typically >50K writes/sec for most RDBMS), shard by user ID or tenant. This is a last-resort architectural change that most platforms don't need until they're at massive scale.</li>
+        </ul>
+        <p>Sarah's first move should be deploying <strong>read replicas</strong> because it directly addresses the read/write contention problem with minimal risk and maximum leverage. She can then layer caching for hot reads and materialized views for analytics before ever needing to consider sharding.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When read and write traffic have <strong>different temporal patterns</strong>, the highest-ROI architectural decision is to <strong>physically separate the read and write paths</strong>. A primary-replica topology does this natively, scales reads horizontally, requires no schema changes, and is supported by every major database. Solve the contention problem first — optimize individual query paths later.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

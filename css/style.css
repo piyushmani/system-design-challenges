@@ -656,6 +656,258 @@ body::after {
   line-height: 1.75;
 }
 
+/* ── Visual Window (shared by diagram + code) ─── */
+.viz-window {
+  --viz-bg: #0d0d14;
+  --viz-bar: #15151f;
+  --viz-line: #ffffff0d;
+  position: relative;
+  margin: 1rem 0 .25rem;
+  border-radius: 12px;
+  background: var(--viz-bg);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 1px 0 #ffffff08 inset,
+    0 12px 32px -12px #00000080,
+    0 0 0 1px #7c5cfc10;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* gradient hairline on top edge */
+.viz-window::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--green), transparent);
+  opacity: .7;
+  z-index: 2;
+}
+
+[data-theme="light"] .viz-window {
+  --viz-bg: #fbfcfe;
+  --viz-bar: #f1f5f9;
+  --viz-line: #0f172a0d;
+  box-shadow:
+    0 1px 2px #0f172a0a,
+    0 12px 28px -14px #0f172a30;
+}
+
+.viz-bar {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .55rem .85rem;
+  background: var(--viz-bar);
+  border-bottom: 1px solid var(--border);
+}
+
+.viz-dots {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.viz-dots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow: 0 0 0 .5px #00000030 inset;
+}
+
+.viz-dots i:nth-child(2) { background: #febc2e; }
+.viz-dots i:nth-child(3) { background: #28c840; }
+
+.viz-label {
+  flex: 1;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .68rem;
+  font-weight: 500;
+  letter-spacing: .04em;
+  color: var(--text-dim);
+  text-transform: lowercase;
+}
+
+.viz-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  font-family: inherit;
+  font-size: .68rem;
+  font-weight: 600;
+  padding: .3rem .7rem;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color .2s, border-color .2s, background .2s, transform .1s;
+}
+
+.viz-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.viz-btn:active { transform: scale(.96); }
+
+.viz-btn.is-done {
+  color: var(--green);
+  border-color: var(--green);
+  background: var(--green-gl);
+}
+
+/* ── Diagram (Mermaid) ────────────────────────── */
+.diagram-canvas {
+  position: relative;
+  padding: 2rem 1.5rem;
+  overflow-x: auto;
+  text-align: center;
+  min-height: 160px;
+  /* subtle dotted blueprint grid */
+  background-image: radial-gradient(var(--viz-line) 1.2px, transparent 1.2px);
+  background-size: 18px 18px;
+  background-position: -9px -9px;
+}
+
+/* soft glow behind the diagram */
+.diagram-canvas::before {
+  content: '';
+  position: absolute;
+  inset: 15% 20%;
+  background: radial-gradient(ellipse at center, var(--accent-gl), transparent 70%);
+  filter: blur(30px);
+  opacity: .5;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.diagram-canvas pre.mermaid {
+  margin: 0;
+  background: transparent;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .75rem;
+  color: var(--text-dim);
+  white-space: pre;
+  display: inline-block;
+  text-align: left;
+}
+
+.diagram-canvas pre.mermaid[data-processed] {
+  display: block;
+  text-align: center;
+  animation: vizFade .45s ease;
+}
+
+.diagram-canvas pre.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.diagram-canvas pre.mermaid-error {
+  color: var(--red);
+}
+
+@keyframes vizFade {
+  from { opacity: 0; transform: scale(.98); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Fullscreen mode */
+.diagram-window.is-expanded {
+  position: fixed;
+  inset: 4vh 4vw;
+  margin: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 0 100vmax #000000b3, 0 30px 80px #00000080;
+  animation: vizFade .25s ease;
+}
+
+.diagram-window.is-expanded .diagram-canvas {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+.diagram-window.is-expanded pre.mermaid svg {
+  max-height: 80vh;
+  width: auto;
+}
+
+body.no-scroll { overflow: hidden; }
+
+/* ── Code Block (Pseudocode) ──────────────────── */
+.code-block pre {
+  margin: 0;
+  padding: 1rem 0;
+  overflow-x: auto;
+  counter-reset: ln;
+}
+
+.code-block code {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .78rem;
+  line-height: 1.75;
+  color: #d4d4e0;
+  white-space: pre;
+  tab-size: 4;
+}
+
+.code-block .line {
+  display: inline-block;
+  width: 100%;
+  padding-right: 1.25rem;
+  counter-increment: ln;
+  transition: background .15s;
+}
+
+.code-block .line::before {
+  content: counter(ln);
+  display: inline-block;
+  width: 2.25rem;
+  margin-right: 1rem;
+  padding-right: .75rem;
+  text-align: right;
+  color: #ffffff2e;
+  border-right: 1px solid var(--viz-line);
+  user-select: none;
+}
+
+.code-block .line:hover {
+  background: #7c5cfc12;
+}
+
+.code-block .line:hover::before {
+  color: var(--accent);
+}
+
+/* Syntax tokens — dark */
+.tk-kw  { color: #c792ea; font-weight: 600; }
+.tk-fn  { color: #82aaff; }
+.tk-str { color: #c3e88d; }
+.tk-num { color: #f78c6c; }
+.tk-lit { color: #ff9cac; font-style: italic; }
+.tk-op  { color: #89ddff; }
+.tk-com { color: #676e95; font-style: italic; }
+
+/* Syntax tokens — light */
+[data-theme="light"] .code-block code { color: #1e293b; }
+[data-theme="light"] .code-block .line::before { color: #94a3b8; }
+[data-theme="light"] .code-block .line:hover { background: #6366f10d; }
+[data-theme="light"] .tk-kw  { color: #7c3aed; }
+[data-theme="light"] .tk-fn  { color: #2563eb; }
+[data-theme="light"] .tk-str { color: #15803d; }
+[data-theme="light"] .tk-num { color: #c2410c; }
+[data-theme="light"] .tk-lit { color: #be185d; }
+[data-theme="light"] .tk-op  { color: #0891b2; }
+[data-theme="light"] .tk-com { color: #94a3b8; }
+
 /* ── Trade-off Table ──────────────────────────── */
 .tt-wrap {
   overflow-x: auto;

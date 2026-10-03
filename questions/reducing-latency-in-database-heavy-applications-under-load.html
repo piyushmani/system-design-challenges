@@ -171,6 +171,75 @@
 
       </div>
 
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Cache-Aside Read Path</h3>
+        <p>How a request flows through the cache before ever touching the database:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    C[Client] --&gt; A[App Server]
+    A --&gt;|1. GET key| R[(Redis Cache)]
+    R --&gt;|2a. HIT| A
+    A --&gt;|2b. MISS| D[(Primary DB)]
+    D --&gt;|3. Result| A
+    A --&gt;|4. SET key TTL| R
+    A --&gt; C">flowchart LR
+    C[Client] --&gt; A[App Server]
+    A --&gt;|1. GET key| R[(Redis Cache)]
+    R --&gt;|2a. HIT| A
+    A --&gt;|2b. MISS| D[(Primary DB)]
+    D --&gt;|3. Result| A
+    A --&gt;|4. SET key TTL| R
+    A --&gt; C</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Cache-Aside with Stampede Protection</h3>
+        <p>A read-through helper that serves hot keys from memory and prevents a thundering herd on expiry:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getUserProfile</span>(userId):</span>
+<span class="line">    key <span class="tk-op">=</span> <span class="tk-str">&quot;user:&quot;</span> <span class="tk-op">+</span> userId</span>
+<span class="line"></span>
+<span class="line">    value <span class="tk-op">=</span> cache.<span class="tk-fn">get</span>(key)</span>
+<span class="line">    <span class="tk-kw">if</span> value <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> value                      <span class="tk-com">// cache HIT (~0.5 ms)</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Only one request rebuilds the key; others wait briefly</span></span>
+<span class="line">    <span class="tk-kw">if</span> cache.<span class="tk-fn">acquireLock</span>(<span class="tk-str">&quot;lock:&quot;</span> <span class="tk-op">+</span> key, ttl <span class="tk-op">=</span> <span class="tk-num">5s</span>):</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            value <span class="tk-op">=</span> db.<span class="tk-fn">query</span>(<span class="tk-str">&quot;SELECT * FROM users WHERE id = ?&quot;</span>, userId)</span>
+<span class="line">            cache.<span class="tk-fn">set</span>(key, value, ttl <span class="tk-op">=</span> <span class="tk-num">300s</span> <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-num">30s</span>))  <span class="tk-com">// jitter TTL</span></span>
+<span class="line">        <span class="tk-kw">finally</span>:</span>
+<span class="line">            cache.<span class="tk-fn">releaseLock</span>(<span class="tk-str">&quot;lock:&quot;</span> <span class="tk-op">+</span> key)</span>
+<span class="line">        <span class="tk-kw">return</span> value</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-fn">sleep</span>(<span class="tk-num">50ms</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">getUserProfile</span>(userId)        <span class="tk-com">// retry; key is likely warm now</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">updateUserProfile</span>(userId, data):</span>
+<span class="line">    db.<span class="tk-fn">update</span>(<span class="tk-str">&quot;users&quot;</span>, userId, data)</span>
+<span class="line">    cache.<span class="tk-fn">delete</span>(<span class="tk-str">&quot;user:&quot;</span> <span class="tk-op">+</span> userId)       <span class="tk-com">// invalidate on write</span></span></code></pre>
+        </figure>
+      </div>
+
       <div class="explanation-card" style="border-color:#f8717130;">
         <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
         <ul class="mistakes-list">

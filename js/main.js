@@ -58,6 +58,7 @@
     const section = document.getElementById('answerSection');
     if (section) {
       section.classList.add('visible');
+      renderDiagrams();
       setTimeout(() => section.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     }
   }
@@ -125,6 +126,170 @@
         
         document.documentElement.setAttribute('data-theme', newTheme);
         localStorage.setItem('theme', newTheme);
+
+        // Re-render diagrams so they match the new theme
+        if (revealed) renderDiagrams();
+      });
+    });
+  }
+
+  // ── Mermaid Diagrams (lazy-loaded) ─────────────
+  const MERMAID_CDN = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  let mermaidPromise = null;
+
+  function loadMermaid() {
+    if (!mermaidPromise) {
+      mermaidPromise = import(MERMAID_CDN).then(m => m.default);
+    }
+    return mermaidPromise;
+  }
+
+  // Palettes tuned to match the site's CSS themes
+  const MERMAID_THEMES = {
+    dark: {
+      background: 'transparent',
+      fontFamily: 'Inter, system-ui, sans-serif',
+      fontSize: '14px',
+      primaryColor: '#241f3d',
+      primaryBorderColor: '#7c5cfc',
+      primaryTextColor: '#ece9ff',
+      secondaryColor: '#123128',
+      secondaryBorderColor: '#34d399',
+      secondaryTextColor: '#d1fae5',
+      tertiaryColor: '#1e1e28',
+      tertiaryBorderColor: '#3a3a4d',
+      tertiaryTextColor: '#e4e4eb',
+      lineColor: '#8b8ca3',
+      textColor: '#e4e4eb',
+      edgeLabelBackground: '#15151f',
+      clusterBkg: '#16161f',
+      clusterBorder: '#2a2a38',
+      nodeTextColor: '#ece9ff',
+      actorBkg: '#241f3d',
+      actorBorder: '#7c5cfc',
+      actorTextColor: '#ece9ff',
+      signalColor: '#8b8ca3',
+      signalTextColor: '#e4e4eb',
+      noteBkgColor: '#2b2416',
+      noteBorderColor: '#fbbf24',
+      noteTextColor: '#fde68a',
+    },
+    light: {
+      background: 'transparent',
+      fontFamily: 'Inter, system-ui, sans-serif',
+      fontSize: '14px',
+      primaryColor: '#eef2ff',
+      primaryBorderColor: '#6366f1',
+      primaryTextColor: '#1e1b4b',
+      secondaryColor: '#ecfdf5',
+      secondaryBorderColor: '#10b981',
+      secondaryTextColor: '#064e3b',
+      tertiaryColor: '#f8fafc',
+      tertiaryBorderColor: '#cbd5e1',
+      tertiaryTextColor: '#1e293b',
+      lineColor: '#64748b',
+      textColor: '#1e293b',
+      edgeLabelBackground: '#ffffff',
+      clusterBkg: '#f8fafc',
+      clusterBorder: '#e2e8f0',
+      nodeTextColor: '#1e1b4b',
+      actorBkg: '#eef2ff',
+      actorBorder: '#6366f1',
+      actorTextColor: '#1e1b4b',
+      signalColor: '#64748b',
+      signalTextColor: '#1e293b',
+      noteBkgColor: '#fffbeb',
+      noteBorderColor: '#f59e0b',
+      noteTextColor: '#78350f',
+    },
+  };
+
+  // Extra polish applied inside the rendered SVG
+  const MERMAID_CSS = `
+    .node rect, .node polygon, .node circle, .node path { stroke-width: 1.5px; }
+    .node rect { rx: 10px; ry: 10px; }
+    .edgePath .path, .flowchart-link { stroke-width: 1.6px; }
+    .edgeLabel { font-size: 12px; padding: 2px 6px; border-radius: 6px; }
+    .label { font-weight: 500; }
+    .cluster rect { rx: 12px; ry: 12px; stroke-dasharray: 4 3; }
+  `;
+
+  async function renderDiagrams() {
+    const nodes = document.querySelectorAll('pre.mermaid[data-source]');
+    if (!nodes.length) return;
+
+    try {
+      const mermaid = await loadMermaid();
+      const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'base',
+        themeVariables: MERMAID_THEMES[isLight ? 'light' : 'dark'],
+        themeCSS: MERMAID_CSS,
+        securityLevel: 'strict',
+        flowchart: { curve: 'basis', padding: 16, nodeSpacing: 45, rankSpacing: 55, htmlLabels: true },
+        sequence: { mirrorActors: false, messageAlign: 'center' },
+      });
+
+      // Reset each node to its original source before (re-)rendering
+      nodes.forEach(n => {
+        n.removeAttribute('data-processed');
+        n.classList.remove('mermaid-error');
+        n.textContent = n.dataset.source;
+      });
+      await mermaid.run({ nodes: Array.from(nodes) });
+    } catch (err) {
+      console.error('Mermaid failed to render:', err);
+      nodes.forEach(n => n.classList.add('mermaid-error'));
+    }
+  }
+
+  // ── Diagram fullscreen toggle ──────────────────
+  function initDiagramExpand() {
+    const close = win => {
+      win.classList.remove('is-expanded');
+      document.body.classList.remove('no-scroll');
+      const label = win.querySelector('.diagram-expand span');
+      if (label) label.textContent = 'Expand';
+    };
+
+    document.querySelectorAll('.diagram-window').forEach(win => {
+      const btn = win.querySelector('.diagram-expand');
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        if (win.classList.contains('is-expanded')) return close(win);
+        win.classList.add('is-expanded');
+        document.body.classList.add('no-scroll');
+        btn.querySelector('span').textContent = 'Close';
+      });
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      document.querySelectorAll('.diagram-window.is-expanded').forEach(close);
+    });
+  }
+
+  // ── Copy button for code blocks ────────────────
+  function initCodeCopy() {
+    document.querySelectorAll('.code-block').forEach(block => {
+      const btn = block.querySelector('.code-copy');
+      const code = block.querySelector('code');
+      if (!btn || !code) return;
+      const label = btn.querySelector('span') || btn;
+
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(code.textContent);
+          label.textContent = 'Copied';
+          btn.classList.add('is-done');
+        } catch {
+          label.textContent = 'Failed';
+        }
+        setTimeout(() => {
+          label.textContent = 'Copy';
+          btn.classList.remove('is-done');
+        }, 1600);
       });
     });
   }
@@ -133,5 +298,7 @@
     initTheme();
     init();
     initHome();
+    initCodeCopy();
+    initDiagramExpand();
   });
 })();

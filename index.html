@@ -38,11 +38,11 @@
 
     <div class="stats-bar">
       <div class="stat">
-        <div class="stat-num" id="visibleCount">5</div>
+        <div class="stat-num" id="visibleCount">10</div>
         <div class="stat-label">Challenges</div>
       </div>
       <div class="stat">
-        <div class="stat-num">18</div>
+        <div class="stat-num">31</div>
         <div class="stat-label">Topics</div>
       </div>
     </div>
@@ -54,6 +54,7 @@
     </div>
 
     <div class="filter-bar">
+      <span class="filter-tag" data-tag="Architecture Decisions">Architecture Decisions</span>
       <span class="filter-tag" data-tag="CAP Theorem">CAP Theorem</span>
       <span class="filter-tag" data-tag="CRDTs">CRDTs</span>
       <span class="filter-tag" data-tag="Conflict Resolution">Conflict Resolution</span>
@@ -64,14 +65,26 @@
       <span class="filter-tag" data-tag="Distributed Systems">Distributed Systems</span>
       <span class="filter-tag" data-tag="E-Commerce Infrastructure">E-Commerce Infrastructure</span>
       <span class="filter-tag" data-tag="Error Handling">Error Handling</span>
+      <span class="filter-tag" data-tag="Event Streaming">Event Streaming</span>
+      <span class="filter-tag" data-tag="Event-Driven Architecture">Event-Driven Architecture</span>
       <span class="filter-tag" data-tag="Fault Tolerance">Fault Tolerance</span>
+      <span class="filter-tag" data-tag="Feature Flags">Feature Flags</span>
+      <span class="filter-tag" data-tag="Index-Only Scans">Index-Only Scans</span>
+      <span class="filter-tag" data-tag="Low Latency">Low Latency</span>
+      <span class="filter-tag" data-tag="Message Queues">Message Queues</span>
       <span class="filter-tag" data-tag="Microservices Resilience">Microservices Resilience</span>
       <span class="filter-tag" data-tag="Multi-Region Architecture">Multi-Region Architecture</span>
       <span class="filter-tag" data-tag="Performance Trade-offs">Performance Trade-offs</span>
       <span class="filter-tag" data-tag="Query Optimization">Query Optimization</span>
+      <span class="filter-tag" data-tag="Query Planning">Query Planning</span>
+      <span class="filter-tag" data-tag="Read Optimization">Read Optimization</span>
       <span class="filter-tag" data-tag="Read vs Write Scaling">Read vs Write Scaling</span>
+      <span class="filter-tag" data-tag="SQL Optimization">SQL Optimization</span>
       <span class="filter-tag" data-tag="Scalability">Scalability</span>
+      <span class="filter-tag" data-tag="Stream Processing">Stream Processing</span>
+      <span class="filter-tag" data-tag="Subqueries &amp; CTEs">Subqueries &amp; CTEs</span>
       <span class="filter-tag" data-tag="System Architecture">System Architecture</span>
+      <span class="filter-tag" data-tag="System Design">System Design</span>
     </div>
 
     <div class="problem-grid">
@@ -81,6 +94,56 @@
         <span class="card-title">Building Resilient Microservices: The Error Handling Architecture Decision</span>
         <div class="card-tags">
           <span class="tag tag--purple">Error Handling</span> <span class="tag tag--green">Microservices Resilience</span> <span class="tag tag--amber">System Architecture</span>
+          <span class="card-date">24 FEB 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/designing-a-low-latency-event-pipeline-for-real-time-recommendations.html" class="problem-card"
+         data-title="designing a low-latency event pipeline for real-time recommendations"
+         data-tags="event-driven architecture,stream processing,scalability">
+        <span class="card-title">Designing a Low-Latency Event Pipeline for Real-Time Recommendations</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Event-Driven Architecture</span> <span class="tag tag--green">Stream Processing</span> <span class="tag tag--amber">Scalability</span>
+          <span class="card-date">24 FEB 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/designing-a-feature-flag-system-for-fast-evaluation-and-quick-propagation.html" class="problem-card"
+         data-title="designing a feature flag system for fast evaluation and quick propagation"
+         data-tags="feature flags,system design,low latency">
+        <span class="card-title">Designing a Feature Flag System for Fast Evaluation and Quick Propagation</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Feature Flags</span> <span class="tag tag--green">System Design</span> <span class="tag tag--amber">Low Latency</span>
+          <span class="card-date">24 FEB 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/choosing-between-message-queues-and-event-streams-for-real-time-analytics.html" class="problem-card"
+         data-title="choosing between message queues and event streams for real-time analytics"
+         data-tags="message queues,event streaming,architecture decisions">
+        <span class="card-title">Choosing Between Message Queues and Event Streams for Real-Time Analytics</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Message Queues</span> <span class="tag tag--green">Event Streaming</span> <span class="tag tag--amber">Architecture Decisions</span>
+          <span class="card-date">24 FEB 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/speeding-up-complex-sql-built-on-subqueries-and-ctes.html" class="problem-card"
+         data-title="speeding up complex sql built on subqueries and ctes"
+         data-tags="sql optimization,subqueries &amp; ctes,query planning">
+        <span class="card-title">Speeding Up Complex SQL Built on Subqueries and CTEs</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">SQL Optimization</span> <span class="tag tag--green">Subqueries &amp; CTEs</span> <span class="tag tag--amber">Query Planning</span>
+          <span class="card-date">24 FEB 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/cutting-disk-io-when-index-only-scans-arent-enough.html" class="problem-card"
+         data-title="cutting disk i/o when index-only scans aren&#x27;t enough"
+         data-tags="index-only scans,database performance,read optimization">
+        <span class="card-title">Cutting Disk I/O When Index-Only Scans Aren&#x27;t Enough</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Index-Only Scans</span> <span class="tag tag--green">Database Performance</span> <span class="tag tag--amber">Read Optimization</span>
           <span class="card-date">24 FEB 2026</span>
         </div>
         <span class="card-arrow">→</span>

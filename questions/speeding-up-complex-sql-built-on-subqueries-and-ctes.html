@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Speeding Up Complex SQL Built on Subqueries and CTEs — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">24 FEB 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">SQL Optimization</span>
+      <span class="tag tag--green">Subqueries &amp; CTEs</span>
+      <span class="tag tag--amber">Query Planning</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Speeding Up Complex SQL Built on Subqueries and CTEs</h1>
+      <p class="q-scenario"><strong>Sneha</strong>, a backend engineer, owns a reporting endpoint backed by a large SQL query with several <strong>nested and correlated subqueries</strong> and a chain of <strong>Common Table Expressions (CTEs)</strong>. As the tables have grown, the query has gone from milliseconds to <strong>several seconds</strong>, and EXPLAIN shows the subqueries being <strong>evaluated over and over</strong>. The data changes often and users expect current results. What should Sneha try first?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Rewrite the subqueries as joins so the optimizer can plan the query as a single set-based operation.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Create materialized views that precompute and store the subquery results.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Add an application-level cache that temporarily stores the subquery results.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Partition the underlying tables so the subqueries can run in parallel.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Rewrite Subqueries as Joins</h3>
+        <p>Rewriting correlated subqueries and opaque CTE chains as <strong>joins</strong> fixes the root cause, which is the shape of the query, instead of hiding it. Here's why it's the right first move:</p>
+        <ul>
+          <li>**Eliminates row-by-row execution:** A correlated subquery in the SELECT or WHERE clause can run <strong>once per outer row</strong>, which is effectively an N+1 problem inside the database. A join (or a join against a pre-aggregated derived table) runs once as a set operation.</li>
+          <li>**Unlocks better join algorithms:** Once the query is written as joins, the planner can pick <strong>hash joins or merge joins</strong>, reorder tables, and push predicates down. None of that is possible while the logic is locked inside subqueries.</li>
+          <li>**Removes optimization fences:** Some engines materialize CTEs as written (PostgreSQL before version 12, or any CTE marked MATERIALIZED), which blocks predicate pushdown and index use. Inlining them or converting them to joins lets filters reach the base tables.</li>
+          <li>**No staleness, no new infrastructure:** Results stay fully up to date, there's nothing to refresh or invalidate, and the change is a single query rewrite that's easy to roll back.</li>
+        </ul>
+        <p>Sneha should compare <strong>EXPLAIN ANALYZE</strong> output before and after, make sure the joins are backed by <strong>indexes on the join and filter columns</strong>, and watch for duplicated rows. Where a one-to-many join would multiply rows, aggregate first or use EXISTS/semi-joins.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🗂️</div>
+          <h4>B — Materialized Views</h4>
+          <p>Materialized views trade freshness for speed: results are only as current as the last <strong>REFRESH</strong>, and refreshing a complex view can be expensive and lock-heavy. With data that changes often and users expecting current results, that's a poor first step. It also leaves the inefficient query in place, just running on a schedule.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">💾</div>
+          <h4>C — Application Cache</h4>
+          <p>Caching hides the slow query instead of fixing it. Every cache miss and expiry still runs the multi-second query, invalidation is tricky when the data changes often, and reporting queries with many parameter combinations get <strong>low hit rates</strong>.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧩</div>
+          <h4>D — Table Partitioning</h4>
+          <p>Partitioning helps when queries can <strong>skip partitions</strong> based on a key such as date. It doesn't stop a correlated subquery from running once per row, and it adds significant schema and operational complexity. Running a badly shaped plan in parallel just spends more CPU on the same wasted work.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>A — Rewrite Subqueries as Joins ✓</h4>
+          <p>Rewrite the subqueries as joins so the optimizer can plan the query as a single set-based operation.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Query Speedup</th><th>Data Freshness</th><th>Implementation Effort</th><th>Ongoing Maintenance</th><th>Fixes Root Cause</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Rewrite as Joins ✓</td><td>High ⬆⬆</td><td>Real-time ✅</td><td>Low ✅</td><td>None ✅</td><td>Yes ✅</td></tr>
+            <tr><td class="tt-option">B — Materialized Views</td><td>Very High ⬆⬆</td><td>Stale until refresh ⬇</td><td>Medium</td><td>Refresh jobs ⬇</td><td>No ❌</td></tr>
+            <tr><td class="tt-option">C — Application Cache</td><td>Very High (on hit)</td><td>Stale until expiry ⬇</td><td>Medium</td><td>Invalidation logic ⬇</td><td>No ❌</td></tr>
+            <tr><td class="tt-option">D — Table Partitioning</td><td>Situational</td><td>Real-time ✅</td><td>High ⬇</td><td>High ⬇</td><td>No ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Rewrite as Joins</h4>
+          <p>Queries with correlated subqueries, repeated subplans, or CTE chains that block optimization, where the data must be fresh. Always try this first.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Materialized Views</h4>
+          <p>Expensive aggregations over large, slowly changing data where results can be minutes or hours old: dashboards, daily reports, leaderboards.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Application Cache</h4>
+          <p>The same query with the same parameters requested repeatedly, where brief staleness is acceptable and the query has already been optimized.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Table Partitioning</h4>
+          <p>Very large tables (hundreds of millions of rows) where queries naturally filter on the partition key, such as date ranges on event or log tables.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Correlated Subqueries vs. Set-Based Join</h3>
+        <p>The same report written two ways. The rewrite makes one pass over orders instead of running two subqueries per customer:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">sql</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">-- BEFORE: each correlated subquery runs once per customer row</span></span>
+<span class="line">SELECT c.id,</span>
+<span class="line">       c.name,</span>
+<span class="line">       (SELECT <span class="tk-fn">COUNT</span>(<span class="tk-op">*</span>)     FROM orders o WHERE o.customer_id <span class="tk-op">=</span> c.id) AS order_count,</span>
+<span class="line">       (SELECT <span class="tk-fn">SUM</span>(o.total) FROM orders o WHERE o.customer_id <span class="tk-op">=</span> c.id) AS lifetime_value</span>
+<span class="line">FROM customers c</span>
+<span class="line">WHERE c.region <span class="tk-op">=</span> <span class="tk-str">&#x27;APAC&#x27;</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- AFTER: one set-based join + aggregation (hash-join friendly)</span></span>
+<span class="line">SELECT c.id,</span>
+<span class="line">       c.name,</span>
+<span class="line">       <span class="tk-fn">COUNT</span>(o.id)               AS order_count,</span>
+<span class="line">       <span class="tk-fn">COALESCE</span>(<span class="tk-fn">SUM</span>(o.total), <span class="tk-num">0</span>) AS lifetime_value</span>
+<span class="line">FROM customers c</span>
+<span class="line">LEFT JOIN orders o ON o.customer_id <span class="tk-op">=</span> c.id</span>
+<span class="line">WHERE c.region <span class="tk-op">=</span> <span class="tk-str">&#x27;APAC&#x27;</span></span>
+<span class="line">GROUP BY c.id, c.name;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Supporting index: covers the join key and the aggregated column</span></span>
+<span class="line">CREATE INDEX idx_orders_customer ON <span class="tk-fn">orders</span> (customer_id) <span class="tk-fn">INCLUDE</span> (total);</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li>**Assuming CTEs are always optimized away:** This depends on the engine and version, and some engines materialize CTEs and block predicate pushdown. Check the plan.</li>
+          <li>**Duplicate rows from join fan-out:** Replacing a scalar subquery with a join to a one-to-many table multiplies rows and inflates aggregates. Aggregate in a derived table first, or use EXISTS.</li>
+          <li>**Using NOT IN with nullable columns:** NOT IN returns no rows if the subquery produces a NULL. Use NOT EXISTS or an anti-join instead.</li>
+          <li>**Optimizing without measuring:** A rewrite that looks cleaner isn't always faster. Compare EXPLAIN ANALYZE output and timings on production-like data.</li>
+          <li>**Missing indexes on join keys:** A query rewritten with joins can still be slow if the join and filter columns aren't indexed.</li>
+          <li>**Reaching for materialized views first:** Precomputing a badly written query just moves the slowness into the refresh job.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Experienced engineers tune SQL in a set order, from cheap and safe to expensive and structural:</p>
+        <ul>
+          <li>**Step 1 — Profile:** Run EXPLAIN ANALYZE to find repeated subplans, sequential scans, and row estimates that don't match reality.</li>
+          <li>**Step 2 — Rewrite:** Turn correlated subqueries into joins or semi-joins, inline CTEs, and aggregate before joining.</li>
+          <li>**Step 3 — Index:** Add indexes that support the new join and filter columns.</li>
+          <li>**Step 4 — Precompute:** Only if the query is still too slow and some staleness is acceptable, add materialized views or caching for the heaviest aggregates.</li>
+        </ul>
+        <p>Rewriting the query is the <strong>highest-leverage, lowest-risk</strong> fix. Materialized views, caching, and partitioning are for later, once the query itself is efficient.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Before adding infrastructure, <strong>fix the shape of the query</strong>. Turning per-row subqueries into set-based joins often speeds things up 10×–100×, with no staleness and nothing new to operate.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

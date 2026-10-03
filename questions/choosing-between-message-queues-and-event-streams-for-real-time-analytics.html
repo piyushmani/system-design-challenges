@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Choosing Between Message Queues and Event Streams for Real-Time Analytics — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">24 FEB 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Message Queues</span>
+      <span class="tag tag--green">Event Streaming</span>
+      <span class="tag tag--amber">Architecture Decisions</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Choosing Between Message Queues and Event Streams for Real-Time Analytics</h1>
+      <p class="q-scenario"><strong>Daniel</strong>, a software engineer at a fast-growing online retailer, is building a <strong>real-time analytics platform</strong> that ingests a constant, <strong>high-volume flow</strong> of orders, page views, and cart events. Several teams (dashboards, fraud detection, and the data warehouse) all need to consume the same data, and analysts sometimes want to <strong>reprocess historical events</strong> after fixing a bug. Should Daniel build the pipeline on a message queue, an event stream, or something else?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Use a message queue (e.g., RabbitMQ, SQS) and rely on its per-message acknowledgments and delivery guarantees to absorb traffic bursts.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Use an event streaming platform (e.g., Kafka, Kinesis) so data is processed continuously with low latency and can be read by multiple consumers.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Run a message queue and an event stream side by side, writing every event to both for redundancy and consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Build a custom ingestion and processing system from scratch to keep full control over the data pipeline.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Event Streaming Platform</h3>
+        <p>An <strong>event streaming platform</strong> is built specifically for continuous, high-volume analytics with many consumers. These are the deciding factors for Daniel's use case:</p>
+        <ul>
+          <li>**Multiple independent consumers:** A stream is a durable, append-only log. Dashboards, fraud detection, and the warehouse loader each read it with their own <strong>consumer group and offset</strong>, so there's no need to fan out a copy of every message the way queues require.</li>
+          <li>**Replay and reprocessing:** Events are retained (for days, weeks, or indefinitely with tiered storage) instead of being deleted on acknowledgment. After a bug fix, a consumer just <strong>rewinds its offset</strong> and recomputes.</li>
+          <li>**High sustained throughput:** Sequential log writes, batching, and partitioning let streams handle <strong>millions of events per second</strong> with millisecond latency, and they scale out by adding partitions.</li>
+          <li>**Ordering where it matters:** Events with the same key (e.g., order ID) land in the same partition and are read in order, which is essential for correct aggregations and windowed analytics.</li>
+        </ul>
+        <p>Adding a <strong>stream processor</strong> (Flink, Kafka Streams, Spark Structured Streaming) gives Daniel windowed aggregations, joins, and exactly-once state updates on top of the same log.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📬</div>
+          <h4>A — Message Queue</h4>
+          <p>Queues are great at <strong>distributing tasks</strong> to competing workers: each message is consumed once and deleted when acknowledged. Analytics needs the opposite, with multiple teams reading the same data and replaying history. Fan-out means duplicating messages for each consumer, per-message acknowledgment limits throughput at very high volumes, and strict ordering is limited or expensive (e.g., SQS FIFO throughput caps).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔀</div>
+          <h4>C — Queue + Stream in Parallel</h4>
+          <p>Writing every event to two systems is a classic <strong>dual-write problem</strong>: if one write succeeds and the other fails, the systems drift apart, which is the opposite of consistency. It also doubles infrastructure, monitoring, and on-call work. A replicated stream (replication factor 3, acks=all) already gives Daniel the durability he wants.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🛠️</div>
+          <h4>D — Custom-Built Pipeline</h4>
+          <p>Rebuilding durable storage, partitioning, replication, consumer offset tracking, and backpressure is <strong>years of distributed-systems work</strong> that mature platforms already provide. It's slower to deliver, riskier in production, and pulls the team away from the actual analytics problem.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Event Streaming Platform ✓</h4>
+          <p>Use an event streaming platform (e.g., Kafka, Kinesis) so data is processed continuously with low latency and can be read by multiple consumers.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Throughput at Scale</th><th>Multiple Consumers</th><th>Replay / Reprocessing</th><th>Ordering Guarantees</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Message Queue</td><td>Medium</td><td>Requires fan-out ⬇</td><td>No ❌</td><td>Limited</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Event Stream ✓</td><td>Very High ⬆⬆</td><td>Native ✅</td><td>Yes ✅</td><td>Per partition ✅</td><td>Medium</td></tr>
+            <tr><td class="tt-option">C — Queue + Stream in Parallel</td><td>Medium</td><td>Yes</td><td>Partial</td><td>Inconsistent ❌</td><td>Very High ❌</td></tr>
+            <tr><td class="tt-option">D — Custom-Built Pipeline</td><td>Unproven</td><td>Custom-built</td><td>Custom-built</td><td>Custom-built</td><td>Very High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Message Queue</h4>
+          <p>Discrete background tasks that a pool of workers consumes once, such as sending emails, processing payments, or resizing images, where per-message retries and dead-letter queues matter.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Event Stream</h4>
+          <p>Continuous, high-volume data that multiple consumers need and may want to replay: analytics, clickstream, CDC, audit trails, ML feature pipelines.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Queue + Stream in Parallel</h4>
+          <p>Almost never on the same data. Using both in one system is fine when each handles <em>different</em> workloads (stream for analytics, queue for tasks).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Custom-Built Pipeline</h4>
+          <p>Only when requirements are truly unusual (e.g., ultra-low-latency trading with hardware constraints) and the team has deep distributed-systems expertise.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> One Stream, Many Independent Consumers</h3>
+        <p>Each consumer group tracks its own offset, so teams read the same events independently and can replay history:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    P1[Web and App] --&gt; T[(Event Stream - partitioned log)]
+    P2[Order Service] --&gt; T
+    T --&gt;|group: dashboards| D[Real-Time Dashboards]
+    T --&gt;|group: fraud| F[Fraud Detection]
+    T --&gt;|group: warehouse| W[(Data Warehouse)]
+    T -.-&gt;|replay from earlier offset| B[Backfill Job]">flowchart LR
+    P1[Web and App] --&gt; T[(Event Stream - partitioned log)]
+    P2[Order Service] --&gt; T
+    T --&gt;|group: dashboards| D[Real-Time Dashboards]
+    T --&gt;|group: fraud| F[Fraud Detection]
+    T --&gt;|group: warehouse| W[(Data Warehouse)]
+    T -.-&gt;|replay from earlier offset| B[Backfill Job]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li>**Using a stream as a job queue:** Streams don't have per-message acks, delays, or dead-letter queues, so one poison message can block a whole partition. Use a queue for task processing.</li>
+          <li>**Too few partitions:** Partition count limits consumer parallelism. Size for peak throughput and future growth.</li>
+          <li>**Hot partition keys:** Keying all events by a popular category or seller funnels traffic into one partition. Pick high-cardinality keys like order or user ID.</li>
+          <li>**Ignoring consumer lag:** Without lag monitoring, 'real-time' dashboards can silently fall hours behind.</li>
+          <li>**Dual writes to multiple systems:** Writing to both a DB and a broker (or two brokers) from application code leads to drift. Use the transactional outbox pattern or CDC.</li>
+          <li>**Infinite retention without a plan:** Keeping everything in hot broker storage gets expensive. Use tiered storage or archive to object storage.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Mature e-commerce platforms usually run <strong>both</strong> technologies, each for what it does best, without duplicating the same data across them:</p>
+        <ul>
+          <li>**Event stream — Analytics backbone:** Clickstream, order, and inventory events flow through Kafka to dashboards, ML features, and the data lake.</li>
+          <li>**Message queue — Task dispatch:** Background jobs like sending emails, generating invoices, or resizing images use RabbitMQ/SQS with retries and dead-letter queues.</li>
+          <li>**Bridge — Stream-triggered tasks:** A stream consumer can put specific jobs onto a queue when that work needs per-message retry behavior.</li>
+          <li>**Storage — Tiered retention:** Recent events stay in the stream for replay, and older data moves to object storage (S3/GCS) for long-term analytics.</li>
+        </ul>
+        <p>For Daniel's analytics pipeline the stream is the right backbone. Queues are still valuable elsewhere in the platform for <strong>discrete, one-time background tasks</strong>.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Use a <strong>queue when each message is a task</strong> that one worker does once. Use a <strong>stream when each event is a fact</strong> that many consumers need to read, replay, and aggregate. Real-time analytics is a stream problem.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

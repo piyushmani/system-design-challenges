@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Designing a Feature Flag System for Fast Evaluation and Quick Propagation — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">24 FEB 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Feature Flags</span>
+      <span class="tag tag--green">System Design</span>
+      <span class="tag tag--amber">Low Latency</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Designing a Feature Flag System for Fast Evaluation and Quick Propagation</h1>
+      <p class="q-scenario"><strong>Kavya</strong>, a platform engineer, is building the feature flag infrastructure for a large web application that runs on <strong>hundreds of service instances</strong>. Flags are checked on <strong>almost every request</strong>, often several times per request, so evaluating them must add almost <strong>no latency</strong>. Product teams also want flag changes (gradual rollouts, kill switches) to take effect <strong>within seconds</strong>. Which architecture balances these needs best?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Run a central flag service that every application instance queries, using long-polling to receive flag changes as they happen.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Let each service own its flags and notify dependent services of changes through webhooks.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Keep flag rules in a local in-memory cache inside each application instance, refreshed every few seconds from a central flag store.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Connect application instances in a peer-to-peer mesh that gossips flag changes directly between them.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Local In-Memory Cache with Periodic Refresh</h3>
+        <p>Evaluating flags against a <strong>local in-memory copy</strong> that syncs from a central source of truth is the core design of mature flag platforms (LaunchDarkly, Unleash, Flagsmith, OpenFeature providers). It handles both of Kavya's requirements:</p>
+        <ul>
+          <li>**Near-zero evaluation latency:** A flag check becomes an in-process hash-map lookup plus rule evaluation, taking <strong>microseconds</strong> instead of a network round trip. With several checks per request, it's the only option that doesn't multiply latency.</li>
+          <li>**Resilience by default:** If the central store goes down, instances keep serving the last-known flag values. The flag system can never cause an outage on the request path.</li>
+          <li>**Bounded, predictable staleness:** A 5–30 second refresh interval meets the 'within seconds' requirement for rollouts. Conditional requests (ETag or version number) keep each poll cheap when nothing has changed.</li>
+          <li>**Simple to run and scale:** Read load on the central store depends on instance count divided by refresh interval, not on request traffic. Hundreds of instances polling every 10 s is trivial load, and a CDN or read replica can serve the flag payload.</li>
+        </ul>
+        <p>The design can be tightened by adding a <strong>push signal</strong> (SSE/streaming) that tells instances to refresh right away, with the periodic poll kept as a <strong>safety net</strong>. Shipping a <strong>bootstrap snapshot</strong> with each deploy means instances always start with valid flags.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📡</div>
+          <h4>A — Centralized Long-Polling Service</h4>
+          <p>Long-polling solves <em>update propagation</em>. But if each evaluation calls the central service, every request pays network latency and the flag service becomes a <strong>critical dependency on the hot path</strong>: if it goes down, the whole app degrades. It also means holding hundreds of open connections. The only way to make it fast is to cache locally, which turns it into option C.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔗</div>
+          <h4>B — Decentralized with Webhooks</h4>
+          <p>Spreading flag ownership across services leaves <strong>no single source of truth</strong> for auditing, targeting rules, or kill switches. Webhooks are fire-and-forget: a missed or failed delivery leaves an instance silently out of sync, and every service has to build its own retries, ordering, and security for incoming callbacks.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🕸️</div>
+          <h4>D — Peer-to-Peer Mesh</h4>
+          <p>Gossip protocols are <strong>eventually consistent</strong>, with unpredictable convergence time, and they're hard to debug ('why does instance 47 still have the old value?'). In autoscaled environments instances constantly join and leave, and there's no clean audit trail of who changed what. That's a lot of complexity for a problem a central store solves simply.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Local In-Memory Cache with Periodic Refresh ✓</h4>
+          <p>Keep flag rules in a local in-memory cache inside each application instance, refreshed every few seconds from a central flag store.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Evaluation Latency</th><th>Update Propagation</th><th>Resilience to Flag Service Outage</th><th>Consistency / Auditability</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Centralized Long-Polling</td><td>High ⬇ (network hop)</td><td>Near real-time ✅</td><td>Poor ❌</td><td>Strong ✅</td><td>Medium</td></tr>
+            <tr><td class="tt-option">B — Decentralized Webhooks</td><td>Low ✅</td><td>Fast but unreliable</td><td>Medium</td><td>Weak ❌</td><td>High ⬇</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Local Cache + Refresh ✓</td><td>Microseconds ⬆⬆</td><td>Seconds (bounded) ✅</td><td>Excellent ✅</td><td>Strong ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">D — Peer-to-Peer Mesh</td><td>Low ✅</td><td>Unpredictable</td><td>Good</td><td>Weak ❌</td><td>Very High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Centralized Long-Polling</h4>
+          <p>Client-side or edge apps with few instances, where one long-lived connection is cheap. Also works as the update channel that feeds a local cache, but never as the per-evaluation path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Decentralized Webhooks</h4>
+          <p>Small systems where each team fully owns its flags and there are no cross-service rollouts, or for notifying external systems (CI/CD, Slack) about flag changes.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Local Cache + Refresh</h4>
+          <p>The default for server-side applications at any scale. Flags are read far more often than they change, and a few seconds of staleness is acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Peer-to-Peer Mesh</h4>
+          <p>Rarely appropriate. Only for disconnected or edge environments (e.g., offline-capable devices) that can't reach a central store.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Local Evaluation with Background Sync</h3>
+        <p>Requests never leave the process to check a flag; a background refresher keeps the in-memory snapshot current:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    U[Admin UI] --&gt;|change flag| S[(Central Flag Store)]
+    subgraph APP[App Instance]
+        R[Request Handler] --&gt;|isEnabled| C[In-Memory Flag Cache]
+        B[Background Refresher] --&gt;|swap snapshot| C
+    end
+    B --&gt;|poll every 10s with ETag| S
+    S -.-&gt;|optional push: refresh now| B">flowchart LR
+    U[Admin UI] --&gt;|change flag| S[(Central Flag Store)]
+    subgraph APP[App Instance]
+        R[Request Handler] --&gt;|isEnabled| C[In-Memory Flag Cache]
+        B[Background Refresher] --&gt;|swap snapshot| C
+    end
+    B --&gt;|poll every 10s with ETag| S
+    S -.-&gt;|optional push: refresh now| B</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Local Flag Cache with Jittered Refresh</h3>
+        <p>Flags are evaluated in-process; a background loop refreshes the snapshot cheaply and fails safe:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> FlagClient:</span>
+<span class="line">    snapshot <span class="tk-op">=</span> <span class="tk-fn">loadBootstrapFile</span>()          <span class="tk-com">// safe start if the store is unreachable</span></span>
+<span class="line">    version  <span class="tk-op">=</span> snapshot.version</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">start</span>():</span>
+<span class="line">        <span class="tk-fn">every</span> (<span class="tk-num">10s</span> <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-num">2s</span>)):        <span class="tk-com">// jitter avoids fleet-wide spikes</span></span>
+<span class="line">            <span class="tk-kw">try</span>:</span>
+<span class="line">                resp <span class="tk-op">=</span> http.<span class="tk-fn">get</span>(<span class="tk-str">&quot;/flags&quot;</span>, headers <span class="tk-op">=</span> { <span class="tk-str">&quot;If-None-Match&quot;</span>: version })</span>
+<span class="line">                <span class="tk-kw">if</span> resp.status <span class="tk-op">==</span> <span class="tk-num">200</span>:</span>
+<span class="line">                    snapshot <span class="tk-op">=</span> resp.body     <span class="tk-com">// atomic reference swap</span></span>
+<span class="line">                    version  <span class="tk-op">=</span> resp.etag</span>
+<span class="line">                <span class="tk-com">// 304 Not Modified -&gt; keep current snapshot</span></span>
+<span class="line">            <span class="tk-kw">catch</span> error:</span>
+<span class="line">                log.<span class="tk-fn">warn</span>(<span class="tk-str">&quot;flag refresh failed; serving last-known values&quot;</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">isEnabled</span>(flagKey, user, <span class="tk-kw">default</span> <span class="tk-op">=</span> <span class="tk-lit">false</span>):</span>
+<span class="line">        flag <span class="tk-op">=</span> snapshot.<span class="tk-fn">get</span>(flagKey)</span>
+<span class="line">        <span class="tk-kw">if</span> flag <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-kw">default</span></span>
+<span class="line">        bucket <span class="tk-op">=</span> <span class="tk-fn">hash</span>(flagKey <span class="tk-op">+</span> user.id) <span class="tk-op">%</span> <span class="tk-num">100</span>   <span class="tk-com">// stable per user</span></span>
+<span class="line">        <span class="tk-kw">return</span> flag.enabled <span class="tk-kw">and</span> bucket <span class="tk-op">&lt;</span> flag.rolloutPercent</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li>**Calling the flag service on every evaluation:** This turns a config lookup into a network dependency, and one slow flag API call can cascade into request timeouts.</li>
+          <li>**No safe default when the cache is empty:** On cold start or SDK failure, code must fall back to a defined default value instead of throwing.</li>
+          <li>**Synchronized refresh across the fleet:** If every instance polls on the same second, the store gets load spikes. Add jitter to the refresh interval.</li>
+          <li>**Treating flags as permanent config:** Old release flags pile up as tech debt and dead code paths. Give them expiry dates and remove them after rollout.</li>
+          <li>**Inconsistent bucketing:** Using random numbers instead of a stable hash of the user ID makes users flip between variants from one request to the next.</li>
+          <li>**Putting secrets or large payloads in flags:** Every instance fetches and caches flag payloads in memory, so keep them small and non-sensitive.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Production flag systems combine several mechanisms instead of relying on just one:</p>
+        <ul>
+          <li>**Source of truth — Central flag store:** Versioned flag definitions with an audit log, RBAC, and approval workflows.</li>
+          <li>**Evaluation — Local SDK cache:** Every flag check runs in-process against an in-memory ruleset.</li>
+          <li>**Fast propagation — Streaming push:** SSE or a pub/sub channel tells SDKs about changes in under a second.</li>
+          <li>**Safety net — Periodic poll + bootstrap file:** Recovers from missed push events and lets instances cold-start when the flag service is unreachable.</li>
+        </ul>
+        <p>Kavya should start with <strong>local cache + periodic refresh</strong> as the foundation. Streaming push is an add-on optimization, worth it only if sub-second propagation is truly needed.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Feature flags sit on the hot path, so <strong>evaluate locally and sync in the background</strong>. Never make a network call per flag check. Keep read latency separate from update propagation, and accept a few seconds of bounded staleness.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

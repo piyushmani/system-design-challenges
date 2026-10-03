@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Designing a Low-Latency Event Pipeline for Real-Time Recommendations — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">24 FEB 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Event-Driven Architecture</span>
+      <span class="tag tag--green">Stream Processing</span>
+      <span class="tag tag--amber">Scalability</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Designing a Low-Latency Event Pipeline for Real-Time Recommendations</h1>
+      <p class="q-scenario"><strong>Rohan</strong>, a backend engineer at a high-traffic e-commerce company, is building a <strong>real-time analytics pipeline</strong> that takes in clickstream events (product views, add-to-cart actions, searches) and turns them into <strong>personalized recommendations</strong> within seconds. During sale events the platform produces <strong>hundreds of thousands of events per second</strong>. Which architecture gives Rohan the best mix of <strong>throughput and low end-to-end latency</strong>?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Split the pipeline into independent microservices, each consuming and analyzing the full event feed on its own.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Send every event to one central processing engine that does all aggregation and scoring in a single place.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Partition the event stream (e.g., by user ID) and run many stream-processor instances in parallel, each owning a subset of partitions.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Adopt event sourcing: persist every event in an append-only log as the system of record and let multiple subscribers rebuild state from it.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Partitioned Parallel Stream Processing</h3>
+        <p>Partitioning the stream by a key such as <strong>user ID</strong> and processing partitions in parallel is the design behind nearly every large-scale real-time personalization system. Here's why it wins:</p>
+        <ul>
+          <li>**Horizontal throughput:** Throughput grows roughly in line with partition count. Add processor instances and the consumer group rebalances automatically, so a sale-day spike is handled by scaling out instead of buying a bigger machine.</li>
+          <li>**Low latency via data locality:** All events for a given user land on the same partition, so each processor can keep that user's session state (recent views, cart, affinities) in <strong>local memory or an embedded state store</strong> (e.g., RocksDB in Flink/Kafka Streams). With no remote lookup per event, processing takes single-digit milliseconds.</li>
+          <li>**Per-key ordering:** Order is guaranteed within a partition, so a user's 'view → add-to-cart → purchase' sequence is processed in the right order. That matters for correct recommendation signals, and it avoids a global ordering bottleneck.</li>
+          <li>**Fault isolation and recovery:** If a processor dies, only its partitions are reassigned. Checkpointed state and committed offsets let the replacement pick up where it left off, so one failure doesn't stall the whole pipeline.</li>
+        </ul>
+        <p>A production-grade version uses <strong>Kafka (or Kinesis/Pulsar)</strong> as the partitioned log, <strong>Flink or Kafka Streams</strong> as the parallel processing layer, and writes features to a <strong>low-latency online store</strong> (Redis, Cassandra) that the recommendation API reads from.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🧱</div>
+          <h4>A — Independent Microservices</h4>
+          <p>Microservices are an <strong>organizational and deployment</strong> boundary, not a stream-processing strategy. If each service consumes and analyzes the full feed on its own, every service pays the full ingestion cost, state is duplicated, and nothing partitions the work or keeps a user's events in order. Each service would still need a parallel processing model inside it, which is exactly option C.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🎯</div>
+          <h4>B — Centralized Engine</h4>
+          <p>A single processing engine is a <strong>throughput ceiling and a single point of failure</strong>. Vertical scaling quickly runs out of headroom at hundreds of thousands of events/sec, queues build up during spikes, and latency keeps growing. One crash stops recommendations for every user.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📜</div>
+          <h4>D — Event Sourcing</h4>
+          <p>Event sourcing is a <strong>state-persistence pattern</strong>. It's great for auditability, temporal queries, and rebuilding state, but on its own it doesn't say how processing is parallelized or made fast. Subscribers replaying an unpartitioned log are slow, and treating noisy clickstream data as a system of record adds storage and schema-evolution burden. The useful part, a durable and replayable log, is already included in option C's partitioned stream.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Partitioned Parallel Stream Processing ✓</h4>
+          <p>Partition the event stream (e.g., by user ID) and run many stream-processor instances in parallel, each owning a subset of partitions.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Throughput Scalability</th><th>End-to-End Latency</th><th>Per-User Ordering</th><th>Fault Isolation</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Independent Microservices</td><td>Medium</td><td>Medium</td><td>Not guaranteed ❌</td><td>Good ✅</td><td>High ⬇</td></tr>
+            <tr><td class="tt-option">B — Centralized Engine</td><td>Low ❌</td><td>Degrades under load ⬇</td><td>Yes ✅</td><td>Poor ❌ (SPOF)</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Partitioned Parallel Processing ✓</td><td>Very High ⬆⬆</td><td>Very Low ✅</td><td>Yes (per key) ✅</td><td>Good ✅</td><td>Medium</td></tr>
+            <tr><td class="tt-option">D — Event Sourcing</td><td>Medium</td><td>Medium–High ⬇</td><td>Yes ✅</td><td>Medium</td><td>High ⬇</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Independent Microservices</h4>
+          <p>When separate teams own clearly distinct capabilities (fraud scoring, recommendations, inventory) that need their own deploy cycles. Each service should still use partitioned parallel processing inside it.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Centralized Engine</h4>
+          <p>Low-volume pipelines (a few hundred events/sec), prototypes, or workloads that need strict global ordering, where simplicity matters more than scale.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Partitioned Parallel Processing</h4>
+          <p>High-volume, latency-sensitive workloads where events can be grouped by a key: clickstream personalization, fraud detection, IoT telemetry, real-time metrics.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Event Sourcing</h4>
+          <p>Domains where the event history <em>is</em> the business truth and auditability matters: banking ledgers, order lifecycles, inventory reservations.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Partitioned Parallel Event Processing</h3>
+        <p>Events are keyed by user ID, so each processor owns a slice of users and keeps their state locally:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    W[Web and App Clients] --&gt; I[Ingestion API]
+    I --&gt;|key = userId| K[(Kafka Topic - N partitions)]
+    K --&gt;|P0-P3| S1[&quot;Processor 1 (local state)&quot;]
+    K --&gt;|P4-P7| S2[&quot;Processor 2 (local state)&quot;]
+    K --&gt;|P8-P11| S3[&quot;Processor 3 (local state)&quot;]
+    S1 --&gt; F[(Online Feature Store)]
+    S2 --&gt; F
+    S3 --&gt; F
+    F --&gt; R[Recommendation API]">flowchart LR
+    W[Web and App Clients] --&gt; I[Ingestion API]
+    I --&gt;|key = userId| K[(Kafka Topic - N partitions)]
+    K --&gt;|P0-P3| S1[&quot;Processor 1 (local state)&quot;]
+    K --&gt;|P4-P7| S2[&quot;Processor 2 (local state)&quot;]
+    K --&gt;|P8-P11| S3[&quot;Processor 3 (local state)&quot;]
+    S1 --&gt; F[(Online Feature Store)]
+    S2 --&gt; F
+    S3 --&gt; F
+    F --&gt; R[Recommendation API]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li>**Choosing a poor partition key:** Keying by product ID during a flash sale sends most events for the hot product to one partition. Key by user or session ID for personalization, and monitor partition skew.</li>
+          <li>**Too few partitions:** Partition count caps consumer parallelism. Plan for peak load (e.g., 3–5× current need), because adding partitions later reshuffles which partition each key lands on.</li>
+          <li>**Calling a remote DB per event:** Looking up user profiles synchronously in the hot path wrecks latency. Keep state local to the processor or pre-join through a compacted topic.</li>
+          <li>**Ignoring backpressure and consumer lag:** Without lag alerts, the pipeline silently falls minutes behind during spikes and recommendations go stale.</li>
+          <li>**Assuming exactly-once comes for free:** Retries create duplicates. Use idempotent sinks or the framework's transactional/checkpointing guarantees.</li>
+          <li>**Using event sourcing for clickstream:** Treating high-volume, low-value telemetry as an immutable system of record inflates storage and makes schema changes painful.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Real-world personalization platforms combine these ideas instead of picking just one:</p>
+        <ul>
+          <li>**Ingestion — Partitioned log:** Kafka topics keyed by user ID, kept for days so jobs can be replayed or backfilled.</li>
+          <li>**Processing — Parallel stateful operators:** Flink/Kafka Streams jobs with windowed aggregations and local state, scaled by partition count.</li>
+          <li>**Serving — Online feature store:** Precomputed user features in Redis/Cassandra so the recommendation API responds in under 10 ms.</li>
+          <li>**Service boundaries — Microservices:** Ingestion, feature computation, and model serving are separately deployed services, each parallel inside.</li>
+        </ul>
+        <p>Rohan's core decision is the <strong>parallel, partitioned processing model</strong>. Microservice boundaries and a replayable log are complementary choices that sit on top of it.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For high-volume, low-latency event processing, <strong>partition the work by key and process partitions in parallel with local state</strong>. Central engines cap throughput. Event sourcing and microservices describe <em>where</em> data and code live, not <em>how</em> to process events quickly.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

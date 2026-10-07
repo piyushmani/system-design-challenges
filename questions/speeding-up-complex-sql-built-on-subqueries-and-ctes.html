@@ -87,9 +87,9 @@
         <h3><span class="emoji">🏆</span> Best Answer — A: Rewrite Subqueries as Joins</h3>
         <p>Rewriting correlated subqueries and opaque CTE chains as <strong>joins</strong> fixes the root cause, which is the shape of the query, instead of hiding it. Here's why it's the right first move:</p>
         <ul>
-          <li><strong>Eliminates row-by-row execution:</strong> A correlated subquery in the SELECT or WHERE clause can run <strong>once per outer row</strong>, which is effectively an N+1 problem inside the database. A join (or a join against a pre-aggregated derived table) runs once as a set operation. Modern query planners (PostgreSQL 12+, MySQL 8.0+) already convert many <code>IN</code> and <code>EXISTS</code> subqueries into semi-joins automatically. The real wins from manual rewriting come from <strong>scalar subqueries in the SELECT list</strong> (which run once per outer row) and <strong>CTE optimization fences</strong> (where the planner materializes a CTE instead of inlining it). Focus rewriting effort on these two patterns.</li>
+          <li><strong>Eliminates row-by-row execution:</strong> A correlated scalar subquery in the SELECT list can run <strong>once per outer row</strong>, which is effectively an N+1 problem inside the database. A join against a pre-aggregated derived table (or a single LEFT JOIN + GROUP BY) runs once as a set operation. Mature planners (PostgreSQL, MySQL 5.6+, SQL Server, Oracle) already turn many plain <code>IN</code>/<code>EXISTS</code> subqueries into semi-joins, so the real wins from manual rewriting are <strong>scalar and aggregate subqueries in the SELECT list</strong>, <code>NOT IN</code>/OR-combined predicates the planner can't decorrelate, and <strong>CTE optimization fences</strong>. Check the plan before rewriting anything that already shows a semi-join.</li>
           <li><strong>Unlocks better join algorithms:</strong> Once the query is written as joins, the planner can pick <strong>hash joins or merge joins</strong>, reorder tables, and push predicates down. None of that is possible while the logic is locked inside subqueries.</li>
-          <li><strong>Removes optimization fences:</strong> Some engines materialize CTEs as written (PostgreSQL before version 12, or any CTE marked MATERIALIZED), which blocks predicate pushdown and index use. Inlining them or converting them to joins lets filters reach the base tables.</li>
+          <li><strong>Removes optimization fences:</strong> PostgreSQL before version 12 always materialized CTEs. From 12 on, a side-effect-free, non-recursive CTE referenced once is inlined, but one that is referenced more than once, or marked <code>MATERIALIZED</code>, is still computed in full first, which blocks predicate pushdown and index-driven nested loops. Inlining it (or <code>NOT MATERIALIZED</code>) lets filters reach the base tables. Other engines differ, so read the plan.</li>
           <li><strong>No staleness, no new infrastructure:</strong> Results stay fully up to date, there's nothing to refresh or invalidate, and the change is a single query rewrite that's easy to roll back.</li>
         </ul>
         <p>Sneha should compare <strong>EXPLAIN ANALYZE</strong> output before and after, make sure the joins are backed by <strong>indexes on the join and filter columns</strong>, and watch for duplicated rows. Where a one-to-many join would multiply rows, aggregate first or use EXISTS/semi-joins.</p>
@@ -173,7 +173,7 @@
 
       <div class="explanation-card">
         <h3><span class="emoji">🧑‍💻</span> Correlated Subqueries vs. Set-Based Join</h3>
-        <p>The same report written two ways. The rewrite makes one pass over orders instead of running two subqueries per customer:</p>
+        <p>Two examples. First, the same report written with correlated subqueries and as one set-based join (the two return identical results, including NULL for customers with no orders). Second, a PostgreSQL CTE that is forced to materialize versus the same logic left for the planner to inline.</p>
         <figure class="viz-window code-block">
           <div class="viz-bar">
             <span class="viz-dots"><i></i><i></i><i></i></span>
@@ -191,62 +191,48 @@
 <span class="line">FROM customers c</span>
 <span class="line">WHERE c.region <span class="tk-op">=</span> <span class="tk-str">&#x27;APAC&#x27;</span>;</span>
 <span class="line"></span>
-<span class="line"><span class="tk-com">-- AFTER: one set-based join + aggregation (hash-join friendly)</span></span>
+<span class="line"><span class="tk-com">-- AFTER: one set-based join + aggregation (hash-join friendly).</span></span>
+<span class="line"><span class="tk-com">-- Equivalent to BEFORE: COUNT(o.id) is 0 and SUM(o.total) is NULL for customers with no orders.</span></span>
+<span class="line"><span class="tk-com">-- (Wrap SUM in COALESCE(..., 0) only if you also want to change that behaviour.)</span></span>
 <span class="line">SELECT c.id,</span>
 <span class="line">       c.name,</span>
-<span class="line">       <span class="tk-fn">COUNT</span>(o.id)               AS order_count,</span>
-<span class="line">       <span class="tk-fn">COALESCE</span>(<span class="tk-fn">SUM</span>(o.total), <span class="tk-num">0</span>) AS lifetime_value, <span class="tk-com">-- COALESCE converts NULL (no orders) to 0; drop it if NULL semantics are needed</span></span>
+<span class="line">       <span class="tk-fn">COUNT</span>(o.id)   AS order_count,</span>
+<span class="line">       <span class="tk-fn">SUM</span>(o.total)  AS lifetime_value</span>
 <span class="line">FROM customers c</span>
 <span class="line">LEFT JOIN orders o ON o.customer_id <span class="tk-op">=</span> c.id</span>
 <span class="line">WHERE c.region <span class="tk-op">=</span> <span class="tk-str">&#x27;APAC&#x27;</span></span>
 <span class="line">GROUP BY c.id, c.name;</span>
 <span class="line"></span>
 <span class="line"><span class="tk-com">-- Supporting index: covers the join key and the aggregated column</span></span>
-<span class="line">CREATE INDEX idx_orders_customer ON <span class="tk-fn">orders</span> (customer_id) <span class="tk-fn">INCLUDE</span> (total);</span>
+<span class="line">CREATE INDEX idx_orders_customer ON <span class="tk-fn">orders</span> (customer_id, created_at) <span class="tk-fn">INCLUDE</span> (total);</span>
 <span class="line"></span>
-<span class="line"></span>
-<span class="line"></span>
-<span class="line"></span>
-<span class="line"><span class="tk-com">-- CTE FENCE EXAMPLE: PostgreSQL materializes this CTE,</span></span>
-<span class="line"></span>
-<span class="line"><span class="tk-com">-- blocking predicate pushdown from the outer query.</span></span>
-<span class="line"></span>
-<span class="line">WITH recent_orders <span class="tk-fn">AS</span> (</span>
-<span class="line"></span>
-<span class="line">    SELECT customer_id, total, created_at</span>
-<span class="line"></span>
+<span class="line"><span class="tk-com">-- ---------------------------------------------------------------</span></span>
+<span class="line"><span class="tk-com">-- CTE FENCE (PostgreSQL). Materialized CTEs are the default before PG 12, and</span></span>
+<span class="line"><span class="tk-com">-- opt-in on 12+ via MATERIALIZED (or when the CTE is referenced more than once).</span></span>
+<span class="line"><span class="tk-com">-- The 90-day order set is computed for ALL customers before the join, so the</span></span>
+<span class="line"><span class="tk-com">-- region filter cannot drive index lookups into orders.</span></span>
+<span class="line">WITH recent_orders AS <span class="tk-fn">MATERIALIZED</span> (</span>
+<span class="line">    SELECT customer_id, total</span>
 <span class="line">    FROM orders</span>
-<span class="line"></span>
 <span class="line">    WHERE created_at <span class="tk-op">&gt;=</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> interval <span class="tk-str">&#x27;90 days&#x27;</span></span>
-<span class="line"></span>
 <span class="line">)</span>
-<span class="line"></span>
 <span class="line">SELECT c.id, c.name, <span class="tk-fn">SUM</span>(ro.total) AS q_revenue</span>
-<span class="line"></span>
 <span class="line">FROM customers c</span>
-<span class="line"></span>
 <span class="line">JOIN recent_orders ro ON ro.customer_id <span class="tk-op">=</span> c.id</span>
-<span class="line"></span>
 <span class="line">WHERE c.region <span class="tk-op">=</span> <span class="tk-str">&#x27;APAC&#x27;</span></span>
-<span class="line"></span>
 <span class="line">GROUP BY c.id, c.name;</span>
 <span class="line"></span>
-<span class="line"></span>
-<span class="line"></span>
-<span class="line"><span class="tk-com">-- FIX: Inline the CTE (or use NOT MATERIALIZED in PG 12+)</span></span>
-<span class="line"></span>
-<span class="line"><span class="tk-com">-- so the region filter can push into the orders scan.</span></span>
-<span class="line"></span>
-<span class="line">SELECT c.id, c.name, <span class="tk-fn">SUM</span>(o.total) AS q_revenue</span>
-<span class="line"></span>
+<span class="line"><span class="tk-com">-- FIX: let the planner inline it. Now it can start from the APAC customers and</span></span>
+<span class="line"><span class="tk-com">-- probe orders via idx_orders_customer.</span></span>
+<span class="line">WITH recent_orders AS NOT <span class="tk-fn">MATERIALIZED</span> (</span>
+<span class="line">    SELECT customer_id, total</span>
+<span class="line">    FROM orders</span>
+<span class="line">    WHERE created_at <span class="tk-op">&gt;=</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> interval <span class="tk-str">&#x27;90 days&#x27;</span></span>
+<span class="line">)</span>
+<span class="line">SELECT c.id, c.name, <span class="tk-fn">SUM</span>(ro.total) AS q_revenue</span>
 <span class="line">FROM customers c</span>
-<span class="line"></span>
-<span class="line">JOIN orders o ON o.customer_id <span class="tk-op">=</span> c.id</span>
-<span class="line"></span>
+<span class="line">JOIN recent_orders ro ON ro.customer_id <span class="tk-op">=</span> c.id</span>
 <span class="line">WHERE c.region <span class="tk-op">=</span> <span class="tk-str">&#x27;APAC&#x27;</span></span>
-<span class="line"></span>
-<span class="line">  AND o.created_at <span class="tk-op">&gt;=</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> interval <span class="tk-str">&#x27;90 days&#x27;</span></span>
-<span class="line"></span>
 <span class="line">GROUP BY c.id, c.name;</span></code></pre>
         </figure>
       </div>
@@ -278,7 +264,7 @@
       <div class="verdict">
         <div class="v-emoji">💡</div>
         <h3>Key Takeaway</h3>
-        <p>Before adding infrastructure, <strong>fix the shape of the query</strong>. Turning per-row subqueries into set-based joins can speed things up by an order of magnitude or more, with no staleness and nothing new to operate.</p>
+        <p>Before adding infrastructure, <strong>fix the shape of the query</strong>. Replacing per-row scalar subqueries with set-based joins, and removing CTE fences, often gives large speedups (the size depends on table sizes and how many per-row evaluations disappear), with no staleness and nothing new to operate. Confirm with <code>EXPLAIN ANALYZE</code> on production-like data.</p>
       </div>
 
     </section>

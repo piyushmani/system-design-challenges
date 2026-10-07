@@ -188,21 +188,33 @@
           <div class="diagram-canvas">
             <pre class="mermaid" data-source="stateDiagram-v2
     [*] --&gt; Closed
-    Closed --&gt; Open : Failure threshold exceeded
+    Closed --&gt; Open : Failure or slow-call threshold exceeded
     Open --&gt; HalfOpen : Cooldown timer expires
     HalfOpen --&gt; Closed : Probe requests succeed
     HalfOpen --&gt; Open : Probe requests fail
-    note right of Closed : Normal operation.\nRequests pass through.\nFailures are counted.
-    note right of Open : Requests fail fast\nwith fallback response.\nNo load on downstream.
-    note left of HalfOpen : Limited probe requests\ntest if downstream recovered.">stateDiagram-v2
+    note right of Closed
+        Normal operation. Failures and slow calls are counted.
+    end note
+    note right of Open
+        Calls fail fast with a fallback. No load on the dependency.
+    end note
+    note left of HalfOpen
+        A few probe calls test whether the dependency recovered.
+    end note">stateDiagram-v2
     [*] --&gt; Closed
-    Closed --&gt; Open : Failure threshold exceeded
+    Closed --&gt; Open : Failure or slow-call threshold exceeded
     Open --&gt; HalfOpen : Cooldown timer expires
     HalfOpen --&gt; Closed : Probe requests succeed
     HalfOpen --&gt; Open : Probe requests fail
-    note right of Closed : Normal operation.\nRequests pass through.\nFailures are counted.
-    note right of Open : Requests fail fast\nwith fallback response.\nNo load on downstream.
-    note left of HalfOpen : Limited probe requests\ntest if downstream recovered.</pre>
+    note right of Closed
+        Normal operation. Failures and slow calls are counted.
+    end note
+    note right of Open
+        Calls fail fast with a fallback. No load on the dependency.
+    end note
+    note left of HalfOpen
+        A few probe calls test whether the dependency recovered.
+    end note</pre>
           </div>
         </figure>
       </div>

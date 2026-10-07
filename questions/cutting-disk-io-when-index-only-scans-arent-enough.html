@@ -85,11 +85,11 @@
 
       <div class="explanation-card best">
         <h3><span class="emoji">🏆</span> Best Answer — D: Materialized View</h3>
-        <p>A <strong>materialized view</strong> tackles the problem at its source: instead of reading millions of wide rows on every request, queries read a small, precomputed table. Given Arjun's constraints, it's the most effective change:</p>
+        <p>A <strong>materialized view</strong> tackles the problem at its source: instead of reading millions of wide rows on every request, queries read a small, precomputed table. It fits Arjun's constraints <em>provided the view's grain covers the dimensions users actually filter on</em>. If the filters are open-ended or high-cardinality, the view grows toward the size of the raw table and the columnar option below becomes the better answer. Given bounded staleness and a known set of filter dimensions, it's the most effective first change:</p>
         <ul>
-          <li><strong>Far less I/O:</strong> Pre-aggregating millions of order rows into something like daily totals per region and category can cut the data scanned by <strong>100× or more</strong>. A relation that small stays in the buffer cache, so most reads never touch disk.</li>
-          <li><strong>Zero-I/O reads:</strong> A plain REFRESH rebuilds the relation from scratch, producing a clean visibility map. When using REFRESH CONCURRENTLY (which is recommended to avoid blocking readers), schedule VACUUM on the view afterward to maintain the visibility map for index-only scans.</li>
-          <li><strong>Flexible within its dimensions:</strong> Unlike a key-value cache, the view is a SQL table that supports any combination of filters on its grouped columns (day, region, category). This covers the dashboard's primary access patterns. However, filters on dimensions not included in the view's GROUP BY require querying the base table or creating additional views.</li>
+          <li><strong>Far less I/O:</strong> Pre-aggregating millions of order rows into something like daily totals per region and category can shrink the data scanned by <strong>orders of magnitude</strong> (the ratio depends on the grain you choose). A relation that small can stay in the buffer cache, so most reads never touch disk.</li>
+          <li><strong>Makes index-only scans realistic again:</strong> Because the view is narrow, a <strong>covering index</strong> can include every column the dashboard needs. Index-only scans also need the visibility map to be set, and a refresh should not be relied on to do that. Run <code>VACUUM</code> (or let autovacuum run) on the view after refreshes, and confirm with <code>EXPLAIN (ANALYZE)</code> that <em>Heap Fetches</em> is near zero.</li>
+          <li><strong>Flexible within its dimensions:</strong> Unlike a key-value cache, the view is a SQL table, so any combination of filters and groupings over its <strong>grouped columns</strong> (day, region, category) works and every query hits the same small relation. Filters on columns <em>not</em> in the GROUP BY, and non-additive metrics, still need the base table, another view, or a columnar store.</li>
           <li><strong>Fits the freshness budget:</strong> Running <strong>REFRESH MATERIALIZED VIEW CONCURRENTLY</strong> every few minutes stays within the stated staleness tolerance without blocking readers, and it needs no new infrastructure.</li>
         </ul>
         <p>Arjun should match the refresh interval to the freshness requirement, add a <strong>unique index</strong> (required for concurrent refresh), and monitor how long refreshes take. If they get too slow, he can switch to incremental aggregation: summary tables updated by triggers or CDC, or something like TimescaleDB continuous aggregates.</p>
@@ -136,7 +136,7 @@
             <tr><td class="tt-option">A — In-Memory Cache</td><td>High (on hit only)</td><td>Poor ❌</td><td>Stale until expiry</td><td>Medium</td><td>Medium (invalidation)</td></tr>
             <tr><td class="tt-option">B — Sharding</td><td>Low per query ❌</td><td>Yes ✅</td><td>Real-time ✅</td><td>Very High ❌</td><td>Very High ❌</td></tr>
             <tr><td class="tt-option">C — Columnar Database</td><td>Very High ⬆⬆</td><td>Yes ✅</td><td>Depends on sync lag</td><td>Very High ❌</td><td>High ⬇</td></tr>
-            <tr class="tt-best"><td class="tt-option">D — Materialized View ✓</td><td>Very High ⬆⬆</td><td>Yes ✅</td><td>Minutes (configurable)</td><td>Low ✅</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Materialized View ✓</td><td>Very High ⬆⬆</td><td>Only on grouped dimensions ⚠</td><td>Minutes (configurable)</td><td>Low ✅</td><td>Low ✅</td></tr>
             </tbody>
           </table>
         </div>
@@ -203,6 +203,9 @@
 <span class="line"></span>
 <span class="line"><span class="tk-com">-- 4. Refresh every few minutes without blocking readers (cron / pg_cron)</span></span>
 <span class="line">REFRESH MATERIALIZED VIEW CONCURRENTLY mv_daily_sales;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- 4b. Keep the visibility map current so index-only scans avoid heap fetches</span></span>
+<span class="line"><span class="tk-fn">VACUUM</span> (ANALYZE) mv_daily_sales;</span>
 <span class="line"></span>
 <span class="line"><span class="tk-com">-- 5. Dashboard query now reads a small, indexed relation</span></span>
 <span class="line">SELECT day, <span class="tk-fn">SUM</span>(revenue) AS revenue</span>

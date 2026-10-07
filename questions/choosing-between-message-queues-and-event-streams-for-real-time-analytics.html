@@ -85,14 +85,14 @@
 
       <div class="explanation-card best">
         <h3><span class="emoji">🏆</span> Best Answer — B: Event Streaming Platform</h3>
-        <p>An <strong>event streaming platform</strong> is built specifically for continuous, high-volume analytics with many consumers. These are the deciding factors for Daniel's use case:</p>
+        <p>An <strong>event streaming platform</strong> is built specifically for continuous, high-volume analytics with many consumers. By profiling the bottleneck—the need to distribute large volumes of identical events to diverse analytical subscribers with historical recall—this architecture shines:</p>
         <ul>
-          <li>**Multiple independent consumers:** A stream is a durable, append-only log. Dashboards, fraud detection, and the warehouse loader each read it with their own <strong>consumer group and offset</strong>, so there's no need to fan out a copy of every message the way queues require.</li>
-          <li>**Replay and reprocessing:** Events are retained (for days, weeks, or indefinitely with tiered storage) instead of being deleted on acknowledgment. After a bug fix, a consumer just <strong>rewinds its offset</strong> and recomputes.</li>
-          <li>**High sustained throughput:** Sequential log writes, batching, and partitioning let streams handle <strong>millions of events per second</strong> with millisecond latency, and they scale out by adding partitions.</li>
-          <li>**Ordering where it matters:** Events with the same key (e.g., order ID) land in the same partition and are read in order, which is essential for correct aggregations and windowed analytics.</li>
+          <li><strong>Multiple independent consumers:</strong> A stream is a durable, append-only log. Dashboards, fraud detection, and the warehouse loader each read it with their own <strong>consumer group and offset</strong>, so there's no need to fan out a copy of every message the way queues require.</li>
+          <li><strong>Replay and reprocessing:</strong> Events are retained (for days, weeks, or indefinitely with tiered storage) instead of being deleted on acknowledgment. After a bug fix, a consumer just <strong>rewinds its offset</strong> and recomputes.</li>
+          <li><strong>High sustained throughput:</strong> Sequential log writes, batching, and partitioning let streams handle <strong>millions of events per second</strong> with millisecond latency, and they scale out by adding partitions.</li>
+          <li><strong>Ordering where it matters:</strong> Events with the same key (e.g., order ID) land in the same partition and are read in order, which is essential for correct aggregations and windowed analytics.</li>
         </ul>
-        <p>Adding a <strong>stream processor</strong> (Flink, Kafka Streams, Spark Structured Streaming) gives Daniel windowed aggregations, joins, and exactly-once state updates on top of the same log.</p>
+        <p>The stream is the ingestion and processing backbone, but real-time dashboards and fraud models need a <strong>query layer</strong> on top — typically a purpose-built analytics store like ClickHouse, Apache Druid, or Apache Pinot that ingests from the stream and serves low-latency analytical queries. Adding a <strong>stream processor</strong> (Flink, Kafka Streams, Spark Structured Streaming) between them handles windowed aggregations, joins, and exactly-once state updates.</p>
       </div>
 
       <div class="explanation-card">
@@ -104,17 +104,17 @@
         <div class="strategy-item">
           <div class="s-icon">📬</div>
           <h4>A — Message Queue</h4>
-          <p>Queues are great at <strong>distributing tasks</strong> to competing workers: each message is consumed once and deleted when acknowledged. Analytics needs the opposite, with multiple teams reading the same data and replaying history. Fan-out means duplicating messages for each consumer, per-message acknowledgment limits throughput at very high volumes, and strict ordering is limited or expensive (e.g., SQS FIFO throughput caps).</p>
+          <p>Queues are great at <strong>distributing tasks</strong> to competing workers: each message is consumed once and deleted when acknowledged. Modern queue ecosystems offer native fan-out (SNS→SQS, RabbitMQ exchanges/bindings) and some replay capability (RabbitMQ Streams). However, these are <strong>add-ons bolted onto a task-distribution primitive</strong>, not the native model. A stream's append-only log with independent consumer offsets provides fan-out and replay as first-class features without additional infrastructure.</p>
         </div>
         <div class="strategy-item">
           <div class="s-icon">🔀</div>
           <h4>C — Queue + Stream in Parallel</h4>
-          <p>Writing every event to two systems is a classic <strong>dual-write problem</strong>: if one write succeeds and the other fails, the systems drift apart, which is the opposite of consistency. It also doubles infrastructure, monitoring, and on-call work. A replicated stream (replication factor 3, acks=all) already gives Daniel the durability he wants.</p>
+          <p>There are legitimate architectures that use both a queue and a stream — but for <strong>different workloads</strong> (stream for analytics, queue for task dispatch), not as redundant paths for the same data. Writing the same event to both systems from application code creates a dual-write consistency problem; if one write fails, the systems drift. Use the transactional outbox pattern or CDC to bridge them safely.</p>
         </div>
         <div class="strategy-item">
           <div class="s-icon">🛠️</div>
           <h4>D — Custom-Built Pipeline</h4>
-          <p>Rebuilding durable storage, partitioning, replication, consumer offset tracking, and backpressure is <strong>years of distributed-systems work</strong> that mature platforms already provide. It's slower to deliver, riskier in production, and pulls the team away from the actual analytics problem.</p>
+          <p>Custom pipelines are justified in niche domains with extreme constraints (ultra-low-latency trading systems, hardware-accelerated networking) where off-the-shelf platforms add unacceptable overhead. For analytics at an e-commerce company, the engineering cost far outweighs any marginal performance gain. Rebuilding durable storage, partitioning, replication, consumer offset tracking, and backpressure is <strong>years of distributed-systems work</strong>.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
           <div class="s-icon">⚡</div>
@@ -204,25 +204,26 @@
       <div class="explanation-card" style="border-color:#f8717130;">
         <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
         <ul class="mistakes-list">
-          <li>**Using a stream as a job queue:** Streams don't have per-message acks, delays, or dead-letter queues, so one poison message can block a whole partition. Use a queue for task processing.</li>
-          <li>**Too few partitions:** Partition count limits consumer parallelism. Size for peak throughput and future growth.</li>
-          <li>**Hot partition keys:** Keying all events by a popular category or seller funnels traffic into one partition. Pick high-cardinality keys like order or user ID.</li>
-          <li>**Ignoring consumer lag:** Without lag monitoring, 'real-time' dashboards can silently fall hours behind.</li>
-          <li>**Dual writes to multiple systems:** Writing to both a DB and a broker (or two brokers) from application code leads to drift. Use the transactional outbox pattern or CDC.</li>
-          <li>**Infinite retention without a plan:** Keeping everything in hot broker storage gets expensive. Use tiered storage or archive to object storage.</li>
+          <li><strong>Using a stream as a job queue:</strong> Streams don't have per-message acks, delays, or dead-letter queues, so one poison message can block a whole partition. Use a queue for task processing.</li>
+          <li><strong>Too few partitions:</strong> Partition count limits consumer parallelism. Size for peak throughput and future growth.</li>
+          <li><strong>Hot partition keys:</strong> Keying all events by a popular category or seller funnels traffic into one partition. Pick high-cardinality keys like order or user ID.</li>
+          <li><strong>Ignoring consumer lag:</strong> Without lag monitoring, 'real-time' dashboards can silently fall hours behind.</li>
+          <li><strong>Dual writes to multiple systems:</strong> Writing to both a DB and a broker (or two brokers) from application code leads to drift. Use the transactional outbox pattern or CDC.</li>
+          <li><strong>Infinite retention without a plan:</strong> Keeping everything in hot broker storage gets expensive. Use tiered storage or archive to object storage.</li>
         </ul>
       </div>
 
       <div class="explanation-card">
         <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
-        <p>Mature e-commerce platforms usually run <strong>both</strong> technologies, each for what it does best, without duplicating the same data across them:</p>
+        <p>Mature e-commerce platforms usually deploy specialized tools to handle different workloads cleanly:</p>
         <ul>
-          <li>**Event stream — Analytics backbone:** Clickstream, order, and inventory events flow through Kafka to dashboards, ML features, and the data lake.</li>
-          <li>**Message queue — Task dispatch:** Background jobs like sending emails, generating invoices, or resizing images use RabbitMQ/SQS with retries and dead-letter queues.</li>
-          <li>**Bridge — Stream-triggered tasks:** A stream consumer can put specific jobs onto a queue when that work needs per-message retry behavior.</li>
-          <li>**Storage — Tiered retention:** Recent events stay in the stream for replay, and older data moves to object storage (S3/GCS) for long-term analytics.</li>
+          <li><strong>Event stream — Analytics backbone:</strong> Clickstream, order, and inventory events flow through Kafka to dashboards, ML features, and the data lake.</li>
+          <li><strong>Analytics Query Layer:</strong> The stream feeds into an analytics store (ClickHouse, Druid, Pinot) which powers dashboards and fast analytical queries.</li>
+          <li><strong>Message queue — Task dispatch:</strong> Background jobs like sending emails, generating invoices, or resizing images use RabbitMQ/SQS with retries and dead-letter queues.</li>
+          <li><strong>Bridge — Stream-triggered tasks:</strong> A stream consumer can put specific jobs onto a queue when that work needs per-message retry behavior.</li>
+          <li><strong>Storage — Tiered retention:</strong> Recent events stay in the stream for replay, and older data moves to object storage (S3/GCS) for long-term analytics.</li>
         </ul>
-        <p>For Daniel's analytics pipeline the stream is the right backbone. Queues are still valuable elsewhere in the platform for <strong>discrete, one-time background tasks</strong>.</p>
+        <p>Designing distinct boundaries limits coupling. For Daniel's analytics pipeline, the stream serves as the optimal ingestion layer.</p>
       </div>
 
       <div class="verdict">

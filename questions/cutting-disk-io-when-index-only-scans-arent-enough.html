@@ -87,10 +87,10 @@
         <h3><span class="emoji">🏆</span> Best Answer — D: Materialized View</h3>
         <p>A <strong>materialized view</strong> tackles the problem at its source: instead of reading millions of wide rows on every request, queries read a small, precomputed table. Given Arjun's constraints, it's the most effective change:</p>
         <ul>
-          <li>**Far less I/O:** Pre-aggregating millions of order rows into something like daily totals per region and category can cut the data scanned by <strong>100× or more</strong>. A relation that small stays in the buffer cache, so most reads never touch disk.</li>
-          <li>**Brings index-only scans back:** Because the view is narrow, a <strong>covering index</strong> on it can include every column the dashboard needs. A freshly refreshed view also has an up-to-date visibility map, so the planner can skip heap fetches entirely.</li>
-          <li>**Serves every filter combination:** Unlike a key-value cache, the view is still a SQL table. Any combination of filters and groupings can run against it, so hit rate is never a problem.</li>
-          <li>**Fits the freshness budget:** Running <strong>REFRESH MATERIALIZED VIEW CONCURRENTLY</strong> every few minutes stays within the stated staleness tolerance without blocking readers, and it needs no new infrastructure.</li>
+          <li><strong>Far less I/O:</strong> Pre-aggregating millions of order rows into something like daily totals per region and category can cut the data scanned by <strong>100× or more</strong>. A relation that small stays in the buffer cache, so most reads never touch disk.</li>
+          <li><strong>Zero-I/O reads:</strong> A plain REFRESH rebuilds the relation from scratch, producing a clean visibility map. When using REFRESH CONCURRENTLY (which is recommended to avoid blocking readers), schedule VACUUM on the view afterward to maintain the visibility map for index-only scans.</li>
+          <li><strong>Flexible within its dimensions:</strong> Unlike a key-value cache, the view is a SQL table that supports any combination of filters on its grouped columns (day, region, category). This covers the dashboard's primary access patterns. However, filters on dimensions not included in the view's GROUP BY require querying the base table or creating additional views.</li>
+          <li><strong>Fits the freshness budget:</strong> Running <strong>REFRESH MATERIALIZED VIEW CONCURRENTLY</strong> every few minutes stays within the stated staleness tolerance without blocking readers, and it needs no new infrastructure.</li>
         </ul>
         <p>Arjun should match the refresh interval to the freshness requirement, add a <strong>unique index</strong> (required for concurrent refresh), and monitor how long refreshes take. If they get too slow, he can switch to incremental aggregation: summary tables updated by triggers or CDC, or something like TimescaleDB continuous aggregates.</p>
       </div>
@@ -114,7 +114,7 @@
         <div class="strategy-item">
           <div class="s-icon">🏛️</div>
           <h4>C — Columnar Database</h4>
-          <p>Columnar stores (ClickHouse, Redshift, BigQuery) are excellent for analytics and would reduce I/O. But <strong>moving the workload</strong> means new infrastructure, a data pipeline to keep it in sync, and new operational skills. That's a heavy answer when the dashboard's needs can be met inside the existing database. It becomes the right choice once analytics outgrows precomputation.</p>
+          <p>Columnar stores (ClickHouse, DuckDB, Redshift, BigQuery) are <strong>purpose-built for exactly this workload</strong> and would eliminate the I/O problem at its root. They read only the columns each query needs, compress aggressively, and handle ad-hoc filter combinations that a pre-aggregated view cannot support. The trade-off is operational: a new data store, a sync pipeline (CDC or batch ETL), and a separate query interface. <strong>If the dashboard's filter requirements outgrow the materialized view's grouped dimensions, or if non-additive aggregates are needed, a columnar store becomes the right next step.</strong> For Arjun's current needs — known aggregate patterns with bounded staleness — the materialized view is a lower-cost starting point inside the existing database.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
           <div class="s-icon">⚡</div>
@@ -217,12 +217,12 @@
       <div class="explanation-card" style="border-color:#f8717130;">
         <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
         <ul class="mistakes-list">
-          <li>**Blocking refreshes:** A plain REFRESH MATERIALIZED VIEW locks out readers. Use CONCURRENTLY, which requires a unique index on the view.</li>
-          <li>**Refreshing too often:** If a refresh takes longer than the interval, refreshes overlap and hammer the database. Measure refresh time and schedule around it.</li>
-          <li>**Forgetting to index the view:** A materialized view is just a table, and without indexes queries against it still do full scans.</li>
-          <li>**Neglecting VACUUM:** Index-only scans depend on an up-to-date visibility map. Bloated tables with stale visibility maps fall back to heap fetches.</li>
-          <li>**Over-wide covering indexes:** Stuffing every column into INCLUDE bloats the index until it costs as much to read as the table.</li>
-          <li>**Sharding to fix a query-shape problem:** Spreading inefficient scans across more machines multiplies cost without fixing the root cause.</li>
+          <li><strong>Blocking refreshes:</strong> A plain REFRESH MATERIALIZED VIEW locks out readers. Use CONCURRENTLY, which requires a unique index on the view.</li>
+          <li><strong>Refreshing too often:</strong> If a refresh takes longer than the interval, refreshes overlap and hammer the database. Measure refresh time and schedule around it.</li>
+          <li><strong>Forgetting to index the view:</strong> A materialized view is just a table, and without indexes queries against it still do full scans.</li>
+          <li><strong>Neglecting VACUUM:</strong> Index-only scans depend on an up-to-date visibility map. Bloated tables with stale visibility maps fall back to heap fetches.</li>
+          <li><strong>Over-wide covering indexes:</strong> Stuffing every column into INCLUDE bloats the index until it costs as much to read as the table.</li>
+          <li><strong>Sharding to fix a query-shape problem:</strong> Spreading inefficient scans across more machines multiplies cost without fixing the root cause.</li>
         </ul>
       </div>
 
@@ -230,12 +230,12 @@
         <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
         <p>Teams usually escalate read optimizations in stages, matching the effort to the size of the problem:</p>
         <ul>
-          <li>**Stage 1 — Covering indexes:** Use INCLUDE columns and keep VACUUM healthy so true index-only scans work for narrow queries.</li>
-          <li>**Stage 2 — Materialized views / summary tables:** Precompute aggregates for dashboards that can tolerate a few minutes of staleness.</li>
-          <li>**Stage 3 — Result caching:** Add Redis on top of the views for the handful of hottest, identical queries.</li>
-          <li>**Stage 4 — Columnar analytics store:** Move heavy ad-hoc analytics to ClickHouse/BigQuery through CDC once the OLTP database can't keep up.</li>
+          <li><strong>Stage 1 — Covering indexes:</strong> Use INCLUDE columns and keep VACUUM healthy so true index-only scans work for narrow queries.</li>
+          <li><strong>Stage 2 — Materialized views / summary tables:</strong> Precompute aggregates for dashboards that can tolerate a few minutes of staleness.</li>
+          <li><strong>Stage 3 — Result caching:</strong> Add Redis on top of the views for the handful of hottest, identical queries.</li>
+          <li><strong>Stage 4 — Columnar analytics store:</strong> Move heavy ad-hoc analytics to ClickHouse/BigQuery through CDC once the OLTP database can't keep up.</li>
         </ul>
-        <p>For Arjun's dashboard, a materialized view delivers most of the gain <strong>inside the existing database</strong>. Caching and columnar storage are the next steps if the workload keeps growing.</p>
+        <p>For Arjun's dashboard, a materialized view delivers most of the gain <strong>inside the existing database</strong>. Caching and columnar storage are the next steps if the workload keeps growing. If the materialized view approach proves too limiting (too many dimensions, non-additive aggregates, ad-hoc queries), migrating to a columnar store is the natural escalation.</p>
       </div>
 
       <div class="verdict">

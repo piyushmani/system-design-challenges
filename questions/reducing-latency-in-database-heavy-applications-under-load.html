@@ -44,7 +44,7 @@
     <div class="question-card">
       <div class="q-label">Challenge</div>
       <h1 class="q-title">Reducing Latency in Database-Heavy Applications Under Load</h1>
-      <p class="q-scenario"><strong>Priya</strong>, a senior backend developer, is investigating performance bottlenecks in a production system that serves <strong>millions of requests daily</strong>. During peak traffic windows, database query response times degrade significantly, leading to <strong>timeouts</strong> and a poor end-user experience. She needs to choose the most effective strategy to enhance query throughput and minimize response latency.</p>
+      <p class="q-scenario"><strong>Priya</strong>, a senior backend developer, is investigating performance bottlenecks in a production system that serves <strong>millions of requests daily</strong>. During peak traffic windows, database query response times degrade significantly, leading to <strong>timeouts</strong> and a poor end-user experience. Profiling shows that the slow queries already use appropriate indexes with healthy query plans, the workload is <strong>read-heavy</strong>, and a small set of hot rows (such as popular user profiles and product pages) accounts for most reads. The product can tolerate <strong>bounded staleness</strong> (seconds to a few minutes) on this data. She needs to choose the most effective <em>first</em> strategy to improve throughput and reduce response latency.</p>
     </div>
 
     <div class="options-list" id="optionsList" data-correct="1">
@@ -60,7 +60,7 @@
       </div>
       <div class="option" data-idx="2">
         <div class="opt-letter">C</div>
-        <div class="opt-text">Apply table partitioning to spread data across multiple nodes and balance the read/write workload.</div>
+        <div class="opt-text">Partition or shard large tables to spread data across multiple nodes and balance the read/write workload.</div>
         <div class="opt-badge">✗ Not Best</div>
       </div>
       <div class="option" data-idx="3">
@@ -85,14 +85,15 @@
 
       <div class="explanation-card best">
         <h3><span class="emoji">🏆</span> Best Answer — B: Caching Layer</h3>
-        <p>Introducing a <strong>caching layer</strong> (such as Redis or Memcached) is the most impactful single strategy for a system already suffering latency spikes under peak load. Here's why it stands out:</p>
+        <p>Given this workload (read-heavy, repetitive, already-indexed queries, staleness-tolerant), introducing a <strong>caching layer</strong> (such as Redis or Memcached) is the most impactful first step for a system whose profiling already shows healthy query plans and high read repetition on a small set of hot rows. Because profiling has already ruled out query-plan inefficiencies and the workload has high temporal locality, reducing demand on the database is the right next step — not further query optimization. Here's why it stands out:</p>
         <ul>
-          <li>**Immediate latency reduction:** Cache hits return data in <strong>sub-millisecond</strong> time versus tens or hundreds of milliseconds for a database query. For hot data paths, this can reduce p99 latency by <strong>10×–100×</strong>.</li>
-          <li>**Load shedding:** By intercepting repeated reads before they reach the database, caching dramatically reduces the number of queries hitting the DB during peak hours — exactly when the system struggles.</li>
-          <li>**Non-invasive:** Unlike schema changes (denormalization) or infrastructure changes (partitioning), a cache can be layered on top of the existing architecture with minimal refactoring.</li>
-          <li>**Battle-tested at scale:** Companies like Twitter, Instagram, and GitHub use read-through and write-behind caching as a cornerstone of their high-traffic architectures.</li>
+          <li><strong>Immediate latency reduction:</strong> A cache hit is typically served in around a millisecond or less, versus tens or hundreds of milliseconds for a loaded database query. For hot data paths the improvement is often an order of magnitude or more, depending on hit rate and query cost.</li>
+          <li><strong>Read offloading:</strong> By intercepting repeated reads before they reach the database, caching sharply reduces the number of queries (and connections held) during peak hours, which is exactly when the system struggles.</li>
+          <li><strong>Relatively non-invasive:</strong> Unlike schema changes (denormalization) or data-layout changes (partitioning/sharding), a cache can be layered onto the existing architecture with limited refactoring: reads go through a cache-aside helper, and writes add an invalidation step.</li>
+          <li><strong>Why not read replicas first?</strong> Replicas also offload reads, but each one still executes the query, so latency per request stays the same, you pay for more database capacity, and replication lag adds its own consistency issues. A cache removes the work entirely for repeated reads.</li>
+          <li><strong>Proven at scale:</strong> Facebook's published memcache architecture (Nishtala et al., NSDI 2013) is a well-known example of look-aside caching absorbing most read traffic in front of MySQL.</li>
         </ul>
-        <p>A well-designed caching strategy includes <strong>TTL-based expiry</strong>, <strong>cache invalidation on writes</strong>, and a <strong>cache-aside or read-through pattern</strong> to keep data fresh while absorbing the majority of read traffic.</p>
+        <p>A well-designed caching strategy includes <strong>TTL-based expiry</strong>, <strong>invalidation on writes</strong>, <strong>stampede protection</strong>, and a <strong>cache-aside or read-through pattern</strong>. Track the hit rate and the database query rate before and after rollout; if the hit rate stays low, caching is not the right fix for this workload.</p>
       </div>
 
       <div class="explanation-card">
@@ -104,17 +105,17 @@
         <div class="strategy-item">
           <div class="s-icon">📇</div>
           <h4>A — Composite Indexes</h4>
-          <p>Indexes speed up <strong>individual query execution</strong>, but they don't reduce the <em>volume</em> of queries hitting the database. Under peak load with millions of identical reads, every request still round-trips to the DB. Indexes also add write overhead (every INSERT/UPDATE must maintain the index B-tree).</p>
+          <p>Indexes lower the <strong>cost of each query</strong>, which raises how many queries the database can handle, but they don't reduce the <em>volume</em> of queries hitting it. In this scenario profiling already shows the slow queries use appropriate indexes, so adding more yields little, and each extra index adds write overhead (inserts, deletes, and updates to indexed columns must maintain it). <strong>Caveat:</strong> if profiling had shown sequential scans or poor query plans, indexing would be the right first move: it's cheap, low-risk, and easy to reverse.</p>
         </div>
         <div class="strategy-item">
           <div class="s-icon">🧩</div>
-          <h4>C — Table Partitioning</h4>
-          <p>Partitioning helps when a <strong>single table is too large</strong> to scan efficiently or when you need to shard writes across nodes. But it introduces significant operational complexity (cross-partition queries, rebalancing, migration) and doesn't help if the bottleneck is repeated reads of the same data.</p>
+          <h4>C — Table Partitioning / Sharding</h4>
+          <p><strong>Partitioning</strong> divides a table into segments on the SAME server (helps the planner skip irrelevant segments). <strong>Sharding</strong> distributes data across MULTIPLE nodes (scales writes and storage). Both are heavy changes that introduce significant operational complexity (cross-partition queries, rebalancing, migration), and neither helps much if the bottleneck is repeated reads of the same hot rows, since a hot row still lives on one shard.</p>
         </div>
         <div class="strategy-item">
           <div class="s-icon">📋</div>
           <h4>D — Denormalization</h4>
-          <p>Removing JOINs speeds up reads, but it <strong>duplicates data</strong>, complicates writes, and risks inconsistency. It's a permanent schema change that's hard to reverse. For Priya's scenario (peak-hour spikes on a working system), this is a heavy-handed structural change when a simpler layer can solve the problem.</p>
+          <p>Removing JOINs speeds up reads, but it <strong>duplicates data</strong>, complicates writes, and risks inconsistency. It's a schema change that is hard to reverse. For Priya's scenario (peak-hour spikes on a working system, with no evidence that JOINs are the dominant cost), this is a heavy-handed structural change when a simpler layer can absorb the load.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
           <div class="s-icon">⚡</div>
@@ -130,13 +131,13 @@
         <div class="tt-wrap">
           <table class="tradeoff-table">
             <thead>
-              <tr><th>Approach</th><th>Read Latency Impact</th><th>Write Overhead</th><th>Implementation Complexity</th><th>Reversibility</th><th>Scales with Traffic</th></tr>
+              <tr><th>Approach</th><th>Read Latency Impact</th><th>Write Overhead</th><th>Implementation Complexity</th><th>Reversibility</th><th>Reduces Query Volume</th><th>Needs Repeated Reads</th></tr>
             </thead>
             <tbody>
-            <tr><td class="tt-option">A — Composite Indexes</td><td>Moderate ⬆</td><td>High ⬇</td><td>Low ✅</td><td>Easy ✅</td><td>No ❌</td></tr>
-            <tr class="tt-best"><td class="tt-option">B — Caching ✓</td><td>Very High ⬆⬆</td><td>None ✅</td><td>Medium</td><td>Easy ✅</td><td>Yes ✅</td></tr>
-            <tr><td class="tt-option">C — Table Partitioning</td><td>Moderate ⬆</td><td>Medium</td><td>High ⬇</td><td>Hard ❌</td><td>Yes ✅</td></tr>
-            <tr><td class="tt-option">D — Denormalization</td><td>High ⬆</td><td>High ⬇</td><td>High ⬇</td><td>Very Hard ❌</td><td>Partial</td></tr>
+            <tr><td class="tt-option">A — Composite Indexes</td><td>Moderate (high if scans) ✅</td><td>High ❌</td><td>Low ✅</td><td>Easy ✅</td><td>No ❌ (cheaper per query)</td><td>No ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Caching ✓</td><td>Very high on hits ✅</td><td>Low–Medium (invalidation) ⚠</td><td>Medium ⚠</td><td>Easy ✅</td><td>Yes ✅</td><td>Yes ⚠</td></tr>
+            <tr><td class="tt-option">C — Partitioning / Sharding</td><td>Moderate ⚠</td><td>Medium ⚠</td><td>High ❌</td><td>Hard ❌</td><td>Partial (spreads load) ⚠</td><td>No ✅</td></tr>
+            <tr><td class="tt-option">D — Denormalization</td><td>High for JOIN-heavy reads ✅</td><td>High ❌</td><td>High ❌</td><td>Very hard ❌</td><td>No ❌ (cheaper per query)</td><td>No ✅</td></tr>
             </tbody>
           </table>
         </div>
@@ -151,61 +152,77 @@
         <div class="strategy-item">
           <div class="s-icon">📌</div>
           <h4>A — Composite Indexes</h4>
-          <p>Queries are diverse (not repeated identical reads) and the database itself is the bottleneck due to full table scans or missing index coverage. Works best when your query patterns are stable and predictable.</p>
+          <p>Slow query logs show sequential scans or poor plans, or queries are diverse (not repeated identical reads) and the database itself is the bottleneck. Usually the cheapest, safest fix when profiling points to missing index coverage.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
           <div class="s-icon">✅</div>
           <h4>B — Caching</h4>
-          <p>Read-heavy workload with high temporal locality — the same data is requested thousands of times between changes. Ideal when the system is already functional but drowning under peak traffic volume.</p>
+          <p>Read-heavy workload with high temporal locality: the same data is requested thousands of times between changes, queries are already well-indexed, and some staleness is acceptable. Not effective if requests are mostly unique.</p>
         </div>
         <div class="strategy-item">
           <div class="s-icon">📌</div>
-          <h4>C — Table Partitioning</h4>
-          <p>Table has grown to billions of rows and queries naturally partition by a dimension (date, tenant, region). Also critical when write throughput on a single node is the limiting factor.</p>
+          <h4>C — Table Partitioning / Sharding</h4>
+          <p>A table has grown to billions of rows and queries naturally split by a dimension (date, tenant, region), or write throughput or storage on a single node is the limiting factor.</p>
         </div>
         <div class="strategy-item">
           <div class="s-icon">📌</div>
           <h4>D — Denormalization</h4>
-          <p>Analytics or reporting dashboards that run complex multi-table JOINs and can tolerate slight data staleness. Best applied surgically after profiling proves JOINs are the dominant cost.</p>
+          <p>Analytics or reporting paths that run complex multi-table JOINs and can tolerate slight staleness, applied after profiling proves JOINs are the dominant cost.</p>
         </div>
 
       </div>
 
       <div class="explanation-card">
         <h3><span class="emoji">🗺️</span> Cache-Aside Read Path</h3>
-        <p>How a request flows through the cache before ever touching the database:</p>
+        <p>A read checks the cache first and only touches the database on a miss:</p>
         <figure class="viz-window diagram-window">
           <div class="viz-bar">
             <span class="viz-dots"><i></i><i></i><i></i></span>
-            <span class="viz-label">diagram · flowchart</span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
             <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
               <span>Expand</span>
             </button>
           </div>
           <div class="diagram-canvas">
-            <pre class="mermaid" data-source="flowchart LR
-    C[Client] --&gt; A[App Server]
-    A --&gt;|1. GET key| R[(Redis Cache)]
-    R --&gt;|2a. HIT| A
-    A --&gt;|2b. MISS| D[(Primary DB)]
-    D --&gt;|3. Result| A
-    A --&gt;|4. SET key TTL| R
-    A --&gt; C">flowchart LR
-    C[Client] --&gt; A[App Server]
-    A --&gt;|1. GET key| R[(Redis Cache)]
-    R --&gt;|2a. HIT| A
-    A --&gt;|2b. MISS| D[(Primary DB)]
-    D --&gt;|3. Result| A
-    A --&gt;|4. SET key TTL| R
-    A --&gt; C</pre>
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant A as App Server
+    participant R as Redis Cache
+    participant D as Primary DB
+    C-&gt;&gt;A: Request
+    A-&gt;&gt;R: 1. GET key
+    alt Cache hit
+        R--&gt;&gt;A: 2a. Value
+    else Cache miss
+        R--&gt;&gt;A: 2b. Miss
+        A-&gt;&gt;D: 3. SELECT
+        D--&gt;&gt;A: 4. Row
+        A-&gt;&gt;R: 5. SET key with TTL
+    end
+    A--&gt;&gt;C: Response">sequenceDiagram
+    participant C as Client
+    participant A as App Server
+    participant R as Redis Cache
+    participant D as Primary DB
+    C-&gt;&gt;A: Request
+    A-&gt;&gt;R: 1. GET key
+    alt Cache hit
+        R--&gt;&gt;A: 2a. Value
+    else Cache miss
+        R--&gt;&gt;A: 2b. Miss
+        A-&gt;&gt;D: 3. SELECT
+        D--&gt;&gt;A: 4. Row
+        A-&gt;&gt;R: 5. SET key with TTL
+    end
+    A--&gt;&gt;C: Response</pre>
           </div>
         </figure>
       </div>
 
       <div class="explanation-card">
         <h3><span class="emoji">🧑‍💻</span> Cache-Aside with Stampede Protection</h3>
-        <p>A read-through helper that serves hot keys from memory and prevents a thundering herd on expiry:</p>
+        <p>A read-through helper that serves hot keys from memory, re-checks the cache after taking the lock, caches misses for nonexistent rows, and serves stale data or fails fast instead of stampeding the database:</p>
         <figure class="viz-window code-block">
           <div class="viz-bar">
             <span class="viz-dots"><i></i><i></i><i></i></span>
@@ -215,59 +232,88 @@
               <span>Copy</span>
             </button>
           </div>
-          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getUserProfile</span>(userId):</span>
+          <pre><code><span class="line">NOT_FOUND <span class="tk-op">=</span> sentinel value            <span class="tk-com">// negative-cache marker</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getUserProfile</span>(userId):</span>
 <span class="line">    key <span class="tk-op">=</span> <span class="tk-str">&quot;user:&quot;</span> <span class="tk-op">+</span> userId</span>
 <span class="line"></span>
-<span class="line">    value <span class="tk-op">=</span> cache.<span class="tk-fn">get</span>(key)</span>
-<span class="line">    <span class="tk-kw">if</span> value <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
-<span class="line">        <span class="tk-kw">return</span> value                      <span class="tk-com">// cache HIT (~0.5 ms)</span></span>
+<span class="line">    entry <span class="tk-op">=</span> cache.<span class="tk-fn">get</span>(key)</span>
+<span class="line">    <span class="tk-kw">if</span> entry <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> entry <span class="tk-op">==</span> NOT_FOUND ? <span class="tk-lit">null</span> : entry          <span class="tk-com">// cache HIT (~1 ms)</span></span>
 <span class="line"></span>
 <span class="line">    <span class="tk-com">// Only one request rebuilds the key; others wait briefly</span></span>
-<span class="line">    <span class="tk-kw">if</span> cache.<span class="tk-fn">acquireLock</span>(<span class="tk-str">&quot;lock:&quot;</span> <span class="tk-op">+</span> key, ttl <span class="tk-op">=</span> <span class="tk-num">5s</span>):</span>
+<span class="line">    token <span class="tk-op">=</span> cache.<span class="tk-fn">acquireLock</span>(<span class="tk-str">&quot;lock:&quot;</span> <span class="tk-op">+</span> key, ttl <span class="tk-op">=</span> <span class="tk-num">5s</span>)    <span class="tk-com">// unique token, or null</span></span>
+<span class="line">    <span class="tk-kw">if</span> token <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
 <span class="line">        <span class="tk-kw">try</span>:</span>
-<span class="line">            value <span class="tk-op">=</span> db.<span class="tk-fn">query</span>(<span class="tk-str">&quot;SELECT * FROM users WHERE id = ?&quot;</span>, userId)</span>
-<span class="line">            cache.<span class="tk-fn">set</span>(key, value, ttl <span class="tk-op">=</span> <span class="tk-num">300s</span> <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-num">30s</span>))  <span class="tk-com">// jitter TTL</span></span>
-<span class="line">        <span class="tk-kw">finally</span>:</span>
-<span class="line">            cache.<span class="tk-fn">releaseLock</span>(<span class="tk-str">&quot;lock:&quot;</span> <span class="tk-op">+</span> key)</span>
-<span class="line">        <span class="tk-kw">return</span> value</span>
+<span class="line">            <span class="tk-com">// Re-check: another request may have filled the cache before we got the lock</span></span>
+<span class="line">            entry <span class="tk-op">=</span> cache.<span class="tk-fn">get</span>(key)</span>
+<span class="line">            <span class="tk-kw">if</span> entry <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">                <span class="tk-kw">return</span> entry <span class="tk-op">==</span> NOT_FOUND ? <span class="tk-lit">null</span> : entry</span>
 <span class="line"></span>
-<span class="line">    <span class="tk-fn">sleep</span>(<span class="tk-num">50ms</span>)</span>
-<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">getUserProfile</span>(userId)        <span class="tk-com">// retry; key is likely warm now</span></span>
+<span class="line">            row <span class="tk-op">=</span> db.<span class="tk-fn">query</span>(<span class="tk-str">&quot;SELECT id, name, avatar, bio FROM users WHERE id = ?&quot;</span>, userId)</span>
+<span class="line">            <span class="tk-kw">if</span> row <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">                cache.<span class="tk-fn">set</span>(key, NOT_FOUND, ttl <span class="tk-op">=</span> <span class="tk-num">30s</span>)       <span class="tk-com">// short TTL: avoids repeated DB hits for missing ids</span></span>
+<span class="line">            <span class="tk-kw">else</span>:</span>
+<span class="line">                cache.<span class="tk-fn">set</span>(key, row, ttl <span class="tk-op">=</span> <span class="tk-num">300s</span> <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-num">30s</span>))   <span class="tk-com">// jittered TTL</span></span>
+<span class="line">                cache.<span class="tk-fn">set</span>(<span class="tk-str">&quot;stale:&quot;</span> <span class="tk-op">+</span> key, row, ttl <span class="tk-op">=</span> <span class="tk-num">1h</span>)          <span class="tk-com">// longer-lived fallback copy</span></span>
+<span class="line">            <span class="tk-kw">return</span> row</span>
+<span class="line">        <span class="tk-kw">finally</span>:</span>
+<span class="line">            <span class="tk-com">// release only if we still own the lock (it may have expired)</span></span>
+<span class="line">            cache.<span class="tk-fn">releaseLock</span>(<span class="tk-str">&quot;lock:&quot;</span> <span class="tk-op">+</span> key, token)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Someone else is rebuilding: wait briefly for them to fill the cache</span></span>
+<span class="line">    <span class="tk-kw">for</span> attempt <span class="tk-kw">in</span> <span class="tk-num">0</span>..<span class="tk-num">2</span>:</span>
+<span class="line">        <span class="tk-fn">sleep</span>(<span class="tk-num">50ms</span> <span class="tk-op">*</span> <span class="tk-num">2</span>^attempt <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-num">20ms</span>))          <span class="tk-com">// bounded backoff</span></span>
+<span class="line">        entry <span class="tk-op">=</span> cache.<span class="tk-fn">get</span>(key)</span>
+<span class="line">        <span class="tk-kw">if</span> entry <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">            <span class="tk-kw">return</span> entry <span class="tk-op">==</span> NOT_FOUND ? <span class="tk-lit">null</span> : entry</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Still not filled. Do NOT send every waiter to the DB (it is already struggling).</span></span>
+<span class="line">    stale <span class="tk-op">=</span> cache.<span class="tk-fn">get</span>(<span class="tk-str">&quot;stale:&quot;</span> <span class="tk-op">+</span> key)</span>
+<span class="line">    <span class="tk-kw">if</span> stale <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> stale                                       <span class="tk-com">// slightly stale beats a stampede</span></span>
+<span class="line">    <span class="tk-kw">throw</span> ServiceBusy                                      <span class="tk-com">// fail fast; caller returns 503 or a degraded response</span></span>
 <span class="line"></span>
 <span class="line"><span class="tk-kw">function</span> <span class="tk-fn">updateUserProfile</span>(userId, data):</span>
-<span class="line">    db.<span class="tk-fn">update</span>(<span class="tk-str">&quot;users&quot;</span>, userId, data)</span>
-<span class="line">    cache.<span class="tk-fn">delete</span>(<span class="tk-str">&quot;user:&quot;</span> <span class="tk-op">+</span> userId)       <span class="tk-com">// invalidate on write</span></span></code></pre>
+<span class="line">    db.<span class="tk-fn">update</span>(<span class="tk-str">&quot;users&quot;</span>, userId, data)                       <span class="tk-com">// commit first</span></span>
+<span class="line">    <span class="tk-fn">deleteWithRetry</span>(<span class="tk-str">&quot;user:&quot;</span> <span class="tk-op">+</span> userId, maxAttempts <span class="tk-op">=</span> <span class="tk-num">3</span>)     <span class="tk-com">// if this fails, the entry stays stale until TTL</span></span>
+<span class="line">    jobQueue.<span class="tk-fn">enqueue</span>(<span class="tk-fn">DeleteKey</span>(<span class="tk-str">&quot;user:&quot;</span> <span class="tk-op">+</span> userId), delay <span class="tk-op">=</span> <span class="tk-num">500ms</span>)   <span class="tk-com">// durable queue, survives app crashes</span></span>
+<span class="line">    <span class="tk-com">// A concurrent reader may re-cache the old row after the first delete.</span></span>
+<span class="line">    <span class="tk-com">// The TTL bounds that staleness; the delayed delete narrows it further.</span></span>
+<span class="line">    <span class="tk-com">// For stronger guarantees, use leases or versioned values.</span></span></code></pre>
         </figure>
       </div>
 
       <div class="explanation-card" style="border-color:#f8717130;">
         <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
         <ul class="mistakes-list">
-          <li>**Caching everything blindly** — Without analyzing access patterns, you end up with a bloated cache full of cold keys. Cache only hot paths identified through query profiling.</li>
-          <li>**Ignoring cache invalidation** — Serving stale data after writes is the #1 caching bug. Always pair cache writes with an invalidation strategy (write-through, write-behind, or explicit eviction on mutation).</li>
-          <li>**Cache stampede on expiry** — When a popular key expires, hundreds of concurrent requests all hit the DB simultaneously. Use request coalescing (singleflight), probabilistic early expiry, or lock-based refresh.</li>
-          <li>**Adding indexes to every column** — Indexes aren't free. Each one adds storage and slows writes. Profile your actual slow queries with EXPLAIN ANALYZE before adding indexes.</li>
-          <li>**Premature denormalization** — Duplicating data before proving JOINs are the bottleneck creates permanent write complexity for a problem that might not exist.</li>
-          <li>**Partitioning by the wrong key** — Choosing the wrong partition key (e.g., alphabetical instead of time-based for logs) creates hot partitions that are worse than no partitioning.</li>
+          <li><strong>Skipping profiling:</strong> Picking a fix before you know where time is going. A cache can hide a bad query instead of fixing it, and the problem returns when the cache is cold. Use slow query logs and <code>EXPLAIN ANALYZE</code> first.</li>
+          <li><strong>Caching everything blindly:</strong> Without analyzing access patterns, you end up with a bloated cache full of cold keys and a low hit rate. Cache hot paths identified through profiling, and monitor the hit rate.</li>
+          <li><strong>Ignoring cache invalidation:</strong> Serving stale data after writes is a common caching bug. Pair every cached read with an invalidation strategy (explicit eviction on write, or write-through), and keep a TTL as a backstop.</li>
+          <li><strong>Missing the invalidation race:</strong> A reader fetches an old row, a writer updates the DB and deletes the key, and the reader then writes the old row back into the cache. Mitigations, from most to least robust: leases (as in the Facebook paper), versioned values, short TTLs, and a delayed second delete as a heuristic.</li>
+          <li><strong>Cache stampede on expiry:</strong> When a popular key expires, hundreds of concurrent requests hit the DB at once. Use request coalescing (singleflight), probabilistic early expiry, TTL jitter, or lock-based refresh with a stale fallback.</li>
+          <li><strong>No plan for cache failure or cold start:</strong> If Redis restarts or is flushed at peak, the full load lands on the database at once. Plan for warm-up, rate limiting, and graceful degradation.</li>
         </ul>
       </div>
 
       <div class="explanation-card">
         <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
-        <p>In practice, senior engineers rarely pick <em>just one</em> strategy. The optimal production setup layers <strong>multiple techniques</strong> together:</p>
+        <p>In practice, senior engineers rarely pick <em>just one</em> strategy, and they <strong>measure before choosing</strong>. A typical sequence looks like this:</p>
         <ul>
-          <li>**Layer 1 — Caching:** Intercept hot reads with Redis/Memcached (biggest immediate win).</li>
-          <li>**Layer 2 — Indexing:** Ensure all remaining DB queries are well-indexed (steady-state performance).</li>
-          <li>**Layer 3 — Partitioning:** Shard only when single-node DB storage or write throughput becomes the bottleneck.</li>
-          <li>**Layer 4 — Denormalization:** Apply surgically to specific read-heavy paths where JOINs are proven bottlenecks via query profiling.</li>
+          <li><strong>Step 0 — Profile first:</strong> Use slow query logs, <code>EXPLAIN ANALYZE</code>, and p99 breakdowns (queueing vs. execution time) to find what is actually slow. If profiling shows full scans or bad plans, start with indexing instead.</li>
+          <li><strong>Step 1 — Caching:</strong> Intercept hot, repeated reads with Redis/Memcached (the biggest win for this scenario).</li>
+          <li><strong>Step 2 — Connection pooling and read replicas:</strong> Timeouts under load are often caused by connection exhaustion or queueing. Pool connections sensibly, set sane timeouts, and offload remaining reads to replicas (accepting some replication lag).</li>
+          <li><strong>Step 3 — Indexing:</strong> Make sure all remaining database queries are well-indexed for steady-state performance.</li>
+          <li><strong>Step 4 — Partitioning/sharding:</strong> Only when single-node storage or write throughput becomes the bottleneck.</li>
+          <li><strong>Step 5 — Denormalization:</strong> Apply surgically to specific read-heavy paths where JOINs are proven bottlenecks.</li>
         </ul>
-        <p>Priya's first move should be caching because it yields the <strong>highest impact with the lowest risk</strong>. She can then layer in other optimizations based on profiling data.</p>
+        <p>Layer these in based on profiling data, not habit.</p>
       </div>
 
       <div class="verdict">
         <div class="v-emoji">💡</div>
         <h3>Key Takeaway</h3>
-        <p>When facing latency spikes under peak traffic, <strong>reduce demand on the database first</strong> — don't just make the database faster. A caching layer absorbs the thundering herd, buys time, and is the highest-ROI first step in any database performance toolkit.</p>
+        <p>Measure first, then <strong>reduce demand on the database</strong> when reads are repetitive. A caching layer absorbs repeated read traffic and buys time, but it only works if the workload has repeated reads and tolerates some staleness, and it must be paired with invalidation and stampede protection. If profiling instead shows slow query plans, fix those first.</p>
       </div>
 
     </section>

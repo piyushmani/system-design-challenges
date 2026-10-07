@@ -45,7 +45,7 @@
     <div class="question-card">
       <div class="q-label">Challenge</div>
       <h1 class="q-title">Balancing Read and Write Throughput in a Dual-Traffic-Pattern Platform</h1>
-      <p class="q-scenario"><strong>Sarah</strong>, a software engineer at a fast-growing social media platform, is tackling a <strong>dual-traffic-pattern problem</strong>: during peak hours, the system is hammered with <strong>write-heavy traffic</strong> (posts, comments, reactions, stories) while off-peak periods are dominated by <strong>read-heavy traffic</strong> (timeline browsing, search, profile views). The current single-database architecture is buckling under both patterns, and Sarah needs to choose a scaling strategy that optimizes for <strong>both read and write throughput</strong> without over-engineering for one at the expense of the other.</p>
+      <p class="q-scenario"><strong>Sarah</strong>, a software engineer at a fast-growing social media platform, is tackling a <strong>dual-traffic-pattern problem</strong>: during peak hours, the system is hammered with <strong>write-heavy traffic</strong> (posts, comments, reactions, stories) while off-peak periods are dominated by <strong>read-heavy traffic</strong> (timeline browsing, search, profile views). The current single-database architecture is buckling under both patterns: during peak hours, the database struggles to keep up with write volume; during off-peak, read-heavy queries saturate its I/O capacity. Sarah needs to choose a scaling strategy that optimizes for <strong>both read and write throughput</strong> without over-engineering for one at the expense of the other.</p>
     </div>
 
     <div class="options-list" id="optionsList" data-correct="3">
@@ -86,12 +86,13 @@
 
       <div class="explanation-card best">
         <h3><span class="emoji">🏆</span> Best Answer — D: Primary-Replica Topology</h3>
-        <p>Adopting a <strong>primary-replica topology</strong> is the most effective single architectural decision for Sarah's dual-traffic-pattern workload. It directly addresses the core problem — <strong>read and write traffic competing for the same resources</strong> — by physically separating them into dedicated paths. Here's why it stands out:</p>
+        <p>Adopting a <strong>primary-replica topology</strong> is the most effective single architectural decision for Sarah's dual-traffic-pattern workload. It directly addresses the core problem — <strong>read and write traffic competing for the same resources</strong> — by physically separating them into dedicated paths. Primary-replica directly addresses the off-peak read saturation. For peak-hour write pressure, Sarah should pair this with write-path optimizations: batching writes, offloading non-critical writes to an async queue, and using event-driven patterns to decouple write processing from the request path. Here's why this combination stands out:</p>
         <ul>
-          <li>**Direct separation of concerns:** The primary node is optimized exclusively for write throughput (indexes tuned for inserts/updates, write-ahead log configuration, minimal read contention). Read replicas are optimized for query performance (additional read-oriented indexes, query caching, connection pooling). Neither path degrades the other.</li>
-          <li>**Elastic read scaling:** During off-peak read-heavy periods, Sarah can spin up additional read replicas to absorb the load — this scales <strong>horizontally and independently</strong> of write capacity. During peak write hours, read replicas continue serving stale-but-recent data (typically seconds behind) while the primary absorbs the write surge without read contention.</li>
-          <li>**Minimal architectural disruption:** Primary-replica is natively supported by every major database (PostgreSQL streaming replication, MySQL replication, MongoDB replica sets). It requires no schema changes, no application-level sharding logic, and no data model restructuring. Sarah can deploy it <strong>incrementally</strong> — add one replica, route read traffic, measure, add more.</li>
-          <li>**Battle-tested at social media scale:** Twitter, Instagram, and LinkedIn all use primary-replica as the foundational layer of their database architecture. It's the first scaling step before more complex patterns (sharding, CQRS) become necessary, and it often <strong>buys 6–18 months of headroom</strong> before the next architecture evolution is needed.</li>
+          <li><strong>Dedicated resources for reads:</strong> Read replicas can be configured with different resource allocations (more memory for buffer cache, query-tuned connection pooling) and serve as dedicated query endpoints without contending for the primary's I/O budget. This ensures that off-peak read traffic doesn't degrade performance.</li>
+          <li><strong>Elastic read scaling:</strong> During off-peak read-heavy periods, Sarah can spin up additional read replicas to absorb the load — this scales <strong>horizontally and independently</strong> of write capacity. During peak write hours, read replicas continue serving stale-but-recent data (typically seconds behind) while the primary absorbs the write surge without read contention.</li>
+          <li><strong>Minimal architectural disruption:</strong> Primary-replica is natively supported by every major database (PostgreSQL streaming replication, MySQL replication, MongoDB replica sets). It requires no schema changes, no application-level sharding logic, and no data model restructuring. Sarah can deploy it <strong>incrementally</strong> — add one replica, route read traffic, measure, add more.</li>
+          <li><strong>Battle-tested at social media scale:</strong> Primary-replica is a foundational layer in the database architecture of most large-scale web platforms. as the foundational layer of their database architecture. It's the first scaling step before more complex patterns (sharding, CQRS) become necessary, and it often <strong>often provides significant headroom before the next architecture evolution is needed</strong> before the next architecture evolution is needed.</li>
+          <li><strong>Write-path optimizations:</strong> For peak-hour write surges, complement replicas with write-path optimizations: batch inserts, async processing via queues for non-critical writes (notifications, analytics events), and connection pooling to prevent connection exhaustion under load.</li>
         </ul>
         <p>Sarah should implement primary-replica with a <strong>connection-aware routing layer</strong> (e.g., ProxySQL, PgBouncer with read/write splitting, or application-level routing). Reads that tolerate slight staleness (timelines, profiles, search) go to replicas. Reads that require freshness (user's own just-posted content, notification counts) go to the primary with a <strong>read-your-writes consistency</strong> guarantee. This gives users the perception of strong consistency while distributing 80–90% of read traffic to replicas.</p>
       </div>
@@ -115,7 +116,7 @@
         <div class="strategy-item">
           <div class="s-icon">📊</div>
           <h4>C — Materialized Views</h4>
-          <p>Materialized views precompute expensive read queries, which dramatically speeds up specific read patterns (e.g., 'top posts this week', 'follower count'). But they <strong>only help reads</strong> — they do nothing for write throughput during peak hours. Worse, materialized views must be <strong>refreshed on write</strong>, which adds write overhead. They're also rigid: each view is tailored to one query pattern, so new read patterns require new views. Materialized views are a powerful <strong>tactical optimization</strong> for known hot queries, but they're not a scaling architecture — they're a query-level optimization layered on top of one.</p>
+          <p>Materialized views precompute expensive read queries, which dramatically speeds up specific read patterns (e.g., 'top posts this week', 'follower count'). But they <strong>only help reads</strong> — they do nothing for write throughput during peak hours. Materialized views must be periodically refreshed to stay current, and the refresh itself is an expensive operation that competes for database resources. They also don't reduce write load during peak hours. They're also rigid: each view is tailored to one query pattern, so new read patterns require new views. Materialized views are a powerful <strong>tactical optimization</strong> for known hot queries, but they're not a scaling architecture — they're a query-level optimization layered on top of one.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
           <div class="s-icon">⚡</div>
@@ -157,7 +158,7 @@
         <div class="strategy-item">
           <div class="s-icon">📌</div>
           <h4>B — Horizontal Sharding</h4>
-          <p>Single-node write throughput is the proven bottleneck (>50K writes/sec), or the dataset is too large for a single node's storage. Natural fit when data partitions cleanly by a dimension (user ID, tenant, region) with minimal cross-shard queries.</p>
+          <p>Single-node write throughput is the proven bottleneck (write volume that exceeds what a single primary can handle (measure via load testing)), or the dataset is too large for a single node's storage. Natural fit when data partitions cleanly by a dimension (user ID, tenant, region) with minimal cross-shard queries.</p>
         </div>
         <div class="strategy-item">
           <div class="s-icon">📌</div>
@@ -175,12 +176,12 @@
       <div class="explanation-card" style="border-color:#f8717130;">
         <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
         <ul class="mistakes-list">
-          <li>**Sending all reads to the primary** — After setting up replicas, engineers often forget to actually route read traffic. Use a connection proxy or application-level routing to ensure reads hit replicas by default. Monitor primary vs. replica query ratios.</li>
-          <li>**Ignoring replication lag** — Read replicas are asynchronously behind the primary. If a user posts content and immediately refreshes, they might not see their own post. Implement <strong>read-your-writes consistency</strong> by routing the authoring user's reads to the primary for a brief window after writes.</li>
-          <li>**Sharding prematurely** — Sharding is irreversible and dramatically increases operational complexity. Most platforms can serve 10–100M users on primary-replica + caching alone. Don't shard until you've proven that single-primary write throughput is the bottleneck via load testing.</li>
-          <li>**Caching writes instead of separating paths** — Write-through and write-behind caches don't reduce database write load — they just add another write target. If write throughput is the problem, you need write path optimization (batching, async processing, event sourcing), not caching.</li>
-          <li>**Over-indexing replicas** — Adding too many indexes to read replicas speeds up some queries but slows down replication (every replicated write must update all indexes). Profile actual slow queries before adding indexes, and consider different index configurations per replica if your DB supports it.</li>
-          <li>**Not monitoring replica drift during peak writes** — During write surges, replication lag can spike from milliseconds to seconds. If your application assumes near-real-time replica freshness, this creates subtle bugs. Set up alerts on replication lag and have a fallback strategy (route to primary) when lag exceeds thresholds.</li>
+          <li><strong>Sending all reads to the primary</strong> — After setting up replicas, engineers often forget to actually route read traffic. Use a connection proxy or application-level routing to ensure reads hit replicas by default. Monitor primary vs. replica query ratios.</li>
+          <li><strong>Ignoring replication lag</strong> — Read replicas are asynchronously behind the primary. If a user posts content and immediately refreshes, they might not see their own post. Implement <strong>read-your-writes consistency</strong> by routing the authoring user's reads to the primary for a brief window after writes.</li>
+          <li><strong>Sharding prematurely</strong> — Sharding is irreversible and dramatically increases operational complexity. Most platforms can serve a large number of users on primary-replica + caching alone. Don't shard until you've proven that single-primary write throughput is the bottleneck via load testing.</li>
+          <li><strong>Caching writes instead of separating paths</strong> — Write-through and write-behind caches don't reduce database write load — they just add another write target. If write throughput is the problem, you need write path optimization (batching, async processing, event sourcing), not caching.</li>
+          <li><strong>Over-indexing replicas</strong> — Adding too many indexes to read replicas speeds up some queries but slows down replication (every replicated write must update all indexes). Profile actual slow queries before adding indexes, and consider different index configurations per replica if your DB supports it.</li>
+          <li><strong>Not monitoring replica drift during peak writes</strong> — During write surges, replication lag can spike from milliseconds to seconds. If your application assumes near-real-time replica freshness, this creates subtle bugs. Set up alerts on replication lag and have a fallback strategy (route to primary) when lag exceeds thresholds.</li>
         </ul>
       </div>
 
@@ -188,10 +189,10 @@
         <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
         <p>In production social media platforms, senior engineers don't rely on a single scaling strategy. They <strong>layer complementary patterns</strong> to address different dimensions of the read/write scaling challenge:</p>
         <ul>
-          <li>**Layer 1 — Primary-replica separation:** Route writes to a primary, reads to replicas. This is the foundational layer that buys immediate headroom and is the biggest single architectural win.</li>
-          <li>**Layer 2 — Read-through caching (Redis/Memcached):** Cache hot read paths (timelines, trending content, user profiles) to intercept reads before they even reach replicas. This reduces replica load by 60–80% for typical social media access patterns.</li>
-          <li>**Layer 3 — Materialized views for analytics:** Precompute expensive aggregations (engagement metrics, trending algorithms, recommendation scores) as materialized views refreshed on a schedule. These never hit the primary or real-time replicas.</li>
-          <li>**Layer 4 — Sharding when single-primary saturates:** When write volume exceeds what a single primary can handle (typically >50K writes/sec for most RDBMS), shard by user ID or tenant. This is a last-resort architectural change that most platforms don't need until they're at massive scale.</li>
+          <li><strong>Layer 1 — Primary-replica separation:</strong> Route writes to a primary, reads to replicas. This is the foundational layer that buys immediate headroom and is the biggest single architectural win.</li>
+          <li><strong>Layer 2 — Read-through caching (Redis/Memcached):</strong> Cache hot read paths (timelines, trending content, user profiles) to intercept reads before they even reach replicas. This reduces replica load by 60–80% for typical social media access patterns.</li>
+          <li><strong>Layer 3 — Materialized views for analytics:</strong> Precompute expensive aggregations (engagement metrics, trending algorithms, recommendation scores) as materialized views refreshed on a schedule. These never hit the primary or real-time replicas.</li>
+          <li><strong>Layer 4 — Sharding when single-primary saturates:</strong> When write volume exceeds what a single primary can handle (typically write volume that exceeds what a single primary can handle (measure via load testing) for most RDBMS), shard by user ID or tenant. This is a last-resort architectural change that most platforms don't need until they're at massive scale.</li>
         </ul>
         <p>Sarah's first move should be deploying <strong>read replicas</strong> because it directly addresses the read/write contention problem with minimal risk and maximum leverage. She can then layer caching for hot reads and materialized views for analytics before ever needing to consider sharding.</p>
       </div>
@@ -199,7 +200,7 @@
       <div class="verdict">
         <div class="v-emoji">💡</div>
         <h3>Key Takeaway</h3>
-        <p>When read and write traffic have <strong>different temporal patterns</strong>, the highest-ROI architectural decision is to <strong>physically separate the read and write paths</strong>. A primary-replica topology does this natively, scales reads horizontally, requires no schema changes, and is supported by every major database. Solve the contention problem first — optimize individual query paths later.</p>
+        <p>When read and write traffic have <strong>different temporal patterns</strong>, the highest-ROI architectural decision is to <strong>physically separate the read and write paths</strong>. A primary-replica topology does this natively, scales reads horizontally, requires no schema changes, and is supported by every major database. A scalable architecture must align specifically with the identified bottleneck profile rather than applying generic patterns. While each strategy offers value, solving dual saturation requires targeted approaches for both sides of the workload.</p>
       </div>
 
     </section>

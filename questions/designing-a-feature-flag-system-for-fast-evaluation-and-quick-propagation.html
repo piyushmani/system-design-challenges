@@ -85,14 +85,14 @@
 
       <div class="explanation-card best">
         <h3><span class="emoji">🏆</span> Best Answer — C: Local In-Memory Cache with Periodic Refresh</h3>
-        <p>Evaluating flags against a <strong>local in-memory copy</strong> that syncs from a central source of truth is the core design of mature flag platforms (LaunchDarkly, Unleash, Flagsmith, OpenFeature providers). It handles both of Kavya's requirements:</p>
+        <p>Evaluating flags against a <strong>local in-memory copy</strong> that syncs from a central source of truth is the core design of mature flag platforms (LaunchDarkly, Unleash, Flagsmith, OpenFeature providers). It addresses Kavya's specific bottleneck profile by moving the network completely out of the read path:</p>
         <ul>
-          <li>**Near-zero evaluation latency:** A flag check becomes an in-process hash-map lookup plus rule evaluation, taking <strong>microseconds</strong> instead of a network round trip. With several checks per request, it's the only option that doesn't multiply latency.</li>
-          <li>**Resilience by default:** If the central store goes down, instances keep serving the last-known flag values. The flag system can never cause an outage on the request path.</li>
-          <li>**Bounded, predictable staleness:** A 5–30 second refresh interval meets the 'within seconds' requirement for rollouts. Conditional requests (ETag or version number) keep each poll cheap when nothing has changed.</li>
-          <li>**Simple to run and scale:** Read load on the central store depends on instance count divided by refresh interval, not on request traffic. Hundreds of instances polling every 10 s is trivial load, and a CDN or read replica can serve the flag payload.</li>
+          <li><strong>Near-zero evaluation latency:</strong> A flag check becomes an in-process hash-map lookup plus rule evaluation, taking <strong>microseconds</strong> instead of a network round trip. With several checks per request, it's the only option that doesn't multiply latency.</li>
+          <li><strong>Resilience by default:</strong> If the central store goes down, instances keep serving the last-known flag values. The flag system can never cause an outage on the request path.</li>
+          <li><strong>Bounded, predictable staleness:</strong> A 2–10 second refresh interval comfortably meets the "within seconds" propagation requirement. Conditional requests (ETag / version number) keep each poll cheap when nothing has changed.</li>
+          <li><strong>Simple to run and scale:</strong> Read load on the central store depends on instance count divided by refresh interval, not on request traffic. Hundreds of instances polling every few seconds is trivial load, and a CDN or read replica can serve the flag payload.</li>
         </ul>
-        <p>The design can be tightened by adding a <strong>push signal</strong> (SSE/streaming) that tells instances to refresh right away, with the periodic poll kept as a <strong>safety net</strong>. Shipping a <strong>bootstrap snapshot</strong> with each deploy means instances always start with valid flags.</p>
+        <p>Mature flag platforms like LaunchDarkly default to <strong>streaming (SSE)</strong> rather than polling for update propagation, with the periodic poll kept as a reliability fallback. This hybrid gives sub-second propagation with polling as a safety net. Shipping a <strong>bootstrap snapshot</strong> with each deploy means instances always start with valid flags.</p>
       </div>
 
       <div class="explanation-card">
@@ -217,15 +217,15 @@
           </div>
           <pre><code><span class="line"><span class="tk-kw">class</span> FlagClient:</span>
 <span class="line">    snapshot <span class="tk-op">=</span> <span class="tk-fn">loadBootstrapFile</span>()          <span class="tk-com">// safe start if the store is unreachable</span></span>
-<span class="line">    version  <span class="tk-op">=</span> snapshot.version</span>
+<span class="line">    etag    <span class="tk-op">=</span> snapshot.etag              <span class="tk-com">// or null if no snapshot</span></span>
 <span class="line"></span>
 <span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">start</span>():</span>
 <span class="line">        <span class="tk-fn">every</span> (<span class="tk-num">10s</span> <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-num">2s</span>)):        <span class="tk-com">// jitter avoids fleet-wide spikes</span></span>
 <span class="line">            <span class="tk-kw">try</span>:</span>
-<span class="line">                resp <span class="tk-op">=</span> http.<span class="tk-fn">get</span>(<span class="tk-str">&quot;/flags&quot;</span>, headers <span class="tk-op">=</span> { <span class="tk-str">&quot;If-None-Match&quot;</span>: version })</span>
+<span class="line">                resp <span class="tk-op">=</span> http.<span class="tk-fn">get</span>(<span class="tk-str">&quot;/flags&quot;</span>, headers <span class="tk-op">=</span> { <span class="tk-str">&quot;If-None-Match&quot;</span>: etag })</span>
 <span class="line">                <span class="tk-kw">if</span> resp.status <span class="tk-op">==</span> <span class="tk-num">200</span>:</span>
 <span class="line">                    snapshot <span class="tk-op">=</span> resp.body     <span class="tk-com">// atomic reference swap</span></span>
-<span class="line">                    version  <span class="tk-op">=</span> resp.etag</span>
+<span class="line">                    etag    <span class="tk-op">=</span> resp.etag</span>
 <span class="line">                <span class="tk-com">// 304 Not Modified -&gt; keep current snapshot</span></span>
 <span class="line">            <span class="tk-kw">catch</span> error:</span>
 <span class="line">                log.<span class="tk-fn">warn</span>(<span class="tk-str">&quot;flag refresh failed; serving last-known values&quot;</span>)</span>
@@ -242,12 +242,14 @@
       <div class="explanation-card" style="border-color:#f8717130;">
         <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
         <ul class="mistakes-list">
-          <li>**Calling the flag service on every evaluation:** This turns a config lookup into a network dependency, and one slow flag API call can cascade into request timeouts.</li>
-          <li>**No safe default when the cache is empty:** On cold start or SDK failure, code must fall back to a defined default value instead of throwing.</li>
-          <li>**Synchronized refresh across the fleet:** If every instance polls on the same second, the store gets load spikes. Add jitter to the refresh interval.</li>
-          <li>**Treating flags as permanent config:** Old release flags pile up as tech debt and dead code paths. Give them expiry dates and remove them after rollout.</li>
-          <li>**Inconsistent bucketing:** Using random numbers instead of a stable hash of the user ID makes users flip between variants from one request to the next.</li>
-          <li>**Putting secrets or large payloads in flags:** Every instance fetches and caches flag payloads in memory, so keep them small and non-sensitive.</li>
+          <li><strong>Calling the flag service on every evaluation:</strong> This turns a config lookup into a network dependency, and one slow flag API call can cascade into request timeouts.</li>
+          <li><strong>No safe default when the cache is empty:</strong> On cold start or SDK failure, code must fall back to a defined default value instead of throwing.</li>
+          <li><strong>Synchronized refresh across the fleet:</strong> If every instance polls on the same second, the store gets load spikes. Add jitter to the refresh interval.</li>
+          <li><strong>Treating flags as permanent config:</strong> Old release flags pile up as tech debt and dead code paths. Give them expiry dates and remove them after rollout.</li>
+          <li><strong>Inconsistent bucketing:</strong> Using random numbers instead of a stable hash of the user ID makes users flip between variants from one request to the next.</li>
+          <li><strong>Putting secrets or large payloads in flags:</strong> Every instance fetches and caches flag payloads in memory, so keep them small and non-sensitive.</li>
+          <li><strong>Flag skew across services during a request:</strong> A single user request may fan out to multiple services, each with its own flag cache refreshed at different times. During a rollout, service A may see the new flag value while service B still has the old one. For flags that affect cross-service behavior, use a request-scoped flag snapshot passed in headers or context, or accept the brief inconsistency window.</li>
+          <li><strong>Deploying a broken flag payload to the fleet:</strong> A malformed or semantically invalid flag update (e.g., rollout percentage of 200%, a missing targeting rule) can affect every instance simultaneously. Validate flag payloads at the admin/API layer before publishing, and have the SDK validate the schema before swapping the snapshot. Consider a canary deployment model for flag changes to critical paths.</li>
         </ul>
       </div>
 
@@ -255,18 +257,18 @@
         <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
         <p>Production flag systems combine several mechanisms instead of relying on just one:</p>
         <ul>
-          <li>**Source of truth — Central flag store:** Versioned flag definitions with an audit log, RBAC, and approval workflows.</li>
-          <li>**Evaluation — Local SDK cache:** Every flag check runs in-process against an in-memory ruleset.</li>
-          <li>**Fast propagation — Streaming push:** SSE or a pub/sub channel tells SDKs about changes in under a second.</li>
-          <li>**Safety net — Periodic poll + bootstrap file:** Recovers from missed push events and lets instances cold-start when the flag service is unreachable.</li>
+          <li><strong>Source of truth — Central flag store:</strong> Versioned flag definitions with an audit log, RBAC, and approval workflows.</li>
+          <li><strong>Evaluation — Local SDK cache:</strong> Every flag check runs in-process against an in-memory ruleset.</li>
+          <li><strong>Fast propagation — Streaming push:</strong> SSE or a pub/sub channel tells SDKs about changes in under a second.</li>
+          <li><strong>Safety net — Periodic poll + bootstrap file:</strong> Recovers from missed push events and lets instances cold-start when the flag service is unreachable.</li>
         </ul>
-        <p>Kavya should start with <strong>local cache + periodic refresh</strong> as the foundation. Streaming push is an add-on optimization, worth it only if sub-second propagation is truly needed.</p>
+        <p>Kavya should start with <strong>local cache + periodic refresh</strong> as the foundation. Streaming push is an excellent addition, particularly when sub-second propagation is vital.</p>
       </div>
 
       <div class="verdict">
         <div class="v-emoji">💡</div>
         <h3>Key Takeaway</h3>
-        <p>Feature flags sit on the hot path, so <strong>evaluate locally and sync in the background</strong>. Never make a network call per flag check. Keep read latency separate from update propagation, and accept a few seconds of bounded staleness.</p>
+        <p>When high read volumes dictate design, prioritize moving data to the reader. Feature flags sit on the hot path, so <strong>evaluate locally and sync in the background</strong>. Avoid networking on the evaluation path, and separate read latency from update propagation.</p>
       </div>
 
     </section>

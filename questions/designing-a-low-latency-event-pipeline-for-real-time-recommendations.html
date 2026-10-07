@@ -87,10 +87,11 @@
         <h3><span class="emoji">🏆</span> Best Answer — C: Partitioned Parallel Stream Processing</h3>
         <p>Partitioning the stream by a key such as <strong>user ID</strong> and processing partitions in parallel is the design behind nearly every large-scale real-time personalization system. Here's why it wins:</p>
         <ul>
-          <li>**Horizontal throughput:** Throughput grows roughly in line with partition count. Add processor instances and the consumer group rebalances automatically, so a sale-day spike is handled by scaling out instead of buying a bigger machine.</li>
-          <li>**Low latency via data locality:** All events for a given user land on the same partition, so each processor can keep that user's session state (recent views, cart, affinities) in <strong>local memory or an embedded state store</strong> (e.g., RocksDB in Flink/Kafka Streams). With no remote lookup per event, processing takes single-digit milliseconds.</li>
-          <li>**Per-key ordering:** Order is guaranteed within a partition, so a user's 'view → add-to-cart → purchase' sequence is processed in the right order. That matters for correct recommendation signals, and it avoids a global ordering bottleneck.</li>
-          <li>**Fault isolation and recovery:** If a processor dies, only its partitions are reassigned. Checkpointed state and committed offsets let the replacement pick up where it left off, so one failure doesn't stall the whole pipeline.</li>
+          <li><strong>Horizontal throughput:</strong> Throughput grows roughly in line with partition count. Add processor instances and the consumer group rebalances automatically, so a sale-day spike is handled by scaling out instead of buying a bigger machine.</li>
+          <li><strong>Low latency via data locality:</strong> All events for a given user land on the same partition, so each processor can keep that user's session state (recent views, cart, affinities) in <strong>local memory or an embedded state store</strong> (e.g., RocksDB in Flink/Kafka Streams). With no remote lookup per event, processing takes single-digit milliseconds.</li>
+          <li><strong>Per-key ordering:</strong> Order is guaranteed within a partition, so a user's 'view → add-to-cart → purchase' sequence is processed in the right order. That matters for correct recommendation signals, and it avoids a global ordering bottleneck.</li>
+          <li><strong>Fault isolation and recovery:</strong> If a processor dies, only its partitions are reassigned. Checkpointed state and committed offsets let the replacement pick up where it left off, so one failure doesn't stall the whole pipeline.</li>
+          <li>Exactly-once processing guarantees come with a latency cost: state checkpoints and transactional sink commits happen at the checkpoint interval (typically every 30 seconds to a few minutes in Flink). End-to-end latency is bounded by this interval, not just processing time. For sub-second recommendations, consider at-least-once processing with idempotent sinks instead.</li>
         </ul>
         <p>A production-grade version uses <strong>Kafka (or Kinesis/Pulsar)</strong> as the partitioned log, <strong>Flink or Kafka Streams</strong> as the parallel processing layer, and writes features to a <strong>low-latency online store</strong> (Redis, Cassandra) that the recommendation API reads from.</p>
       </div>
@@ -104,7 +105,7 @@
         <div class="strategy-item">
           <div class="s-icon">🧱</div>
           <h4>A — Independent Microservices</h4>
-          <p>Microservices are an <strong>organizational and deployment</strong> boundary, not a stream-processing strategy. If each service consumes and analyzes the full feed on its own, every service pays the full ingestion cost, state is duplicated, and nothing partitions the work or keeps a user's events in order. Each service would still need a parallel processing model inside it, which is exactly option C.</p>
+          <p>Microservices define team ownership and deployment boundaries, which are valuable. But each microservice that processes events still needs a parallel processing model inside it — typically option C. Microservices are an <strong>organizational and deployment</strong> boundary, not a stream-processing strategy. If each service consumes and analyzes the full feed on its own, every service pays the full ingestion cost, state is duplicated, and nothing partitions the work or keeps a user's events in order. Each service would still need a parallel processing model inside it, which is exactly option C.</p>
         </div>
         <div class="strategy-item">
           <div class="s-icon">🎯</div>
@@ -114,7 +115,7 @@
         <div class="strategy-item">
           <div class="s-icon">📜</div>
           <h4>D — Event Sourcing</h4>
-          <p>Event sourcing is a <strong>state-persistence pattern</strong>. It's great for auditability, temporal queries, and rebuilding state, but on its own it doesn't say how processing is parallelized or made fast. Subscribers replaying an unpartitioned log are slow, and treating noisy clickstream data as a system of record adds storage and schema-evolution burden. The useful part, a durable and replayable log, is already included in option C's partitioned stream.</p>
+          <p>Event sourcing is valuable when the event history IS the business truth — audit trails, order lifecycles, financial ledgers. The append-only log in option C already provides replay capability; event sourcing adds the constraint that the log is the primary system of record, which is overkill for clickstream telemetry. Event sourcing is a <strong>state-persistence pattern</strong>. It's great for auditability, temporal queries, and rebuilding state, but on its own it doesn't say how processing is parallelized or made fast. Subscribers replaying an unpartitioned log are slow, and treating noisy clickstream data as a system of record adds storage and schema-evolution burden. The useful part, a durable and replayable log, is already included in option C's partitioned stream.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
           <div class="s-icon">⚡</div>
@@ -210,12 +211,13 @@
       <div class="explanation-card" style="border-color:#f8717130;">
         <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
         <ul class="mistakes-list">
-          <li>**Choosing a poor partition key:** Keying by product ID during a flash sale sends most events for the hot product to one partition. Key by user or session ID for personalization, and monitor partition skew.</li>
-          <li>**Too few partitions:** Partition count caps consumer parallelism. Plan for peak load (e.g., 3–5× current need), because adding partitions later reshuffles which partition each key lands on.</li>
-          <li>**Calling a remote DB per event:** Looking up user profiles synchronously in the hot path wrecks latency. Keep state local to the processor or pre-join through a compacted topic.</li>
-          <li>**Ignoring backpressure and consumer lag:** Without lag alerts, the pipeline silently falls minutes behind during spikes and recommendations go stale.</li>
-          <li>**Assuming exactly-once comes for free:** Retries create duplicates. Use idempotent sinks or the framework's transactional/checkpointing guarantees.</li>
-          <li>**Using event sourcing for clickstream:** Treating high-volume, low-value telemetry as an immutable system of record inflates storage and makes schema changes painful.</li>
+          <li><strong>Choosing a poor partition key:</strong> Keying by product ID during a flash sale sends most events for the hot product to one partition. Key by user or session ID for personalization, and monitor partition skew.</li>
+          <li><strong>Too few partitions:</strong> Partition count caps consumer parallelism. Plan for peak load (e.g., 3–5× current need), because adding partitions later reshuffles which partition each key lands on.</li>
+          <li><strong>Calling a remote DB per event:</strong> Looking up user profiles synchronously in the hot path wrecks latency. Keep state local to the processor or pre-join through a compacted topic.</li>
+          <li><strong>Ignoring backpressure and consumer lag:</strong> Without lag alerts, the pipeline silently falls minutes behind during spikes and recommendations go stale.</li>
+          <li><strong>Assuming exactly-once comes for free:</strong> Retries create duplicates. Use idempotent sinks or the framework's transactional/checkpointing guarantees.</li>
+          <li><strong>Using event sourcing for clickstream:</strong> Treating high-volume, low-value telemetry as an immutable system of record inflates storage and makes schema changes painful.</li>
+          <li><strong>Ignoring late and out-of-order events:</strong> Not configuring watermarks and allowed-lateness means time windows close too early and silently drop events that arrive out of order, producing inaccurate recommendations.</li>
         </ul>
       </div>
 
@@ -223,10 +225,10 @@
         <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
         <p>Real-world personalization platforms combine these ideas instead of picking just one:</p>
         <ul>
-          <li>**Ingestion — Partitioned log:** Kafka topics keyed by user ID, kept for days so jobs can be replayed or backfilled.</li>
-          <li>**Processing — Parallel stateful operators:** Flink/Kafka Streams jobs with windowed aggregations and local state, scaled by partition count.</li>
-          <li>**Serving — Online feature store:** Precomputed user features in Redis/Cassandra so the recommendation API responds in under 10 ms.</li>
-          <li>**Service boundaries — Microservices:** Ingestion, feature computation, and model serving are separately deployed services, each parallel inside.</li>
+          <li><strong>Ingestion — Partitioned log:</strong> Kafka topics keyed by user ID, kept for days so jobs can be replayed or backfilled.</li>
+          <li><strong>Processing — Parallel stateful operators:</strong> Flink/Kafka Streams jobs with windowed aggregations and local state, scaled by partition count.</li>
+          <li><strong>Serving — Online feature store:</strong> Precomputed user features in Redis/Cassandra so the recommendation API responds in under 10 ms.</li>
+          <li><strong>Service boundaries — Microservices:</strong> Ingestion, feature computation, and model serving are separately deployed services, each parallel inside.</li>
         </ul>
         <p>Rohan's core decision is the <strong>parallel, partitioned processing model</strong>. Microservice boundaries and a replayable log are complementary choices that sit on top of it.</p>
       </div>
@@ -234,7 +236,7 @@
       <div class="verdict">
         <div class="v-emoji">💡</div>
         <h3>Key Takeaway</h3>
-        <p>For high-volume, low-latency event processing, <strong>partition the work by key and process partitions in parallel with local state</strong>. Central engines cap throughput. Event sourcing and microservices describe <em>where</em> data and code live, not <em>how</em> to process events quickly.</p>
+        <p>Profile first, then address the root cause appropriate to the specific bottleneck. For high-volume, low-latency event processing, <strong>partition the work by key and process partitions in parallel with local state</strong>. Central engines cap throughput. Event sourcing and microservices describe <em>where</em> data and code live, not <em>how</em> to process events quickly.</p>
       </div>
 
     </section>

@@ -1,3 +1,17 @@
+// ==========================================
+// THEME CONFIGURATION
+// ==========================================
+const STYLE_MAP = {
+  1: 'default',
+  2: 'indigo',
+  3: 'swiss',
+  4: 'lagoon',
+  5: 'charcoal',
+  6: 'brutalist'
+};
+const ACTIVE_STYLE_ID = 5;
+document.documentElement.setAttribute('data-style', STYLE_MAP[ACTIVE_STYLE_ID] || 'default');
+
 /* ══════════════════════════════════════════════════
    Daily Dev Quiz — Shared Quiz Interaction Logic
    ══════════════════════════════════════════════════ */
@@ -101,13 +115,13 @@
     filterTags.forEach(tag => {
       tag.addEventListener('click', () => {
         if (tag.dataset.tag === 'all') {
-            filterTags.forEach(t => t.classList.remove('active'));
-            tag.classList.add('active');
-            activeTag = null;
+          filterTags.forEach(t => t.classList.remove('active'));
+          tag.classList.add('active');
+          activeTag = null;
         } else {
-            filterTags.forEach(t => t.classList.remove('active'));
-            tag.classList.add('active');
-            activeTag = tag.dataset.tag.toLowerCase();
+          filterTags.forEach(t => t.classList.remove('active'));
+          tag.classList.add('active');
+          activeTag = tag.dataset.tag.toLowerCase();
         }
         currentPage = 1;
         filterAndPaginate();
@@ -116,7 +130,7 @@
 
     function filterAndPaginate() {
       const query = searchInput.value.toLowerCase().trim();
-      
+
       // 1. Filter
       const matchedCards = cards.filter(card => {
         const title = (card.dataset.title || '').toLowerCase();
@@ -132,16 +146,16 @@
       // 2. Paginate
       const totalPages = Math.ceil(matchedCards.length / CARDS_PER_PAGE);
       if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
-      
+
       const startIndex = (currentPage - 1) * CARDS_PER_PAGE;
       const visibleCards = matchedCards.slice(startIndex, startIndex + CARDS_PER_PAGE);
-      
+
       visibleCards.forEach(card => card.style.display = '');
 
       // 3. Update UI
       if (noResults) noResults.style.display = matchedCards.length === 0 ? '' : 'none';
       if (countEl) countEl.textContent = matchedCards.length;
-      
+
       renderPagination(totalPages);
     }
 
@@ -151,27 +165,27 @@
         paginationEl.style.display = 'none';
         return;
       }
-      
+
       paginationEl.style.display = 'flex';
       let html = '';
-      
+
       // Prev
       if (currentPage > 1) {
         html += `<button class="page-btn" data-page="${currentPage - 1}">&laquo; Prev</button>`;
       }
-      
+
       // Pages
       for (let i = 1; i <= totalPages; i++) {
         html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
       }
-      
+
       // Next
       if (currentPage < totalPages) {
         html += `<button class="page-btn" data-page="${currentPage + 1}">Next &raquo;</button>`;
       }
-      
+
       paginationEl.innerHTML = html;
-      
+
       // Add events
       paginationEl.querySelectorAll('.page-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -200,7 +214,7 @@
       btn.addEventListener('click', () => {
         const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
         const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        
+
         document.documentElement.setAttribute('data-theme', newTheme);
         localStorage.setItem('theme', newTheme);
 
@@ -234,14 +248,14 @@
         theme: isLight ? 'default' : 'dark',
         securityLevel: 'strict',
         fontFamily: 'Inter, system-ui, sans-serif',
-        flowchart: { 
-          htmlLabels: true, 
+        flowchart: {
+          htmlLabels: true,
           padding: 15,
           nodeSpacing: 50,
           rankSpacing: 50,
           curve: 'linear'
         },
-        sequence: { 
+        sequence: {
           mirrorActors: false,
           actorMargin: 50,
           messageMargin: 40

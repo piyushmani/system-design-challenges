@@ -33,7 +33,7 @@
   --radius-sm: 10px;
 }
 
-[data-theme="light"] {
+/* [data-theme="light"] {
   --bg: #f8fafc;
   --surface: #ffffff;
   --card: #ffffff;
@@ -51,7 +51,39 @@
   --blue: #3b82f6;
   --blue-gl: #3b82f622;
   --cyan: #06b6d4;
+} */
+
+
+/* 
+=========================================================
+  ALTERNATE LIGHT THEME (Screenshot Inspired)
+  To apply this theme, uncomment the block below and 
+  comment out the default [data-theme="light"] block above.
+=========================================================
+*/
+
+
+
+[data-theme="light"] {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --text: #111827;
+  --text-dim: #6b7280;
+  --accent: #7571af;
+  --accent-gl: #3730a315;
+  --green: #059669;
+  --green-gl: #05966915;
+  --amber: #d97706;
+  --amber-gl: #d9770615;
+  --red: #dc2626;
+  --red-gl: #dc262615;
+  --blue: #2563eb;
+  --blue-gl: #2563eb15;
+  --cyan: #0891b2;
 }
+
 
 html {
   scroll-behavior: smooth;

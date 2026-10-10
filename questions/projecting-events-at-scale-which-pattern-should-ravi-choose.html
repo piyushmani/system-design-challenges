@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Projecting events at scale: which pattern should Ravi choose? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">01 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Event Sourcing</span>
+      <span class="tag tag--green">CQRS</span>
+      <span class="tag tag--amber">Scalability</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Projecting events at scale: which pattern should Ravi choose?</h1>
+      <p class="q-scenario"><strong>Ravi</strong>, a senior backend developer, is building an order management platform on <strong>Event Sourcing</strong>. A durable, append-only event log (Kafka or a SQL table) is the source of truth. The system needs <strong>highly available, fast read models</strong> for APIs and dashboards, must support <strong>replays after bug fixes</strong>, and must handle <strong>tens of thousands of events per second</strong> at peak across <strong>thousands of aggregates</strong>. Many reads tolerate <strong>eventual consistency</strong> (a few seconds), but some critical business processes need <strong>strict per-aggregate ordering</strong> and <strong>low write latency</strong>. Which pattern should he use to project events into read models while balancing scalability, availability, consistency, replayability and observability?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Synchronous transactional projections: record the event and update the read model within the same database transaction. This ensures strict consistency with no lag, but couples write performance to read-model updates and hinders independent scaling.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">A single-threaded asynchronous projector: write events to the log and use one consumer to sequentially process the entire stream to update read models. This is simple and guarantees global ordering, but severely bottlenecks throughput and makes replays sluggish.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Partitioned asynchronous projections using keyed shards and consumer groups: distribute the event stream by aggregate ID (e.g., Kafka partitions) so each worker processes a specific partition, maintaining per-aggregate order. Use idempotent handlers, checkpoints, and periodic snapshots for faster replays. Rely on eventual consistency, managing cross-aggregate rules via sagas or coordinators.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Strongly consistent cross-system updates: leverage two-phase commit or distributed transactions to atomically save events and update read models across disparate systems. This achieves strict read consistency but drastically increases operational complexity and harms scalability.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Partitioned Asynchronous Projections with Idempotent Handlers and Checkpoints</h3>
+        <p>Event sourcing separates the <em>decision</em> (append an event) from the <em>derived views</em> (read models). Because read models can always be rebuilt from the log, they do not need to be updated atomically with the write. What they need is <strong>correct per-aggregate ordering</strong>, <strong>parallelism</strong>, <strong>safe reprocessing</strong> and <strong>visible lag</strong>, which is exactly what keyed partitions with idempotent projectors provide. Option C also leaves the write side free to meet its latency and ordering needs on its own. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Ordering where it matters:</strong> keying by aggregate id sends every event of an aggregate to the same partition and therefore the same worker, in order. Global ordering across all aggregates is almost never a business requirement, so giving it up costs nothing.</li>
+          <li><strong>Throughput scales with partitions:</strong> more partitions and workers means more parallel projection, so tens of thousands of events per second is routine. Each worker batches its writes to the read store.</li>
+          <li><strong>Writes are decoupled from projections:</strong> the command side appends with an optimistic-concurrency check (expected stream version) and returns. A slow dashboard projection can no longer slow down order placement.</li>
+          <li><strong>Effectively-once results with idempotent handlers:</strong> store the last processed offset or aggregate version in the <em>same transaction</em> as the read-model update. A crash and redelivery then re-applies nothing twice.</li>
+          <li><strong>Replays are routine, not scary:</strong> to fix a projection bug, deploy projector v2 to build a new read model from the beginning in parallel, then switch traffic by alias and retire v1. Snapshots and compacted state make this faster for long histories.</li>
+          <li><strong>Observable by nature:</strong> consumer lag per partition, projection freshness (event time to applied time), parked or poisoned events, and rebuild progress are all measurable and alertable.</li>
+          <li><strong>Critical paths do not depend on read models:</strong> a command handler rebuilds the aggregate from its own stream (plus snapshot) for decisions. Where a user needs read-your-writes, return the new stream version and let the query wait until the projection reaches it (with a bounded timeout).</li>
+        </ul>
+        <p>Key ingredients: <strong>aggregate-id partitioning</strong>, <strong>offset or version stored atomically with the read-model write</strong>, <strong>idempotent handlers</strong>, <strong>blue/green rebuilds by alias switch</strong>, <strong>event versioning and upcasting</strong>, <strong>sagas or process managers for cross-aggregate rules</strong>, and <strong>lag and freshness dashboards</strong>. Rehearse a full rebuild regularly so it is a routine operation.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔗</div>
+          <h4>A — Synchronous Transactional Projections</h4>
+          <p>Updating the read model in the same transaction as the event append gives strict consistency and no lag, and it is simple. It works well as <strong>inline projection for a small number of critical read models</strong> that live in the same database as the event store. At the scale described, though, write latency now includes every projection's cost, one slow or locked read table slows all writes, readers cannot scale independently, and rebuilding requires locking or complex online migration. <strong>Caveat:</strong> use it selectively, for example for a small 'current order status' table, alongside option C for everything else.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🚶</div>
+          <h4>B — Single-Threaded Asynchronous Projector</h4>
+          <p>One consumer gives global ordering and trivial reasoning, but the requirement for global order is almost never real. Throughput is capped by one thread, lag becomes unbounded during peaks, a replay of the full history takes the longest possible time, and one poison event or slow query stalls <em>every</em> read model. <strong>Caveat:</strong> it is fine for small systems, prototypes, or a tiny read model that genuinely needs total order.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧨</div>
+          <h4>D — Two-Phase Commit Across Systems</h4>
+          <p>Distributed transactions solve a problem event sourcing does not have. Read models are <strong>derived data</strong> that can be rebuilt, so atomically committing them with the event buys little. Meanwhile, 2PC blocks on a coordinator, makes availability the product of every participant's availability, lowers throughput, and is not supported across arbitrary combinations such as Kafka and a read database. <strong>Caveat:</strong> reserve distributed transactions for rare cases where two systems of record must change together, and even then prefer sagas.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Partitioned Asynchronous Projections with Idempotent Handlers and Checkpoints ✓</h4>
+          <p>Partitioned asynchronous projections using keyed shards and consumer groups: distribute the event stream by aggregate ID (e.g., Kafka partitions) so each worker processes a specific partition, maintai</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Per-Aggregate Ordering</th><th>Write Latency Impact</th><th>Read-Model Freshness</th><th>Throughput Scaling</th><th>Replay and Rebuild Speed</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Synchronous Transactional Projections</td><td>Strong ✅</td><td>Poor ❌ (couples writes to projections)</td><td>Immediate ✅</td><td>Limited ❌</td><td>Slow ❌ (locking, online migration)</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Single-Threaded Async Projector</td><td>Strong ✅ (global)</td><td>None ✅</td><td>Poor ❌ (unbounded lag)</td><td>Poor ❌</td><td>Slow ❌</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Partitioned Async Projections ✓</td><td>Strong ✅ (per aggregate)</td><td>None ✅</td><td>Good ⚠ (seconds)</td><td>High ✅</td><td>Fast ✅ (parallel, blue/green)</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — 2PC / Distributed Transactions</td><td>Strong ✅</td><td>Poor ❌</td><td>Immediate ✅</td><td>Poor ❌</td><td>Slow ❌</td><td>Very high ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Synchronous Transactional Projections</h4>
+          <p>A few small, critical read models in the same database as the event store where immediate consistency is required and write volume is moderate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Single-Threaded Async Projector</h4>
+          <p>Prototypes, low-volume systems, or a small read model that truly needs total ordering across the whole stream.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Partitioned Async Projections</h4>
+          <p>High-volume event-sourced systems with many aggregates, several read models, replay requirements, and a tolerance for seconds of read-model lag.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — 2PC / Distributed Transactions</h4>
+          <p>Rare cases where two systems of record must change atomically and both support a transaction protocol; usually better replaced by a saga.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Partitioned Projection Pipeline</h3>
+        <p>Events are keyed by aggregate id into partitions. Each worker projects its partitions in order and records its checkpoint atomically with the read-model update:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    CMD[Command Handler] --&gt;|append with expected version| ES[(Event Log)]
+    ES --&gt; P0[Partition 0]
+    ES --&gt; P1[Partition 1]
+    ES --&gt; P2[Partition N]
+    P0 --&gt; W0[Projector worker 0]
+    P1 --&gt; W1[Projector worker 1]
+    P2 --&gt; W2[Projector worker N]
+    W0 --&gt; RM[(Read model DB with checkpoints)]
+    W1 --&gt; RM
+    W2 --&gt; RM
+    RM --&gt; API[Query API and dashboards]
+    W1 -. failure .-&gt; DLQ[Parked event and alert]">flowchart LR
+    CMD[Command Handler] --&gt;|append with expected version| ES[(Event Log)]
+    ES --&gt; P0[Partition 0]
+    ES --&gt; P1[Partition 1]
+    ES --&gt; P2[Partition N]
+    P0 --&gt; W0[Projector worker 0]
+    P1 --&gt; W1[Projector worker 1]
+    P2 --&gt; W2[Projector worker N]
+    W0 --&gt; RM[(Read model DB with checkpoints)]
+    W1 --&gt; RM
+    W2 --&gt; RM
+    RM --&gt; API[Query API and dashboards]
+    W1 -. failure .-&gt; DLQ[Parked event and alert]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent Projector with Atomic Checkpoint, and Version-Aware Read</h3>
+        <p>Each worker applies a batch and commits the new offset in the same transaction. Handlers are idempotent per aggregate version, and queries can wait for a minimum version for read-your-writes:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Command side: decision and append ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleCommand</span>(cmd):</span>
+<span class="line">    events <span class="tk-op">=</span> eventStore.<span class="tk-fn">load</span>(cmd.aggregateId)             <span class="tk-com">// snapshot + tail</span></span>
+<span class="line">    aggregate <span class="tk-op">=</span> <span class="tk-fn">rehydrate</span>(events)</span>
+<span class="line">    newEvents <span class="tk-op">=</span> aggregate.<span class="tk-fn">decide</span>(cmd)                     <span class="tk-com">// business rules, strict per-aggregate order</span></span>
+<span class="line">    eventStore.<span class="tk-fn">append</span>(cmd.aggregateId, newEvents,</span>
+<span class="line">                      expectedVersion <span class="tk-op">=</span> aggregate.version)  <span class="tk-com">// optimistic concurrency</span></span>
+<span class="line">    <span class="tk-kw">return</span> { version: aggregate.version <span class="tk-op">+</span> newEvents.size }   <span class="tk-com">// returned for read-your-writes</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Projection worker: one per partition set ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">projectorLoop</span>(consumer, projectorName):</span>
+<span class="line">    <span class="tk-kw">while</span> <span class="tk-lit">true</span>:</span>
+<span class="line">        batch <span class="tk-op">=</span> consumer.<span class="tk-fn">poll</span>(maxRecords <span class="tk-op">=</span> <span class="tk-num">500</span>)</span>
+<span class="line">        <span class="tk-kw">if</span> batch.<span class="tk-fn">isEmpty</span>(): <span class="tk-kw">continue</span></span>
+<span class="line"></span>
+<span class="line">        tx <span class="tk-op">=</span> readDb.<span class="tk-kw">begin</span>()</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            <span class="tk-kw">for</span> record <span class="tk-kw">in</span> batch:                           <span class="tk-com">// already in per-aggregate order</span></span>
+<span class="line">                <span class="tk-fn">handle</span>(tx, record.event)</span>
+<span class="line">            tx.<span class="tk-fn">upsert</span>(<span class="tk-str">&#x27;checkpoints&#x27;</span>, key <span class="tk-op">=</span> (projectorName, record.partition),</span>
+<span class="line">                      value <span class="tk-op">=</span> batch.lastOffset)             <span class="tk-com">// SAME transaction as the data</span></span>
+<span class="line">            tx.<span class="tk-fn">commit</span>()</span>
+<span class="line">        <span class="tk-kw">catch</span> PoisonEvent <span class="tk-kw">as</span> e:</span>
+<span class="line">            tx.<span class="tk-fn">rollback</span>()</span>
+<span class="line">            <span class="tk-fn">parkAggregate</span>(e.aggregateId, e)               <span class="tk-com">// alert, do not skip silently</span></span>
+<span class="line">        <span class="tk-kw">catch</span> TransientError:</span>
+<span class="line">            tx.<span class="tk-fn">rollback</span>()</span>
+<span class="line">            <span class="tk-fn">backoffAndRetry</span>()</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handle</span>(tx, event):</span>
+<span class="line">    row <span class="tk-op">=</span> tx.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;order_view&#x27;</span>, event.aggregateId)</span>
+<span class="line">    <span class="tk-kw">if</span> row <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> event.version <span class="tk-op">&lt;=</span> row.lastVersion:</span>
+<span class="line">        <span class="tk-kw">return</span>                                             <span class="tk-com">// already applied: idempotent</span></span>
+<span class="line">    <span class="tk-kw">if</span> row <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> event.version <span class="tk-op">!=</span> row.lastVersion <span class="tk-op">+</span> <span class="tk-num">1</span>:</span>
+<span class="line">        <span class="tk-kw">throw</span> <span class="tk-fn">PoisonEvent</span>(event.aggregateId, <span class="tk-str">&#x27;gap in versions&#x27;</span>)</span>
+<span class="line">    tx.<span class="tk-fn">upsert</span>(<span class="tk-str">&#x27;order_view&#x27;</span>, <span class="tk-fn">apply</span>(row, event), lastVersion <span class="tk-op">=</span> event.version)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Query side: bounded wait for freshness ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getOrder</span>(orderId, minVersion, timeout <span class="tk-op">=</span> <span class="tk-num">2s</span>):</span>
+<span class="line">    deadline <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">+</span> timeout</span>
+<span class="line">    <span class="tk-kw">while</span> <span class="tk-fn">now</span>() <span class="tk-op">&lt;</span> deadline:</span>
+<span class="line">        row <span class="tk-op">=</span> readDb.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;order_view&#x27;</span>, orderId)</span>
+<span class="line">        <span class="tk-kw">if</span> minVersion <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> (row <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> row.lastVersion <span class="tk-op">&gt;=</span> minVersion):</span>
+<span class="line">            <span class="tk-kw">return</span> row</span>
+<span class="line">        <span class="tk-fn">sleep</span>(<span class="tk-num">50ms</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> row                                             <span class="tk-com">// may be slightly stale; flag it in the response</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Checkpointing separately from the read-model write:</strong> a crash between them skips or double-applies events. Commit the offset in the same transaction as the data.</li>
+          <li><strong>Non-idempotent handlers:</strong> at-least-once delivery then corrupts counts and totals. Use version checks or upserts keyed by event id.</li>
+          <li><strong>Wrong partition key:</strong> keying by something other than the aggregate id breaks per-aggregate ordering. Key by aggregate id.</li>
+          <li><strong>Side effects inside projections:</strong> replays resend emails and webhooks. Keep projectors pure and put actions in separate reactors.</li>
+          <li><strong>Skipping poison events silently:</strong> the read model quietly diverges. Park the aggregate, alert, and fix the handler or data.</li>
+          <li><strong>No schema-evolution strategy:</strong> a replay hits old event shapes and crashes. Version events and upcast on read.</li>
+          <li><strong>Ignoring hot aggregates and rebalances:</strong> one very busy aggregate or a stop-the-world rebalance causes lag spikes. Monitor skew and use cooperative assignment.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams that run event-sourced systems at scale <strong>decide ordering and consistency per use case</strong> and make rebuilds a routine, automated operation. A typical path looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Choose the key and partition count:</strong> aggregate id is the default key. Size partitions for peak throughput and future growth, since changing them later reshuffles ordering.</li>
+          <li><strong>Step 1 — Harden the write side:</strong> optimistic concurrency with an expected version, idempotent commands, and a way to publish events from the log (the store itself is the outbox, via tailing or change-data-capture).</li>
+          <li><strong>Step 2 — Build projectors:</strong> one consumer group per read model, handlers that are idempotent, batched writes, and the checkpoint stored with the data.</li>
+          <li><strong>Step 3 — Make rebuilds routine:</strong> projector versions write to new tables or indexes, catch up in parallel, then switch by alias; keep the old one briefly for rollback.</li>
+          <li><strong>Step 4 — Define freshness SLOs and monitor them:</strong> lag per partition, end-to-end freshness, rate of parked events, and rebuild duration.</li>
+          <li><strong>Step 5 — Coordinate across aggregates with process managers:</strong> long-running sagas react to events and issue commands, rather than expecting projections to enforce cross-aggregate rules.</li>
+          <li><strong>Step 6 — Test the ugly cases:</strong> replay the full history, kill workers mid-batch, redeliver duplicates, introduce an event schema change, and inject a poison event.</li>
+        </ul>
+        <p>Treat projections as disposable and rebuildable, and the system becomes easy to operate.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Read models are derived, so they do not need to be atomic with the write. <strong>Partition the event stream by aggregate id, project asynchronously with idempotent handlers and atomic checkpoints, and make replays routine</strong>. Keep strict consistency on the command side where decisions are made, handle cross-aggregate rules with sagas, and use synchronous projections only for a few small, critical views.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ethan’s split-second payment dilemma: balancing consistency and scale — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">01 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Microservices</span>
+      <span class="tag tag--green">Scalability</span>
+      <span class="tag tag--amber">Consistency</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Ethan’s split-second payment dilemma: balancing consistency and scale</h1>
+      <p class="q-scenario"><strong>Ethan</strong>, a backend developer, is refactoring a growing e-commerce platform whose <strong>monolith</strong> handles inventory, orders and payments. During traffic surges the system shows <strong>high latency</strong>, occasional <strong>inventory overselling</strong>, and <strong>duplicate charges on retries</strong>. He wants to apply <strong>SOLID principles</strong> and split responsibilities into separate services to improve modularity, scalability, availability and fault tolerance, while <strong>strictly preserving financial and inventory invariants</strong> (no negative stock, no double charges) at acceptable latency. Which architectural strategy should he choose?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Divide into separate services but retain a single shared relational DB. Each service communicates with the database directly, utilizing DB transactions for consistency. Apply shared schemas and migration scripts to maintain alignment.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Separate into domain-specific services using fully async pub/sub (eventual consistency) without a central orchestrator. Services emit and react to events, using compensating transactions for conflict resolution. Prioritize high throughput over immediate consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Break down into smaller bounded contexts with well-defined APIs. Employ a saga orchestrator backed by durable command queues: the orchestrator dispatches idempotent commands to inventory, payment, and order services, waiting for explicit outcomes before responding. Maintain a single-writer ledger for authoritative balances, adding comprehensive observability, retries, and compensation logic for failures.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Convert to a modular monolith: maintain a single deployable artifact but apply SOLID principles internally (clean module separation, dependency injection). Scale by replicating the monolith via a load balancer, relying on optimistic locking and application retries for invariant protection.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Bounded Contexts with a Saga Orchestrator and Single-Writer Ledger</h3>
+        <p>Ethan has two problems that pull in different directions: <strong>scale and fault isolation</strong> (which argue for splitting the system) and <strong>hard invariants</strong> (which argue against loose coupling). Option C resolves the tension by giving each invariant a <strong>single owner</strong> (inventory owns stock, a ledger owns balances), coordinating the cross-service business flow with an <strong>explicit, durable saga</strong>, and making every command <strong>idempotent</strong> so retries cannot double-charge. The failure modes he is seeing (overselling, duplicate charges) are exactly the ones this pattern is designed to remove. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Invariants live in one place:</strong> 'no negative stock' becomes a local conditional update inside the inventory service (decrement only where available quantity is sufficient), and 'no double charge' becomes an idempotency key honoured by the payment service and the ledger. Neither depends on a distributed transaction.</li>
+          <li><strong>Reserve, then confirm:</strong> the saga reserves stock (with an expiry), authorizes payment, then confirms and captures. Splitting authorization from capture makes compensation cheap and safe: release the reservation and void the authorization instead of issuing refunds.</li>
+          <li><strong>Explicit state beats implicit choreography:</strong> an orchestrated saga is a persisted state machine, so you can query where every order is, apply timeouts centrally, and trace one order end to end. That is the observability a payment flow needs.</li>
+          <li><strong>Durable and retry-safe:</strong> the orchestrator persists saga state before dispatching, uses a transactional outbox for messages, and relies on at-least-once delivery with idempotent consumers, which behaves as effectively-once processing.</li>
+          <li><strong>Fault isolation and independent scaling:</strong> a slow payment provider no longer ties up inventory or catalogue threads, and each service can be scaled to its own load profile.</li>
+          <li><strong>Maps directly to SOLID:</strong> single responsibility per bounded context, narrow contracts (interface segregation), dependence on command and event abstractions rather than another service's tables (dependency inversion), and new steps such as fraud checks added without modifying existing services (open/closed).</li>
+        </ul>
+        <p>The essentials are <strong>bounded contexts with data ownership</strong>, <strong>idempotency keys end to end</strong>, <strong>a durable saga state machine</strong>, <strong>transactional outbox messaging</strong>, <strong>compensations designed up front</strong>, and <strong>reconciliation against the payment provider</strong>. Measure saga duration, compensation rate and stuck sagas as first-class signals.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🗄️</div>
+          <h4>A — Separate Services on One Shared Database</h4>
+          <p>A shared database does give you ACID transactions across inventory, orders and payments, so invariants are well protected. But it is a <strong>distributed monolith</strong>: services are coupled through shared schemas and migrations, cannot be deployed independently, and still contend for the same database during a surge, so the latency problem and the single point of failure remain. It also violates data ownership (the single-responsibility and dependency-inversion intent of SOLID). <strong>Caveat:</strong> as a transitional step it is acceptable, but it does not deliver the scalability or fault isolation Ethan wants.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📡</div>
+          <h4>B — Pure Choreography with Eventual Consistency</h4>
+          <p>Event-driven choreography scales well and is a good fit for non-critical flows, but the option explicitly <strong>prioritizes throughput over immediate consistency</strong> and relies on compensating transactions to fix conflicts. For stock and money that means overselling and double charging are tolerated and cleaned up afterwards, which is the exact behaviour Ethan needs to eliminate. With no orchestrator, the overall flow is also implicit, harder to debug, and prone to cyclic event dependencies. <strong>Caveat:</strong> choreography is a sound choice for side effects such as notifications or analytics that sit after the critical path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧱</div>
+          <h4>D — Modular Monolith Replicated Behind a Load Balancer</h4>
+          <p>A modular monolith is a legitimate and often wise <em>first step</em>: clean module boundaries and dependency injection make later extraction easy. As the end state here it falls short. Under a surge, optimistic locking with application retries tends to <strong>amplify contention</strong> (retry storms), duplicate-charge protection still needs idempotency keys with the payment provider, and scaling is all-or-nothing, so one slow dependency (the payment gateway) can exhaust threads for the entire application. <strong>Caveat:</strong> if the team is small and traffic is moderate, this is the best <em>starting</em> point on the path to C.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Bounded Contexts with a Saga Orchestrator and Single-Writer Ledger ✓</h4>
+          <p>Break down into smaller bounded contexts with well-defined APIs. Employ a saga orchestrator backed by durable command queues: the orchestrator dispatches idempotent commands to inventory, payment, and</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Invariant Safety (stock, charges)</th><th>Scalability</th><th>Fault Isolation</th><th>Happy-Path Latency</th><th>Operational Complexity</th><th>Observability of the Flow</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Services + Shared DB</td><td>High ✅ (ACID)</td><td>Low ❌ (shared DB bottleneck)</td><td>Low ❌</td><td>Good ✅</td><td>Medium ⚠ (hidden coupling)</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — Pure Choreography</td><td>Low ❌ (fix after the fact)</td><td>High ✅</td><td>High ✅</td><td>Good ✅</td><td>High ❌ (implicit flow)</td><td>Low ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Saga Orchestrator + Ledger ✓</td><td>High ✅</td><td>High ✅</td><td>High ✅</td><td>Medium ⚠ (waits for outcomes)</td><td>High ❌</td><td>High ✅</td></tr>
+            <tr><td class="tt-option">D — Modular Monolith</td><td>Medium ⚠ (needs idempotency)</td><td>Medium ⚠ (all-or-nothing)</td><td>Low ❌</td><td>Good ✅</td><td>Low ✅</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Services + Shared DB</h4>
+          <p>A short-lived transitional state while extracting code, with a clear plan to separate data ownership soon. Not a target architecture.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Pure Choreography</h4>
+          <p>Loosely coupled, non-critical reactions (notifications, search indexing, analytics) where eventual consistency is acceptable and no money or stock invariant is at stake.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Saga Orchestrator + Ledger</h4>
+          <p>Multi-service business transactions with hard invariants (payments, inventory), high traffic, and a need for clear end-to-end visibility and controlled failure handling.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Modular Monolith</h4>
+          <p>Small to mid-size teams and moderate traffic, or as the first stage of an incremental extraction, especially when the platform maturity for many services is not there yet.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Order Saga: Happy Path and Compensation</h3>
+        <p>The orchestrator persists state, sends idempotent commands, and waits for explicit outcomes. A decline or timeout triggers compensation:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant O as Order Service
+    participant S as Saga Orchestrator
+    participant I as Inventory Service
+    participant P as Payment Service
+    participant L as Ledger
+    C-&gt;&gt;O: Place order with Idempotency-Key
+    O-&gt;&gt;S: 1. Start saga (state persisted)
+    S-&gt;&gt;I: 2. ReserveStock (command id)
+    I--&gt;&gt;S: 3. Reserved (hold with expiry)
+    S-&gt;&gt;P: 4. AuthorizePayment (idempotency key)
+    alt Authorized
+        P-&gt;&gt;L: 5a. Record authorization entry
+        P--&gt;&gt;S: 6a. Authorized
+        S-&gt;&gt;I: 7a. ConfirmReservation
+        S-&gt;&gt;P: 8a. CapturePayment
+        S-&gt;&gt;O: 9a. Mark order PAID
+    else Declined or timeout
+        P--&gt;&gt;S: 5b. Failed or unknown outcome
+        S-&gt;&gt;I: 6b. ReleaseReservation (compensate)
+        S-&gt;&gt;O: 7b. Mark order FAILED
+    end
+    O--&gt;&gt;C: Final status">sequenceDiagram
+    participant C as Client
+    participant O as Order Service
+    participant S as Saga Orchestrator
+    participant I as Inventory Service
+    participant P as Payment Service
+    participant L as Ledger
+    C-&gt;&gt;O: Place order with Idempotency-Key
+    O-&gt;&gt;S: 1. Start saga (state persisted)
+    S-&gt;&gt;I: 2. ReserveStock (command id)
+    I--&gt;&gt;S: 3. Reserved (hold with expiry)
+    S-&gt;&gt;P: 4. AuthorizePayment (idempotency key)
+    alt Authorized
+        P-&gt;&gt;L: 5a. Record authorization entry
+        P--&gt;&gt;S: 6a. Authorized
+        S-&gt;&gt;I: 7a. ConfirmReservation
+        S-&gt;&gt;P: 8a. CapturePayment
+        S-&gt;&gt;O: 9a. Mark order PAID
+    else Declined or timeout
+        P--&gt;&gt;S: 5b. Failed or unknown outcome
+        S-&gt;&gt;I: 6b. ReleaseReservation (compensate)
+        S-&gt;&gt;O: 7b. Mark order FAILED
+    end
+    O--&gt;&gt;C: Final status</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Orchestrator Step, Inventory Reservation, and Idempotent Payment</h3>
+        <p>State is persisted before every dispatch. Stock is protected by a conditional update, and payments are protected by an idempotency key, so retries are harmless:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Orchestrator (stateless worker over durable saga state) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">advance</span>(sagaId):</span>
+<span class="line">    saga <span class="tk-op">=</span> sagaStore.<span class="tk-fn">load</span>(sagaId)</span>
+<span class="line">    <span class="tk-kw">switch</span> saga.state:</span>
+<span class="line">        <span class="tk-kw">case</span> STARTED:</span>
+<span class="line">            <span class="tk-fn">send</span>(inventory, <span class="tk-fn">ReserveStock</span>(commandId <span class="tk-op">=</span> sagaId <span class="tk-op">+</span> <span class="tk-str">&#x27;:reserve&#x27;</span>, sku, qty, holdSeconds <span class="tk-op">=</span> <span class="tk-num">600</span>))</span>
+<span class="line">        <span class="tk-kw">case</span> STOCK_RESERVED:</span>
+<span class="line">            <span class="tk-fn">send</span>(payment, <span class="tk-fn">AuthorizePayment</span>(commandId <span class="tk-op">=</span> sagaId <span class="tk-op">+</span> <span class="tk-str">&#x27;:auth&#x27;</span>, amount, method))</span>
+<span class="line">        <span class="tk-kw">case</span> PAYMENT_AUTHORIZED:</span>
+<span class="line">            <span class="tk-fn">send</span>(inventory, <span class="tk-fn">ConfirmReservation</span>(commandId <span class="tk-op">=</span> sagaId <span class="tk-op">+</span> <span class="tk-str">&#x27;:confirm&#x27;</span>))</span>
+<span class="line">            <span class="tk-fn">send</span>(payment, <span class="tk-fn">CapturePayment</span>(commandId <span class="tk-op">=</span> sagaId <span class="tk-op">+</span> <span class="tk-str">&#x27;:capture&#x27;</span>))</span>
+<span class="line">        <span class="tk-kw">case</span> COMPENSATING:</span>
+<span class="line">            <span class="tk-fn">send</span>(inventory, <span class="tk-fn">ReleaseReservation</span>(commandId <span class="tk-op">=</span> sagaId <span class="tk-op">+</span> <span class="tk-str">&#x27;:release&#x27;</span>))   <span class="tk-com">// idempotent</span></span>
+<span class="line">            <span class="tk-fn">send</span>(payment, <span class="tk-fn">VoidAuthorization</span>(commandId <span class="tk-op">=</span> sagaId <span class="tk-op">+</span> <span class="tk-str">&#x27;:void&#x27;</span>))        <span class="tk-com">// idempotent</span></span>
+<span class="line">    sagaStore.<span class="tk-fn">scheduleTimeout</span>(sagaId, deadline <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">+</span> <span class="tk-fn">stepTimeout</span>(saga.state))</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onOutcome</span>(sagaId, outcome):                    <span class="tk-com">// from durable queue, at-least-once</span></span>
+<span class="line">    saga <span class="tk-op">=</span> sagaStore.<span class="tk-fn">load</span>(sagaId)</span>
+<span class="line">    <span class="tk-kw">if</span> outcome.commandId <span class="tk-kw">in</span> saga.handled: <span class="tk-kw">return</span>        <span class="tk-com">// dedupe</span></span>
+<span class="line">    saga.state <span class="tk-op">=</span> <span class="tk-fn">nextState</span>(saga.state, outcome)         <span class="tk-com">// persisted transition</span></span>
+<span class="line">    saga.handled.<span class="tk-fn">add</span>(outcome.commandId)</span>
+<span class="line">    sagaStore.<span class="tk-fn">saveWithOutbox</span>(saga)                      <span class="tk-com">// state + outbox in ONE transaction</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Inventory service: single writer of stock ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reserveStock</span>(cmd):</span>
+<span class="line">    <span class="tk-kw">if</span> reservations.<span class="tk-fn">exists</span>(cmd.commandId): <span class="tk-kw">return</span> reservations.<span class="tk-fn">get</span>(cmd.commandId)</span>
+<span class="line">    rows <span class="tk-op">=</span> db.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;UPDATE stock SET available = available - ?, reserved = reserved + ?&#x27;</span>,</span>
+<span class="line">                   <span class="tk-str">&#x27;  WHERE sku = ? AND available &gt;= ?&#x27;</span>, cmd.qty, cmd.qty, cmd.sku, cmd.qty)</span>
+<span class="line">    <span class="tk-kw">if</span> rows <span class="tk-op">==</span> <span class="tk-num">0</span>: <span class="tk-kw">return</span> <span class="tk-fn">Rejected</span>(<span class="tk-str">&#x27;OUT_OF_STOCK&#x27;</span>)       <span class="tk-com">// invariant held by the database</span></span>
+<span class="line">    reservations.<span class="tk-fn">insert</span>(cmd.commandId, expiresAt <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">+</span> cmd.holdSeconds)   <span class="tk-com">// same transaction</span></span>
+<span class="line">    <span class="tk-kw">return</span> Reserved</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Payment service: idempotent charge ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">authorize</span>(cmd):</span>
+<span class="line">    prior <span class="tk-op">=</span> payments.<span class="tk-fn">findByKey</span>(cmd.commandId)</span>
+<span class="line">    <span class="tk-kw">if</span> prior <span class="tk-op">!=</span> <span class="tk-lit">null</span>: <span class="tk-kw">return</span> prior.result               <span class="tk-com">// retry returns the same answer</span></span>
+<span class="line">    result <span class="tk-op">=</span> psp.<span class="tk-fn">authorize</span>(cmd.amount, cmd.method, idempotencyKey <span class="tk-op">=</span> cmd.commandId)</span>
+<span class="line">    payments.<span class="tk-fn">save</span>(cmd.commandId, result)</span>
+<span class="line">    ledger.<span class="tk-fn">append</span>(<span class="tk-fn">entry</span>(cmd.commandId, result))         <span class="tk-com">// single-writer ledger</span></span>
+<span class="line">    <span class="tk-kw">return</span> result</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>No idempotency:</strong> at-least-once delivery plus non-idempotent handlers is how double charges happen. Every command and every consumer needs a dedupe key.</li>
+          <li><strong>Dual writes:</strong> updating the database and publishing a message as two separate steps loses one of them on a crash. Use a transactional outbox.</li>
+          <li><strong>Treating a timeout as a failure:</strong> the payment may have succeeded. Look the outcome up by idempotency key before compensating.</li>
+          <li><strong>Designing compensations last:</strong> some steps cannot be undone cleanly. Choose reversible operations (reserve, authorize) before irreversible ones (capture, ship).</li>
+          <li><strong>A 'god' orchestrator:</strong> putting business rules in the orchestrator recreates the monolith. Keep it to sequencing, timeouts and state.</li>
+          <li><strong>No timeouts or stuck-saga alerts:</strong> a saga waiting forever holds reserved stock forever. Give every step a deadline and an owner.</li>
+          <li><strong>Chatty synchronous chains:</strong> long call chains multiply latency and failure probability. Keep the synchronous part short and return a pending status when needed.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams that do this well <strong>move in stages and protect invariants first</strong>, rather than splitting everything at once. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Write the invariants down:</strong> stock is never negative; one successful charge per order; every captured payment has a ledger entry. Everything else is negotiable.</li>
+          <li><strong>Step 1 — Quick wins inside the monolith:</strong> idempotency keys on payment calls and a conditional stock decrement. These two changes alone remove most overselling and duplicate charges.</li>
+          <li><strong>Step 2 — Modularize:</strong> enforce module boundaries and data ownership in code (separate schemas, no cross-module table access).</li>
+          <li><strong>Step 3 — Extract by seam:</strong> payments first (external dependency, largest blast radius), then inventory, then orders. Keep one owner per piece of data.</li>
+          <li><strong>Step 4 — Introduce the saga and outbox:</strong> a persisted state machine, durable command queues and idempotent consumers, ideally on an existing workflow engine.</li>
+          <li><strong>Step 5 — Observe and reconcile:</strong> trace every order across services, alert on stuck sagas and rising compensation rates, and reconcile daily against the payment provider.</li>
+          <li><strong>Step 6 — Test the failure paths:</strong> duplicate messages, orchestrator crash mid-saga, payment timeout with unknown outcome, and a surge load test with retries enabled.</li>
+        </ul>
+        <p>Fix the invariants first, then decide how finely to split.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Splitting services without a plan for invariants just moves the bugs. <strong>Give each invariant a single owner, coordinate cross-service flows with a durable, observable saga, and make every command idempotent.</strong> Use a modular monolith as a stepping stone when the team or traffic does not yet justify the full machinery, and avoid shared databases and invariant-blind choreography on the critical path.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

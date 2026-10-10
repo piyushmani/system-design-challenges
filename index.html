@@ -38,11 +38,11 @@
 
     <div class="stats-bar">
       <div class="stat">
-        <div class="stat-num" id="visibleCount">10</div>
+        <div class="stat-num" id="visibleCount">17</div>
         <div class="stat-label">Challenges</div>
       </div>
       <div class="stat">
-        <div class="stat-num">31</div>
+        <div class="stat-num">49</div>
         <div class="stat-label">Topics</div>
       </div>
     </div>
@@ -55,32 +55,50 @@
 
     <div class="filter-bar">
       <span class="filter-tag" data-tag="Architecture Decisions">Architecture Decisions</span>
+      <span class="filter-tag" data-tag="Authentication">Authentication</span>
       <span class="filter-tag" data-tag="CAP Theorem">CAP Theorem</span>
+      <span class="filter-tag" data-tag="CI/CD">CI/CD</span>
+      <span class="filter-tag" data-tag="CQRS">CQRS</span>
       <span class="filter-tag" data-tag="CRDTs">CRDTs</span>
+      <span class="filter-tag" data-tag="Chaos Engineering">Chaos Engineering</span>
+      <span class="filter-tag" data-tag="Concurrency">Concurrency</span>
       <span class="filter-tag" data-tag="Conflict Resolution">Conflict Resolution</span>
+      <span class="filter-tag" data-tag="Consistency">Consistency</span>
       <span class="filter-tag" data-tag="Consistency Models">Consistency Models</span>
+      <span class="filter-tag" data-tag="Data Consistency">Data Consistency</span>
       <span class="filter-tag" data-tag="Data Replication">Data Replication</span>
       <span class="filter-tag" data-tag="Database Architecture">Database Architecture</span>
+      <span class="filter-tag" data-tag="Database Locking">Database Locking</span>
+      <span class="filter-tag" data-tag="Database Migration">Database Migration</span>
       <span class="filter-tag" data-tag="Database Performance">Database Performance</span>
+      <span class="filter-tag" data-tag="Deployment">Deployment</span>
+      <span class="filter-tag" data-tag="Disaster Recovery">Disaster Recovery</span>
       <span class="filter-tag" data-tag="Distributed Systems">Distributed Systems</span>
       <span class="filter-tag" data-tag="E-Commerce Infrastructure">E-Commerce Infrastructure</span>
       <span class="filter-tag" data-tag="Error Handling">Error Handling</span>
+      <span class="filter-tag" data-tag="Event Sourcing">Event Sourcing</span>
       <span class="filter-tag" data-tag="Event Streaming">Event Streaming</span>
       <span class="filter-tag" data-tag="Event-Driven Architecture">Event-Driven Architecture</span>
       <span class="filter-tag" data-tag="Fault Tolerance">Fault Tolerance</span>
       <span class="filter-tag" data-tag="Feature Flags">Feature Flags</span>
       <span class="filter-tag" data-tag="Index-Only Scans">Index-Only Scans</span>
+      <span class="filter-tag" data-tag="Latency">Latency</span>
       <span class="filter-tag" data-tag="Low Latency">Low Latency</span>
       <span class="filter-tag" data-tag="Message Queues">Message Queues</span>
+      <span class="filter-tag" data-tag="Microservices">Microservices</span>
       <span class="filter-tag" data-tag="Microservices Resilience">Microservices Resilience</span>
+      <span class="filter-tag" data-tag="Multi-Region">Multi-Region</span>
       <span class="filter-tag" data-tag="Multi-Region Architecture">Multi-Region Architecture</span>
       <span class="filter-tag" data-tag="Performance Trade-offs">Performance Trade-offs</span>
       <span class="filter-tag" data-tag="Query Optimization">Query Optimization</span>
       <span class="filter-tag" data-tag="Query Planning">Query Planning</span>
+      <span class="filter-tag" data-tag="Rate Limiting">Rate Limiting</span>
       <span class="filter-tag" data-tag="Read Optimization">Read Optimization</span>
       <span class="filter-tag" data-tag="Read vs Write Scaling">Read vs Write Scaling</span>
+      <span class="filter-tag" data-tag="Replication">Replication</span>
       <span class="filter-tag" data-tag="SQL Optimization">SQL Optimization</span>
       <span class="filter-tag" data-tag="Scalability">Scalability</span>
+      <span class="filter-tag" data-tag="Security">Security</span>
       <span class="filter-tag" data-tag="Stream Processing">Stream Processing</span>
       <span class="filter-tag" data-tag="Subqueries &amp; CTEs">Subqueries &amp; CTEs</span>
       <span class="filter-tag" data-tag="System Architecture">System Architecture</span>
@@ -88,6 +106,76 @@
     </div>
 
     <div class="problem-grid">
+      <a href="questions/when-a-region-goes-dark-choosing-the-write-strategy-for-chaos-experiments.html" class="problem-card"
+         data-title="when a region goes dark: choosing the write strategy for chaos experiments"
+         data-tags="chaos engineering,disaster recovery,data consistency">
+        <span class="card-title">When a region goes dark: choosing the write strategy for chaos experiments</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Chaos Engineering</span> <span class="tag tag--green">Disaster Recovery</span> <span class="tag tag--amber">Data Consistency</span>
+          <span class="card-date">01 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/ethans-split-second-payment-dilemma-balancing-consistency-and-scale.html" class="problem-card"
+         data-title="ethan’s split-second payment dilemma: balancing consistency and scale"
+         data-tags="microservices,scalability,consistency">
+        <span class="card-title">Ethan’s split-second payment dilemma: balancing consistency and scale</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Microservices</span> <span class="tag tag--green">Scalability</span> <span class="tag tag--amber">Consistency</span>
+          <span class="card-date">01 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/riyas-multi-region-trade-off-choosing-between-fast-writes-and-strict-consistency.html" class="problem-card"
+         data-title="riya&#x27;s multi-region trade-off: choosing between fast writes and strict consistency"
+         data-tags="replication,latency,multi-region">
+        <span class="card-title">Riya&#x27;s multi-region trade-off: choosing between fast writes and strict consistency</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Replication</span> <span class="tag tag--green">Latency</span> <span class="tag tag--amber">Multi-Region</span>
+          <span class="card-date">01 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/sofias-search-for-a-low-latency-revocable-token-strategy-across-1000-microservic.html" class="problem-card"
+         data-title="sofia&#x27;s search for a low-latency, revocable token strategy across 1000+ microservices"
+         data-tags="security,authentication,low latency">
+        <span class="card-title">Sofia&#x27;s search for a low-latency, revocable token strategy across 1000+ microservices</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Security</span> <span class="tag tag--green">Authentication</span> <span class="tag tag--amber">Low Latency</span>
+          <span class="card-date">01 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/avoiding-oversells-under-high-contention-which-concurrency-pattern-wins.html" class="problem-card"
+         data-title="avoiding oversells under high contention: which concurrency pattern wins?"
+         data-tags="concurrency,rate limiting,database locking">
+        <span class="card-title">Avoiding oversells under high contention: which concurrency pattern wins?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Concurrency</span> <span class="tag tag--green">Rate Limiting</span> <span class="tag tag--amber">Database Locking</span>
+          <span class="card-date">01 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/projecting-events-at-scale-which-pattern-should-ravi-choose.html" class="problem-card"
+         data-title="projecting events at scale: which pattern should ravi choose?"
+         data-tags="event sourcing,cqrs,scalability">
+        <span class="card-title">Projecting events at scale: which pattern should Ravi choose?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Event Sourcing</span> <span class="tag tag--green">CQRS</span> <span class="tag tag--amber">Scalability</span>
+          <span class="card-date">01 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/mayas-rollout-how-can-you-safely-deploy-a-risky-backend-change.html" class="problem-card"
+         data-title="maya&#x27;s rollout: how can you safely deploy a risky backend change?"
+         data-tags="deployment,ci/cd,database migration">
+        <span class="card-title">Maya&#x27;s rollout: how can you safely deploy a risky backend change?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Deployment</span> <span class="tag tag--green">CI/CD</span> <span class="tag tag--amber">Database Migration</span>
+          <span class="card-date">01 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
       <a href="questions/building-resilient-microservices-the-error-handling-architecture-decision.html" class="problem-card"
          data-title="building resilient microservices: the error handling architecture decision"
          data-tags="error handling,microservices resilience,system architecture,fault tolerance">

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya&#x27;s rollout: how can you safely deploy a risky backend change? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">01 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Deployment</span>
+      <span class="tag tag--green">CI/CD</span>
+      <span class="tag tag--amber">Database Migration</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya&#x27;s rollout: how can you safely deploy a risky backend change?</h1>
+      <p class="q-scenario"><strong>Maya</strong>, a backend engineer, runs a <strong>heavily trafficked payment API</strong> used by millions of people each day. She must ship an update that combines <strong>application code</strong> with a <strong>backward-compatible database migration</strong> (a new index and a nullable column). The rollout must <strong>limit customer-facing errors</strong>, keep <strong>latency stable</strong>, and offer a <strong>fast rollback</strong> if something goes wrong. She has <strong>percentage-based traffic routing</strong> through a service mesh, <strong>feature flags</strong>, and solid <strong>monitoring</strong> (custom metrics, error rates, latency). Which deployment approach fits best?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A traditional rolling deployment: progressively replace instances (10% at a time) across regions, relying on health checks. Automatically roll back if failures occur. Execute the database migration before updating the code.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Blue-green deployment: set up a fully independent green environment, apply the DB changes there, and switch 100% of the traffic once smoke tests pass. Keep the old environment intact for immediate fallback if necessary.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Canary release with feature flags and gradual traffic shifting: deploy the new code to a small percentage of users (1-5%), enabling the feature flag only for them. Monitor key metrics and slowly increase traffic if stable. Use the expand-contract pattern for the DB: apply additive changes first, toggle flags, and clean up old code later. Automate rollbacks on metric regression.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Halt traffic and execute a synchronized deployment during a maintenance window: remove services from the load balancer, apply migrations and code updates simultaneously, then restore traffic. Depend entirely on rigorous QA testing to prevent production issues.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Canary Release with Feature Flags and Expand-Contract Migration</h3>
+        <p>For a payment API, the goal is to <strong>limit blast radius and make reversal instant</strong>. Option C does both: only a small, sticky cohort of users sees the new behaviour, promotion is gated by real metrics, and the <em>flag</em> (not a redeploy) is the rollback. The database change follows <strong>expand-contract</strong>, so schema and code are never coupled to the same moment. Together, these let Maya detect subtle regressions on 1 to 5% of traffic, and undo them in seconds. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Small blast radius:</strong> only 1 to 5% of users are exposed first. A defect that would hit millions in a big-bang release affects a tiny, known cohort, and payment-specific harm (wrong amounts, failed captures) is caught early.</li>
+          <li><strong>Deploy is separated from release:</strong> code ships dark with the flag off, so deployment risk and feature risk are handled independently. Turning the flag off is a rollback in seconds with no new deployment.</li>
+          <li><strong>Metric-gated promotion:</strong> compare canary against baseline on error rate, p99 latency, <em>payment success rate</em> and database load, with automatic rollback on regression. This catches problems that health checks (alive or dead) cannot see.</li>
+          <li><strong>Sticky cohorts:</strong> evaluating the flag by hashing a stable user or account id keeps one user on one version across requests, which matters for multi-step payment flows.</li>
+          <li><strong>Safe schema change:</strong> adding a nullable column and an index is additive, so old and new code both keep working against the new schema. The 'expand' step is applied first and independently, and never needs to be reverted if the code is rolled back.</li>
+          <li><strong>Uses what Maya already has:</strong> mesh weights provide traffic-level canarying and feature flags provide user-level control, with monitoring closing the loop.</li>
+        </ul>
+        <p>A dependable rollout combines <strong>expand-then-contract schema changes</strong>, <strong>dark deploy with a flag</strong>, <strong>sticky percentage ramp (1, 5, 25, 50, 100)</strong>, <strong>automated guardrail checks with rollback</strong>, and a <strong>cleanup release</strong> that removes the flag and the old path. Treat the final contract step as its own, later change.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔄</div>
+          <h4>A — Traditional Rolling Deployment</h4>
+          <p>Running the migration <em>before</em> the code is the correct expand-first order, and rolling replacement is a sound baseline for low-risk changes. For this case, however, instances are replaced by <strong>percentage of servers, not a chosen cohort of users</strong>, so the first 10% already carries real exposure. Health checks detect crashes, not wrong behaviour such as subtle payment errors or a latency regression on one path. Rollback means rolling forward or back again, which takes minutes, not seconds. <strong>Caveat:</strong> adding a flag and metric-gated steps to a rolling deploy moves it toward option C.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔵</div>
+          <h4>B — Blue-Green Deployment</h4>
+          <p>Blue-green gives an excellent instant app-tier rollback, but it fits this case poorly. The database is normally <strong>shared</strong>, so 'apply the DB changes there' is not isolated: the migration affects blue as well, which is exactly why it must be backward compatible. Switching <strong>100% of traffic at once</strong> exposes everyone to any defect, the green environment starts with cold caches and connection pools, and you pay for duplicate capacity. <strong>Caveat:</strong> it works well for stateless, lower-risk releases, and can be combined with canary routing (send 1 to 5% to green first).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🛑</div>
+          <h4>D — Maintenance Window with Synchronized Deployment</h4>
+          <p>Taking a payment API offline means lost revenue and broken SLAs, and it is unnecessary for a backward-compatible change. Applying migration and code <strong>simultaneously</strong> removes the ability to roll either back independently, and relying entirely on QA assumes that pre-production reproduces production load and data, which it rarely does. <strong>Caveat:</strong> a window is justified only for changes that cannot be made backward compatible, which is not Maya's case.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Canary Release with Feature Flags and Expand-Contract Migration ✓</h4>
+          <p>Canary release with feature flags and gradual traffic shifting: deploy the new code to a small percentage of users (1-5%), enabling the feature flag only for them. Monitor key metrics and slowly incre</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Blast Radius at First Exposure</th><th>Rollback Speed</th><th>Downtime Risk</th><th>Detects Subtle Regressions</th><th>DB Migration Safety</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Rolling Deployment</td><td>Medium ⚠ (about 10% of servers)</td><td>Slow ❌ (minutes, another rollout)</td><td>Low ✅</td><td>Weak ⚠ (health checks only)</td><td>Good ✅ (migrate first)</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Blue-Green</td><td>Large ❌ (100% cut-over)</td><td>Fast ✅ (switch back)</td><td>Low ✅</td><td>Weak ❌ (smoke tests only)</td><td>Risky ⚠ (shared DB)</td><td>Medium ⚠ (double capacity)</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Canary + Flags + Expand-Contract ✓</td><td>Small ✅ (1 to 5%)</td><td>Instant ✅ (flag flip)</td><td>Low ✅</td><td>Strong ✅ (metric gates)</td><td>Strong ✅ (additive, decoupled)</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">D — Maintenance Window</td><td>Total ❌</td><td>Slow ❌</td><td>High ❌ (planned outage)</td><td>Weak ❌ (QA only)</td><td>Risky ❌ (coupled with code)</td><td>Low ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Rolling Deployment</h4>
+          <p>Low-risk, backward-compatible changes to stateless services where mixed versions are safe and instance-level health checks are an adequate safety net.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Blue-Green</h4>
+          <p>Stateless releases that need instant whole-environment fallback and are well covered by smoke tests, especially when combined with a small initial traffic slice.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Canary + Flags + Expand-Contract</h4>
+          <p>High-risk or high-stakes changes (payments, authentication, core data paths) where limited exposure, metric gating and instant rollback justify the extra tooling.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Maintenance Window</h4>
+          <p>Breaking changes with no backward-compatible path (for example a major data model change), where a short planned outage is cheaper than a long dual-write migration.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Metric-Gated Canary with Automatic Rollback</h3>
+        <p>The additive migration ships first, code goes out dark, and exposure grows only while guardrails stay healthy. Any breach flips the flag off automatically:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TD
+    A[Run expand migration: nullable column and online index] --&gt; B[Deploy new code with flag OFF]
+    B --&gt; C[Enable flag for 1 percent of users]
+    C --&gt; D{Guardrails healthy for the bake time?}
+    D -- no --&gt; R[Auto rollback: flag OFF and canary traffic to 0 percent]
+    D -- yes --&gt; E[Increase to 5, 25, 50, then 100 percent]
+    E --&gt; D2{Every step healthy?}
+    D2 -- no --&gt; R
+    D2 -- yes --&gt; F[Soak period]
+    F --&gt; G[Contract: remove flag and old code, drop unused objects later]
+    R --&gt; H[Investigate, fix forward, restart the canary]">flowchart TD
+    A[Run expand migration: nullable column and online index] --&gt; B[Deploy new code with flag OFF]
+    B --&gt; C[Enable flag for 1 percent of users]
+    C --&gt; D{Guardrails healthy for the bake time?}
+    D -- no --&gt; R[Auto rollback: flag OFF and canary traffic to 0 percent]
+    D -- yes --&gt; E[Increase to 5, 25, 50, then 100 percent]
+    E --&gt; D2{Every step healthy?}
+    D2 -- no --&gt; R
+    D2 -- yes --&gt; F[Soak period]
+    F --&gt; G[Contract: remove flag and old code, drop unused objects later]
+    R --&gt; H[Investigate, fix forward, restart the canary]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Sticky Flag Evaluation and Guardrail-Driven Ramp</h3>
+        <p>The flag is evaluated by a stable hash so each user stays in one cohort. A controller increases exposure only while guardrails hold and flips the flag off on any breach:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">STEPS <span class="tk-op">=</span> [<span class="tk-num">1</span>, <span class="tk-num">5</span>, <span class="tk-num">25</span>, <span class="tk-num">50</span>, <span class="tk-num">100</span>]                 <span class="tk-com">// percent of users</span></span>
+<span class="line">BAKE <span class="tk-op">=</span> { <span class="tk-num">1</span>: 30min, <span class="tk-num">5</span>: 30min, <span class="tk-num">25</span>: 60min, <span class="tk-num">50</span>: 60min, <span class="tk-num">100</span>: 0min }</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">isEnabled</span>(flagName, userId):</span>
+<span class="line">    config <span class="tk-op">=</span> flags.<span class="tk-fn">get</span>(flagName)            <span class="tk-com">// { enabled, percent, killSwitch }</span></span>
+<span class="line">    <span class="tk-kw">if</span> config.killSwitch <span class="tk-kw">or</span> <span class="tk-kw">not</span> config.enabled: <span class="tk-kw">return</span> <span class="tk-lit">false</span></span>
+<span class="line">    bucket <span class="tk-op">=</span> <span class="tk-fn">hash</span>(flagName <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> userId) <span class="tk-op">%</span> <span class="tk-num">100</span>     <span class="tk-com">// stable, sticky per user</span></span>
+<span class="line">    <span class="tk-kw">return</span> bucket <span class="tk-op">&lt;</span> config.percent</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handlePayment</span>(request):</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">isEnabled</span>(<span class="tk-str">&#x27;new-payment-path&#x27;</span>, request.userId):</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">newPath</span>(request)             <span class="tk-com">// uses the new column and index</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">oldPath</span>(request)                 <span class="tk-com">// still valid after the expand migration</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">rampController</span>(flagName):</span>
+<span class="line">    <span class="tk-kw">for</span> percent <span class="tk-kw">in</span> STEPS:</span>
+<span class="line">        flags.<span class="tk-fn">setPercent</span>(flagName, percent)</span>
+<span class="line">        deadline <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">+</span> BAKE[percent]</span>
+<span class="line">        <span class="tk-kw">while</span> <span class="tk-fn">now</span>() <span class="tk-op">&lt;</span> deadline:</span>
+<span class="line">            canary <span class="tk-op">=</span> metrics.<span class="tk-fn">window</span>(cohort <span class="tk-op">=</span> <span class="tk-str">&#x27;canary&#x27;</span>, last <span class="tk-op">=</span> 5min)</span>
+<span class="line">            base <span class="tk-op">=</span> metrics.<span class="tk-fn">window</span>(cohort <span class="tk-op">=</span> <span class="tk-str">&#x27;baseline&#x27;</span>, last <span class="tk-op">=</span> 5min)</span>
+<span class="line"></span>
+<span class="line">            <span class="tk-kw">if</span> canary.samples <span class="tk-op">&lt;</span> MIN_SAMPLES:</span>
+<span class="line">                <span class="tk-fn">sleep</span>(<span class="tk-num">30s</span>); <span class="tk-kw">continue</span>                          <span class="tk-com">// not enough data to judge</span></span>
+<span class="line"></span>
+<span class="line">            <span class="tk-kw">if</span> <span class="tk-fn">breach</span>(canary, base):</span>
+<span class="line">                flags.<span class="tk-fn">setKillSwitch</span>(flagName, <span class="tk-lit">true</span>)           <span class="tk-com">// rollback in seconds</span></span>
+<span class="line">                <span class="tk-fn">alert</span>(<span class="tk-str">&#x27;Canary rolled back&#x27;</span>, canary, base)</span>
+<span class="line">                <span class="tk-kw">return</span> FAILED</span>
+<span class="line">            <span class="tk-fn">sleep</span>(<span class="tk-num">30s</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> SUCCEEDED                        <span class="tk-com">// later: remove flag and old path</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">breach</span>(canary, base):</span>
+<span class="line">    <span class="tk-kw">return</span> canary.errorRate <span class="tk-op">&gt;</span> base.errorRate <span class="tk-op">*</span> <span class="tk-num">1.2</span> <span class="tk-op">+</span> <span class="tk-num">0.001</span>           <span class="tk-com">// relative plus absolute margin</span></span>
+<span class="line">        <span class="tk-kw">or</span> canary.p99LatencyMs <span class="tk-op">&gt;</span> base.p99LatencyMs <span class="tk-op">*</span> <span class="tk-num">1.25</span></span>
+<span class="line">        <span class="tk-kw">or</span> canary.paymentSuccessRate <span class="tk-op">&lt;</span> base.paymentSuccessRate <span class="tk-op">-</span> <span class="tk-num">0.002</span></span>
+<span class="line">        <span class="tk-kw">or</span> db.lockWaitMs <span class="tk-op">&gt;</span> LOCK_WAIT_LIMIT</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Coupling the migration to the code release:</strong> if the schema change and code ship together, rollback of one breaks the other. Expand first, separately.</li>
+          <li><strong>Non-sticky cohorts:</strong> a user flipping between versions mid-flow causes confusing payment behaviour. Hash on a stable id.</li>
+          <li><strong>Watching only technical metrics:</strong> error rates can look fine while payment success drops. Include business metrics in the guardrails.</li>
+          <li><strong>Too little traffic or too short a bake:</strong> a 1% slice with five minutes of data proves nothing. Set minimum samples and soak times.</li>
+          <li><strong>Comparing against yesterday instead of a concurrent baseline:</strong> time-of-day effects create false alarms and false comfort.</li>
+          <li><strong>Blocking index builds on a large table:</strong> locks writes and spikes latency. Build online, throttled, and verify validity.</li>
+          <li><strong>Leaving flags forever:</strong> dead paths accumulate and break. Schedule cleanup as part of the rollout plan.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams with high-stakes services treat release as <strong>a controlled experiment with an escape hatch</strong>. A typical flow looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Pre-flight:</strong> confirm backward compatibility in both directions, idempotent payment handling across versions, a kill-switch flag defaulting to off, and dashboards and alerts that already exist.</li>
+          <li><strong>Step 1 — Expand:</strong> ship the additive migration as its own change (nullable column, online index build), and verify load, locks and replication lag.</li>
+          <li><strong>Step 2 — Deploy dark:</strong> release the new code with the flag off and compare health with the previous version at 0% exposure.</li>
+          <li><strong>Step 3 — Ramp:</strong> internal users, then 1%, 5%, 25%, 50%, 100%, with a bake time at each step and sticky cohorts.</li>
+          <li><strong>Step 4 — Automate the guardrails:</strong> error rate, p99 latency, payment success rate, database CPU and lock waits. Breach means automatic flag-off and traffic back to baseline.</li>
+          <li><strong>Step 5 — Backfill if needed:</strong> populate the new column in throttled batches before reads depend on it.</li>
+          <li><strong>Step 6 — Contract:</strong> after a soak period, remove the flag and the old code path, and only later drop obsolete columns or indexes in a separate release.</li>
+        </ul>
+        <p>Make every step reversible, and make the reversal automatic.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For a risky change to a payment system, <strong>shrink the blast radius, decouple deploy from release, gate each step on real metrics, and make rollback a flag flip</strong>. Handle the schema with expand-contract so old and new code always coexist safely. Rolling and blue-green deployments are good tools for lower-risk changes, and maintenance windows are for changes that cannot be made compatible.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

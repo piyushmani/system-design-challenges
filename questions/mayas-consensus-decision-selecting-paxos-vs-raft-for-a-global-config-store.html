@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya&#x27;s Consensus Decision: Selecting Paxos vs. Raft for a Global Config Store — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">05 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Consensus Algorithms</span>
+      <span class="tag tag--green">Paxos vs Raft</span>
+      <span class="tag tag--amber">Configuration Management</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya&#x27;s Consensus Decision: Selecting Paxos vs. Raft for a Global Config Store</h1>
+      <p class="q-scenario"><strong>Maya</strong>, a backend engineer, is building a <strong>global service-discovery and configuration store</strong> for her organization's microservices. It requires <strong>linearizable reads and writes</strong> for the service registry and feature flags, <strong>10,000 reads per second</strong> and <strong>100 writes per second</strong>, <strong>write latency under 100 ms</strong>, <strong>high availability across three regions</strong>, and strong <strong>observability</strong> of commit latency and leader elections. She must choose the consensus protocol (Raft or Paxos) together with the scaling and placement strategy for the consensus groups. Which architecture best satisfies these demands, and why?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Partition the keyspace across several independent Raft groups containing 3 to 5 nodes, locating replicas in every region with a per-shard leader. Direct reads and writes for specific keys to the corresponding shard leader to ensure linearizability, while permitting read-through caches and strictly managed follower reads for non-essential low-latency requests. Utilize an established Raft library like Consul or etcd, track commit, term, and leader metrics, and achieve scale by introducing additional shards.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Operate one unified global Multi-Paxos instance covering all data, utilizing numerous nodes across all regions to optimize fault tolerance. Adjust the learner and acceptor roles to enhance throughput, and aim to horizontally scale this singular consensus group by integrating more servers and splitting logical logs rather than sharding the actual data.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Adopt a leaderless, Dynamo-style quorum architecture employing N/R/W configurations along with CRDT-based or last-write-wins conflict resolution. Embrace eventual consistency for the majority of actions to ensure high availability during network partitions and low-latency reads, applying a strong-consistency mode exclusively to a restricted subset of critical keys.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Implement Raft but place a centralized proxy layer in front of it to manage all client traffic. This proxy directs write operations to the active leader and handles read requests using a meticulously updated cache or by querying the leader for linearizable reads. Horizontally scale the proxy layer and depend on it to manage retries and track the current leader.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Raft Groups with Cross-Region Quorums</h3>
+        <p>The workload needs <strong>CP behavior</strong> (consistency over availability during partitions), a quorum that spans regions, and tooling that exposes commit latency and elections. Raft and Multi-Paxos offer equivalent safety guarantees; the practical difference is <strong>maturity of implementations and operability</strong>. Raft has a clear specification, including membership changes, and production-grade stores (etcd, Consul) expose the metrics Maya wants. Option A uses Raft and provides a scale-out path through independent groups. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Linearizability by construction:</strong> Writes commit through the leader once a majority acknowledges, and linearizable reads use the leader or a ReadIndex/lease protocol, so a registry or flag read never returns a stale value.</li>
+          <li><strong>Quorum placement controls latency:</strong> With five voters spread 2-2-1 across three regions, a write needs three acknowledgements, so commit time is roughly the round trip to the nearest other region plus disk fsync. That is what makes sub-100 ms writes achievable when regions are within tens of milliseconds, and it keeps working if an entire region fails.</li>
+          <li><strong>A scale-out path exists:</strong> Independent Raft groups each have their own leader and log, so write throughput and data size scale by adding groups. This is how Spanner (Paxos groups), CockroachDB, and TiKV (Raft ranges) scale consensus.</li>
+          <li><strong>Reads scale without giving up correctness:</strong> The 10,000 reads per second can be spread out: linearizable reads through ReadIndex from followers, explicit opt-in serializable or bounded-stale reads, and client-side caches kept fresh by watch streams for non-critical lookups.</li>
+          <li><strong>Operational maturity and observability:</strong> etcd and Consul expose commit latency, pending proposals, leader changes, term, apply lag, and disk fsync latency. Debuggable consensus matters more than theoretical elegance.</li>
+          <li><strong>Raft versus Paxos in one line:</strong> Same safety, but Raft's strong leader, log-matching property, and built-in membership change are easier to implement and operate correctly than the hand-rolled Multi-Paxos most teams end up with.</li>
+        </ul>
+        <p>Operationally: use <strong>odd-sized voter sets</strong>, pin <strong>leaders near writers</strong> (leader priority or leases), enable <strong>pre-vote and check-quorum</strong> to avoid disruptive elections, snapshot and compact regularly, and alert on <strong>commit-latency percentiles, leader changes per hour, proposal failures, and disk fsync latency</strong>. Rehearse region-failure drills.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🏛️</div>
+          <h4>B — One Global Multi-Paxos Group</h4>
+          <p>Paxos is just as safe as Raft, but adding nodes to one consensus group does <em>not</em> add throughput: every write still passes through one leader and one log and needs a larger quorum, which <strong>increases</strong> latency and failure surface across regions. Splitting logs without sharding the data does not change that. Multi-Paxos also has no single canonical specification, so implementations vary and operational tooling is thinner. <strong>Caveat:</strong> Paxos variants (Flexible Paxos, EPaxos) can reduce WAN latency in specialized designs, but they are harder to build and operate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🕸️</div>
+          <h4>C — Leaderless Dynamo-Style Quorums</h4>
+          <p>Eventual consistency with last-write-wins or CRDTs <strong>violates the stated linearizability requirement</strong>. Even with R + W &gt; N, sloppy quorums, concurrent writes, and clock skew can return stale values or lose updates, which is unacceptable for feature flags and registries where inconsistency causes outages. A strong mode for a subset of keys means running two systems. <strong>Caveat:</strong> for non-critical, high-volume data such as telemetry or caches, leaderless designs are a good fit.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔀</div>
+          <h4>D — Raft Behind a Central Proxy</h4>
+          <p>A proxy does not scale consensus; writes still go to one leader, and the proxy adds a hop and a new failure domain that must itself be highly available. Serving reads from a proxy cache is not linearizable, and proxy-based leader tracking duplicates what client libraries already do. <strong>Caveat:</strong> a thin, stateless routing layer (or a smart client) in front of shards is reasonable; a stateful caching proxy that claims linearizability is not.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>A — Raft Groups with Cross-Region Quorums ✓</h4>
+          <p>Partition the keyspace across several independent Raft groups containing 3 to 5 nodes, locating replicas in every region with a per-shard leader. Direct reads and writes for specific keys to the corre</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Linearizability</th><th>Write Latency (WAN)</th><th>Read Scalability</th><th>Operational Maturity</th><th>Region-Failure Tolerance</th><th>Scale-Out Path</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Sharded Raft Groups ✓</td><td>Yes ✅</td><td>Quorum RTT ⚠ (placement dependent)</td><td>High ✅ (watch, cache, ReadIndex)</td><td>High ✅</td><td>High ✅ (majority survives)</td><td>Add Raft groups ✅</td></tr>
+            <tr><td class="tt-option">B — Global Multi-Paxos</td><td>Yes ✅</td><td>Worse ❌ (bigger quorum)</td><td>Moderate ⚠</td><td>Lower ⚠ (varied implementations)</td><td>High ✅</td><td>None ❌ (one log)</td></tr>
+            <tr><td class="tt-option">C — Leaderless Quorums</td><td>No ❌ (eventual)</td><td>Low ✅</td><td>Very high ✅</td><td>Medium ⚠</td><td>Very high ✅</td><td>Easy ✅</td></tr>
+            <tr><td class="tt-option">D — Raft + Central Proxy</td><td>Only via leader ⚠</td><td>Extra hop ❌</td><td>Limited ⚠ (cache is not linearizable)</td><td>Medium ⚠</td><td>Proxy is a risk ❌</td><td>None ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Sharded Raft Groups</h4>
+          <p>Linearizable metadata (registry, flags, locks, leader election) across regions with modest write rates, strong tooling needs, and a future scale-out path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Global Multi-Paxos</h4>
+          <p>Specialized systems with deep consensus expertise or an existing Multi-Paxos platform; not recommended as a greenfield choice here.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Leaderless Quorums</h4>
+          <p>High-volume, availability-first data that tolerates staleness (shopping carts, telemetry, session caches).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Raft + Central Proxy</h4>
+          <p>As a thin stateless router or client-side library that hides leader discovery; not as a place to cache or to claim consistency.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Raft Group Placement Across Three Regions</h3>
+        <p>One shard shown with five voters in a 2-2-1 layout; other shards use the same layout, and a smart client routes each key to its shard's leader:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    CL[Clients and Services] --&gt; RT[Smart client or shard router]
+    subgraph RA[Region A]
+        LD[Shard 1 Leader]
+        VA[Voter A2]
+    end
+    subgraph RB[Region B]
+        VB1[Voter B1]
+        VB2[Voter B2]
+    end
+    subgraph RC[Region C]
+        VC[Voter C1]
+    end
+    RT --&gt; LD
+    RT -.-&gt;|other keys| S2[Shard 2 group, same 2-2-1 layout]
+    LD --&gt;|AppendEntries| VA
+    LD --&gt;|AppendEntries| VB1
+    LD --&gt;|AppendEntries| VB2
+    LD --&gt;|AppendEntries| VC">flowchart LR
+    CL[Clients and Services] --&gt; RT[Smart client or shard router]
+    subgraph RA[Region A]
+        LD[Shard 1 Leader]
+        VA[Voter A2]
+    end
+    subgraph RB[Region B]
+        VB1[Voter B1]
+        VB2[Voter B2]
+    end
+    subgraph RC[Region C]
+        VC[Voter C1]
+    end
+    RT --&gt; LD
+    RT -.-&gt;|other keys| S2[Shard 2 group, same 2-2-1 layout]
+    LD --&gt;|AppendEntries| VA
+    LD --&gt;|AppendEntries| VB1
+    LD --&gt;|AppendEntries| VB2
+    LD --&gt;|AppendEntries| VC</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Smart Client: Shard Routing and Per-Request Consistency</h3>
+        <p>The client routes by shard, follows leader redirects instead of using a proxy, defaults to linearizable reads, and offers opt-in bounded-stale reads backed by a watch-fed cache:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">SHARDS <span class="tk-op">=</span> <span class="tk-fn">loadShardMap</span>()                                   <span class="tk-com">// key range or hash -&gt; raft group endpoints</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">put</span>(key, value):</span>
+<span class="line">    group <span class="tk-op">=</span> SHARDS.<span class="tk-fn">lookup</span>(key)</span>
+<span class="line">    <span class="tk-kw">for</span> attempt <span class="tk-kw">in</span> <span class="tk-num">0</span>..<span class="tk-num">3</span>:</span>
+<span class="line">        leader <span class="tk-op">=</span> group.<span class="tk-fn">currentLeader</span>() <span class="tk-kw">or</span> group.<span class="tk-fn">discoverLeader</span>()</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            <span class="tk-kw">return</span> leader.<span class="tk-fn">propose</span>(<span class="tk-fn">Put</span>(key, value), timeout <span class="tk-op">=</span> <span class="tk-num">80ms</span>)   <span class="tk-com">// returns after majority commit</span></span>
+<span class="line">        <span class="tk-kw">catch</span> NotLeader <span class="tk-kw">as</span> e:</span>
+<span class="line">            group.<span class="tk-fn">setLeader</span>(e.hint)                       <span class="tk-com">// follow redirect, no proxy needed</span></span>
+<span class="line">        <span class="tk-kw">catch</span> Timeout:</span>
+<span class="line">            <span class="tk-fn">sleep</span>(<span class="tk-fn">backoff</span>(attempt) <span class="tk-op">+</span> <span class="tk-fn">jitter</span>())</span>
+<span class="line">    <span class="tk-kw">throw</span> Unavailable</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">get</span>(key, consistency <span class="tk-op">=</span> LINEARIZABLE):</span>
+<span class="line">    group <span class="tk-op">=</span> SHARDS.<span class="tk-fn">lookup</span>(key)</span>
+<span class="line">    <span class="tk-kw">if</span> consistency <span class="tk-op">==</span> LINEARIZABLE:</span>
+<span class="line">        node <span class="tk-op">=</span> group.<span class="tk-fn">nearestMember</span>()                      <span class="tk-com">// a local follower is fine</span></span>
+<span class="line">        <span class="tk-kw">return</span> node.<span class="tk-fn">read</span>(key, mode <span class="tk-op">=</span> READ_INDEX)          <span class="tk-com">// follower asks leader for read index, waits for apply</span></span>
+<span class="line">    <span class="tk-kw">if</span> consistency <span class="tk-op">==</span> BOUNDED_STALE:</span>
+<span class="line">        cached <span class="tk-op">=</span> localCache.<span class="tk-fn">get</span>(key)</span>
+<span class="line">        <span class="tk-kw">if</span> cached <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> cached.fetchedAt <span class="tk-op">&lt;</span> MAX_STALENESS:</span>
+<span class="line">            <span class="tk-kw">return</span> cached.value</span>
+<span class="line">        value <span class="tk-op">=</span> group.<span class="tk-fn">nearestMember</span>().<span class="tk-fn">read</span>(key, mode <span class="tk-op">=</span> SERIALIZABLE)</span>
+<span class="line">        localCache.<span class="tk-fn">put</span>(key, value)</span>
+<span class="line">        <span class="tk-kw">return</span> value</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">watch</span>(prefix):                                   <span class="tk-com">// push invalidations instead of polling</span></span>
+<span class="line">    stream <span class="tk-op">=</span> group.<span class="tk-fn">nearestMember</span>().<span class="tk-fn">watch</span>(prefix, fromRevision <span class="tk-op">=</span> lastSeenRevision)</span>
+<span class="line">    <span class="tk-kw">for</span> event <span class="tk-kw">in</span> stream:</span>
+<span class="line">        localCache.<span class="tk-fn">apply</span>(event)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Even-sized or oversized clusters:</strong> Four nodes tolerate the same failures as three, and seven or nine voters raise commit latency. Use three or five.</li>
+          <li><strong>All voters in one region:</strong> A regional outage loses quorum. Spread voters so no single region holds a majority.</li>
+          <li><strong>'Linearizable' reads from followers without ReadIndex or leases:</strong> A stale follower can return old data after a leader change.</li>
+          <li><strong>Ignoring disk and clock behavior:</strong> Slow fsync or clock jumps cause missed heartbeats and election storms. Use SSDs, monitor fsync latency, and tune election timeouts to the WAN RTT.</li>
+          <li><strong>Large values or hot keys in the consensus log:</strong> Config stores are for small metadata. Large blobs slow replication and snapshots.</li>
+          <li><strong>Never testing region failure and membership change:</strong> Failure handling that has not been rehearsed will not work during an incident.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams that run consensus-backed control planes <strong>keep the consensus group small, the data small, and the critical path short</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Quantify:</strong> Measure inter-region RTT, key count and size, read/write mix, and the staleness each consumer can actually tolerate.</li>
+          <li><strong>Step 1 — Start with one group:</strong> Five voters (2-2-1 across three regions) on SSDs, with the write-ahead log on a dedicated disk.</li>
+          <li><strong>Step 2 — Cache and watch:</strong> Clients cache reads and use watch streams, so most reads never reach the leader.</li>
+          <li><strong>Step 3 — Tiered reads:</strong> Linearizable by default, with explicit opt-in serializable reads for hot, non-critical paths.</li>
+          <li><strong>Step 4 — Shard when needed:</strong> Split by key range or domain when size or write rate demands it, and keep atomic units inside one shard (the answer to this question).</li>
+          <li><strong>Step 5 — Operate:</strong> Dashboards and alerts for leader changes and fsync latency, game days for region loss, and tested backup and restore.</li>
+        </ul>
+        <p>Consensus is expensive per write; reserve it for the data that truly needs it.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For linearizable configuration and service discovery, choose a <strong>mature Raft implementation</strong> (etcd or Consul style), place a <strong>majority quorum across regions</strong>, and scale by <strong>adding independent groups</strong> rather than adding nodes to one group. Raft versus Paxos is a choice about operability, not safety, and neither bigger quorums nor proxies buy throughput.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

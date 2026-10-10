@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scaling Live Updates: Evaluating WebSockets vs. Long Polling for 100k+ Users — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">05 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">WebSockets</span>
+      <span class="tag tag--green">Long Polling</span>
+      <span class="tag tag--amber">Live Updates</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Scaling Live Updates: Evaluating WebSockets vs. Long Polling for 100k+ Users</h1>
+      <p class="q-scenario"><strong>Liam</strong>, a senior backend engineer, is building a <strong>real-time collaborative dashboard</strong> for <strong>100,000+ concurrent users across three regions</strong>. The system must deliver small event messages and presence updates with <strong>end-to-end latency of 200 ms or less</strong>, guarantee <strong>per-user message ordering</strong>, stay <strong>highly available</strong> so that a failure in one region does not disrupt the others, and be easy to observe. Web and mobile clients must be supported, and some <strong>legacy clients only support HTTP long polling</strong>. Which architecture for delivering updates and routing traffic between servers is the best fit?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Implement WebSockets utilizing load balancer sticky sessions to ensure every client remains linked to a specific application server. Maintain connection and subscription details in memory on each server, and employ server-to-server replication via RPC or peer connections to distribute messages across servers. Use long polling strictly as a fallback for clients incapable of establishing WebSocket connections.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Utilize WebSockets for active users while keeping application servers stateless, allowing sockets to terminate on any node and routing publish/subscribe messages through a highly available external broker like NATS, Kafka, or a Redis Cluster. Keep a compact, shared connection registry in a persistent store to associate user IDs with their respective hosting nodes, using the broker to distribute messages across regions and nodes. Include an HTTP long-polling fallback that accesses the same state and leverages the same message broker.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Avoid long-lived connections completely by deploying aggressive HTTP long polling across a dynamically scaled fleet of servers placed behind a global load balancer. Store the most recent state in a distributed cache and reply with state diffs. Decrease polling intervals in an effort to achieve the required latency, leaning on caching and horizontal auto-scaling to manage the traffic volume.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Implement a hybrid, region-centric architecture by using WebSockets inside each region alongside a local message bus to ensure low latency, while replicating events asynchronously across regions via an eventually consistent data stream. Route a user&#x27;s write requests exclusively to their home region to ensure strict per-user message ordering, allowing read-only representations in other regions to remain eventually consistent. Supply a long-polling fallback for legacy clients.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Region-Centric WebSockets with Home-Region Ordering</h3>
+        <p>Three requirements drive the design: <strong>a 200 ms budget</strong> (which rules out extra cross-region hops on the common path), <strong>per-user ordering</strong> (which needs one sequencer per user, not a global order), and <strong>regional fault isolation</strong> (which means each region must be able to run on its own). A region-centric design delivers all three: users connect to a nearby region over WebSockets, each user's events are sequenced in their <em>home region</em>, and other regions receive them through asynchronous replication. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Local fan-out keeps latency low:</strong> Delivery to users in the same region is a WebSocket push through a local bus, typically a few tens of milliseconds and well inside 200 ms. Cross-region viewers pay inter-region latency once, not on every hop.</li>
+          <li><strong>Per-user ordering is cheap and exact:</strong> All of a user's events pass through that user's home region, which assigns a monotonically increasing sequence number per user. Because the requirement is per-user (not global) ordering, no cross-region consensus is needed.</li>
+          <li><strong>Failure isolation:</strong> Each region has its own gateways, bus, and connection state. If one region fails, the others keep serving their users; only users homed in the failed region need to be re-homed with a new epoch.</li>
+          <li><strong>Stateless gateways inside each region:</strong> Any gateway can terminate any socket, and a regional bus (NATS, Redis Streams, Kafka) routes messages by subscription, so there is no sticky-session mesh to maintain and scaling out means adding nodes.</li>
+          <li><strong>Legacy clients share the same path:</strong> Long-polling clients read from the same regional bus using a <code>lastSeq</code> cursor, so they receive the same ordered data with higher overhead and latency.</li>
+          <li><strong>Operable and observable:</strong> Per-region metrics (connections, fan-out latency, bus lag, replication lag, reconnect rate) and event timestamps give end-to-end latency histograms and clear SLOs per region.</li>
+        </ul>
+        <p>A practical recipe: <strong>stateless WebSocket gateways per region</strong>, a <strong>regional bus</strong> keyed by user, <strong>per-user sequence numbers plus epochs</strong>, <strong>asynchronous inter-region replication</strong> of the same stream, a <strong>cursor-based long-polling fallback</strong>, heartbeats, and backpressure. Monitor <strong>p99 publish-to-deliver latency, replication lag, sequence gaps, active connections, and reconnect rate</strong> by region.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Sticky WebSockets with Server-to-Server Replication</h4>
+          <p>Sticky sessions and in-memory subscriptions make servers stateful: a crash loses subscription state, rebalancing is painful, and server-to-server replication forms a mesh whose fan-out cost grows roughly with the square of the server count. Deployments and autoscaling cause mass reconnects to specific nodes. It works for small clusters but does not scale gracefully to 100k users across regions. <strong>Caveat:</strong> stickiness itself is still useful for connection upgrade and long-poll affinity; the problem is putting <em>state</em> and routing logic inside the application servers.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧰</div>
+          <h4>B — Stateless WebSockets + Global Broker + Registry</h4>
+          <p>This is a strong building-block design and is essentially what option D does <em>inside each region</em>. As described, however, it centers on one broker and one connection registry shared across regions, which couples regional failure domains and puts inter-region round trips on the fan-out path. It also does not say how per-user ordering is guaranteed across regions (a per-user Kafka partition key helps, but only within one cluster). <strong>Caveat:</strong> for a single-region deployment, B is arguably the simplest correct answer.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">⏱️</div>
+          <h4>C — Aggressive HTTP Long Polling</h4>
+          <p>Long polling creates a new HTTP request and response cycle for each batch of events. At 100k users, shortening intervals multiplies request volume, TLS and header overhead, and server load, and still adds latency each time the poll is re-established. Ordering needs cursors and careful idempotency, and presence is awkward. It is a reasonable <em>fallback</em>, not a primary transport. <strong>Caveat:</strong> where proxies block WebSockets, long polling (or SSE) is a valid transport.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>D — Region-Centric WebSockets with Home-Region Ordering ✓</h4>
+          <p>Implement a hybrid, region-centric architecture by using WebSockets inside each region alongside a local message bus to ensure low latency, while replicating events asynchronously across regions via a</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>End-to-End Latency</th><th>Per-User Ordering</th><th>Regional Failure Isolation</th><th>Horizontal Scalability</th><th>Operational Complexity</th><th>Legacy Client Support</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Sticky WebSockets</td><td>Good in-region ⚠</td><td>Hard across servers ❌</td><td>Weak ❌</td><td>Poor ❌ (mesh, sticky state)</td><td>Medium ⚠</td><td>Fallback only ⚠</td></tr>
+            <tr><td class="tt-option">B — Stateless + Global Broker</td><td>Good ⚠ (cross-region hops)</td><td>Possible ⚠ (partition keys)</td><td>Moderate ⚠ (shared broker)</td><td>Good ✅</td><td>Medium ⚠</td><td>Yes ✅</td></tr>
+            <tr><td class="tt-option">C — Aggressive Long Polling</td><td>Poor ❌</td><td>Cursor-based ⚠</td><td>Moderate ⚠</td><td>Costly ❌</td><td>Low ✅</td><td>Native ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Region-Centric ✓</td><td>Low in-region ✅</td><td>Strong ✅ (home region)</td><td>Strong ✅</td><td>Good ✅</td><td>High ❌</td><td>Yes ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Sticky WebSockets</h4>
+          <p>Small clusters in a single region where operational simplicity matters and the server count stays low.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Stateless + Global Broker</h4>
+          <p>Single-region or modest multi-region deployments where a shared broker is acceptable; also the building block used inside each region of the region-centric design.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Aggressive Long Polling</h4>
+          <p>Clients or networks that cannot use WebSockets or SSE, low-frequency updates, or as a fallback transport.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Region-Centric</h4>
+          <p>Large multi-region real-time systems with latency budgets, per-user ordering, and requirements for regional isolation.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Region-Centric Real-Time Architecture</h3>
+        <p>Each region is a self-contained cell; buses replicate asynchronously between regions while legacy clients use cursor-based long polling on the same gateways:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    subgraph R1[Region 1]
+        C1[Web and mobile clients] &lt;--&gt; G1[Stateless WebSocket gateways]
+        LP1[Legacy long-poll clients] --&gt;|HTTP long poll with lastSeq| G1
+        G1 &lt;--&gt; B1[Regional bus]
+    end
+    subgraph R2[Region 2]
+        C2[Web and mobile clients] &lt;--&gt; G2[Stateless WebSocket gateways]
+        G2 &lt;--&gt; B2[Regional bus]
+    end
+    subgraph R3[Region 3]
+        C3[Web and mobile clients] &lt;--&gt; G3[Stateless WebSocket gateways]
+        G3 &lt;--&gt; B3[Regional bus]
+    end
+    B1 &lt;-.-&gt;|async replication, per-user order| B2
+    B2 &lt;-.-&gt; B3
+    B1 &lt;-.-&gt; B3">flowchart LR
+    subgraph R1[Region 1]
+        C1[Web and mobile clients] &lt;--&gt; G1[Stateless WebSocket gateways]
+        LP1[Legacy long-poll clients] --&gt;|HTTP long poll with lastSeq| G1
+        G1 &lt;--&gt; B1[Regional bus]
+    end
+    subgraph R2[Region 2]
+        C2[Web and mobile clients] &lt;--&gt; G2[Stateless WebSocket gateways]
+        G2 &lt;--&gt; B2[Regional bus]
+    end
+    subgraph R3[Region 3]
+        C3[Web and mobile clients] &lt;--&gt; G3[Stateless WebSocket gateways]
+        G3 &lt;--&gt; B3[Regional bus]
+    end
+    B1 &lt;-.-&gt;|async replication, per-user order| B2
+    B2 &lt;-.-&gt; B3
+    B1 &lt;-.-&gt; B3</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Home-Region Sequencing, Replication, and Cursor Resume</h3>
+        <p>Each user's events are sequenced in their home region, replicated idempotently with gap detection, and delivered to WebSocket and long-polling clients from the same log:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Publish path (runs in the user&#x27;s home region) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onClientEvent</span>(userId, payload):</span>
+<span class="line">    home <span class="tk-op">=</span> <span class="tk-fn">homeRegionOf</span>(userId)</span>
+<span class="line">    <span class="tk-kw">if</span> home <span class="tk-op">!=</span> LOCAL_REGION:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">forwardToRegion</span>(home, userId, payload)       <span class="tk-com">// keeps one sequencer per user</span></span>
+<span class="line"></span>
+<span class="line">    seq <span class="tk-op">=</span> sequencer.<span class="tk-fn">next</span>(userId)                            <span class="tk-com">// monotonically increasing per user</span></span>
+<span class="line">    event <span class="tk-op">=</span> <span class="tk-fn">Event</span>(userId, epoch <span class="tk-op">=</span> <span class="tk-fn">currentEpoch</span>(userId), seq <span class="tk-op">=</span> seq, ts <span class="tk-op">=</span> <span class="tk-fn">now</span>(), payload)</span>
+<span class="line">    bus.<span class="tk-fn">publish</span>(topic <span class="tk-op">=</span> <span class="tk-str">&#x27;events&#x27;</span>, key <span class="tk-op">=</span> userId, value <span class="tk-op">=</span> event)   <span class="tk-com">// key keeps per-user order in a partition</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">Ack</span>(seq)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Replication consumer in other regions ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onReplicatedEvent</span>(event):</span>
+<span class="line">    last <span class="tk-op">=</span> lastApplied.<span class="tk-fn">get</span>(event.userId)                    <span class="tk-com">// (epoch, seq)</span></span>
+<span class="line">    <span class="tk-kw">if</span> event.epoch <span class="tk-op">&lt;</span> last.epoch <span class="tk-kw">or</span> event.seq <span class="tk-op">&lt;=</span> last.seq:</span>
+<span class="line">        <span class="tk-kw">return</span>                                              <span class="tk-com">// stale epoch or duplicate</span></span>
+<span class="line">    <span class="tk-kw">if</span> event.seq <span class="tk-op">!=</span> last.seq <span class="tk-op">+</span> <span class="tk-num">1</span>:</span>
+<span class="line">        <span class="tk-fn">requestRange</span>(event.userId, last.seq <span class="tk-op">+</span> <span class="tk-num">1</span>, event.seq <span class="tk-op">-</span> <span class="tk-num">1</span>)   <span class="tk-com">// fill the gap from the home region</span></span>
+<span class="line">        <span class="tk-kw">return</span>                                              <span class="tk-com">// re-process after the gap is filled</span></span>
+<span class="line">    localBus.<span class="tk-fn">publish</span>(<span class="tk-str">&#x27;events&#x27;</span>, key <span class="tk-op">=</span> event.userId, value <span class="tk-op">=</span> event)</span>
+<span class="line">    lastApplied.<span class="tk-fn">set</span>(event.userId, (event.epoch, event.seq))</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Delivery to clients (WebSocket and long poll share the same log) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">longPoll</span>(subscriptions, lastSeqByUser, timeout <span class="tk-op">=</span> <span class="tk-num">25s</span>):</span>
+<span class="line">    events <span class="tk-op">=</span> localBus.<span class="tk-fn">readAfter</span>(subscriptions, lastSeqByUser, waitUpTo <span class="tk-op">=</span> timeout)</span>
+<span class="line">    <span class="tk-kw">return</span> events                                           <span class="tk-com">// client sends back highest seq per user next call</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onSocketConnect</span>(session, lastSeqByUser):</span>
+<span class="line">    backlog <span class="tk-op">=</span> localBus.<span class="tk-fn">readAfter</span>(session.subscriptions, lastSeqByUser, limit <span class="tk-op">=</span> <span class="tk-num">1000</span>)</span>
+<span class="line">    session.<span class="tk-fn">send</span>(backlog)                                   <span class="tk-com">// resume after reconnect without loss</span></span>
+<span class="line">    session.<span class="tk-fn">startLiveStream</span>(bufferLimit <span class="tk-op">=</span> <span class="tk-num">500</span>, onOverflow <span class="tk-op">=</span> disconnectAndResync)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Global ordering by accident:</strong> Forcing a total order across all users needs consensus or a single sequencer and destroys latency. The requirement is per-user ordering.</li>
+          <li><strong>No sequence numbers or cursors:</strong> Without them, clients cannot dedupe or recover after a reconnect, and the long-polling fallback cannot resume.</li>
+          <li><strong>Reconnect storms:</strong> Clients that reconnect immediately and in lockstep overload gateways after any blip. Use jittered exponential backoff and server-side admission control.</li>
+          <li><strong>Unbounded per-connection buffers:</strong> A slow client can exhaust memory. Use bounded queues, coalesce or drop presence updates, and disconnect laggards so they resync.</li>
+          <li><strong>Treating presence as strongly consistent:</strong> Presence is soft state. Use heartbeats and TTLs, and tolerate flapping.</li>
+          <li><strong>Ignoring idle timeouts at proxies and load balancers:</strong> They close quiet sockets. Use ping/pong heartbeats and tune timeouts.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Real-time platforms <strong>keep each region self-sufficient and treat cross-region replication as an add-on for reach</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define budgets:</strong> Split the 200 ms into client-to-gateway, publish, bus, fan-out, and (when needed) replication, and set SLOs per region pair.</li>
+          <li><strong>Step 1 — Terminate connections near users:</strong> Latency-based or geo DNS to the nearest region, with stateless gateways, heartbeats, and backpressure.</li>
+          <li><strong>Step 2 — Regional bus keyed by user:</strong> Publish with key = userId so a partition preserves order, and assign per-user sequence numbers in the home region (the answer to this question).</li>
+          <li><strong>Step 3 — Replicate asynchronously:</strong> Stream per-user ordered events to the other regions and apply them idempotently using (epoch, seq).</li>
+          <li><strong>Step 4 — Support fallbacks:</strong> Long polling or SSE using the same cursors, and graceful degradation of presence updates under load.</li>
+          <li><strong>Step 5 — Practice failure:</strong> Region evacuation drills, reconnect-storm tests, and load tests at two to three times the expected peak.</li>
+        </ul>
+        <p>Optimize for locality first, then replicate for reach.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Build each region as a <strong>self-contained real-time cell</strong>: stateless WebSocket gateways, a local bus, and per-user sequencing at the user's home region. Replicate asynchronously for cross-region reach and keep long polling as a cursor-based fallback. This satisfies the latency, ordering, and fault-isolation requirements together, as long as cross-region latency is measured against the 200 ms budget.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

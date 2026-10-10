@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>When Memory Leaks Hit Production: Choosing the Right Architectural Fix — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">05 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Memory Management</span>
+      <span class="tag tag--green">Production Debugging</span>
+      <span class="tag tag--amber">Stability</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">When Memory Leaks Hit Production: Choosing the Right Architectural Fix</h1>
+      <p class="q-scenario"><strong>Jordan</strong>, a technical lead, runs a <strong>high-volume event-processing system on the JVM</strong>. For weeks the services have suffered <strong>sporadic OutOfMemoryErrors and long garbage-collection pauses</strong> at traffic peaks. Heap dumps show <strong>growing in-memory caches and long-lived object graphs</strong>, but finding the root cause has been slow and inconclusive. The system must stay <strong>highly available with consistent latency</strong> while engineers investigate. Jordan needs an architectural strategy that <strong>reduces customer impact</strong>, <strong>limits the blast radius</strong> of any leak, and <strong>makes memory problems easier to detect and contain</strong>. Which path should he take?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Retain the current long-running JVM service as the sole authoritative source for in-memory state, ensuring strong in-process consistency, and dedicate efforts to intensive GC optimization, larger heap sizes, and advanced production tools for heap-dump analysis to identify and resolve the memory leaks.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Restructure the system into smaller, stateless services paired with ephemeral worker processes to handle intensive or stateful workloads, thereby decentralizing runtime state. Implement container memory limits, automatic restarts upon OOM, robust health checks, and sidecar-based profiling so that leaks remain contained and instances can be quickly recycled without causing widespread downtime.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Maintain the overall structure of the services but move caches and session state out to a distributed storage solution like Redis or a managed cache. Lower the memory footprint of each process by eliminating in-process caching, depending on the external system for data eviction and persistence at the cost of additional network latency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Rebuild the most memory-intensive parts of the system using a non-garbage-collected, memory-safe language such as Rust or Go to prevent GC-related pauses and minimize the potential for leaks, subsequently integrating these new native modules back into the current platform.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Contain and Recycle: Stateless Units with Memory Guardrails</h3>
+        <p>When a leak cannot be fixed <em>yet</em>, the goal changes from 'prevent every leak' to <strong>'make a leak survivable and visible'</strong>. Option B does that: small stateless units fail independently, container limits turn a slow JVM death spiral into a clean fast restart, and sidecar-based profiling gathers evidence while customers stay unaffected. It also buys the time needed for a proper root-cause fix. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Smaller blast radius:</strong> A leak in one stateless instance or one ephemeral worker affects only the requests on that instance. The load balancer shifts traffic to healthy replicas, so users see a retry rather than an outage.</li>
+          <li><strong>Predictable failure instead of GC thrash:</strong> A leaking JVM often spends its last minutes in back-to-back full GCs, with latency spiking long before the OOM. Memory limits, <code>-XX:+ExitOnOutOfMemoryError</code>, and failing readiness checks move the instance out of rotation and restart it quickly, which keeps latency consistent.</li>
+          <li><strong>Leaks become observable:</strong> Per-instance metrics (heap after GC, old-generation occupancy, GC time ratio, restart count) plus a profiling sidecar or continuous profiler (JFR, async-profiler) produce evidence from real production traffic and shorten the investigation.</li>
+          <li><strong>Heavy or stateful work is isolated:</strong> Ephemeral workers for memory-intensive jobs are discarded after each task or batch, so a leak cannot accumulate over days.</li>
+          <li><strong>Works with the existing codebase:</strong> It is mostly an operational and deployment-architecture change (limits, probes, restart policy, splitting a service), not a rewrite, so it can ship in days to weeks.</li>
+          <li><strong>Compatible with the real fix:</strong> It does not block later work such as bounding caches or externalizing state; it protects customers while that work happens.</li>
+        </ul>
+        <p>A solid containment setup includes: <strong>container memory limits</strong>, <strong>heap dump on OOM to durable storage</strong>, <strong>readiness and liveness probes</strong> tied to memory pressure, <strong>bounded caches</strong> (maximum size and TTL), <strong>jittered rolling recycling</strong>, and <strong>alerts on the heap-after-GC trend</strong> (a rising floor after full GC is the signature of a leak).</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔧</div>
+          <h4>A — Tune GC and Debug in Place</h4>
+          <p>Bigger heaps and GC tuning treat symptoms. A larger heap delays the OOM but makes each full GC pause longer and the eventual failure bigger, and the whole service (with its state) remains one failure domain. Heap-dump analysis is necessary, but dumping multi-gigabyte heaps from production pauses the process, and making it the <em>only</em> plan leaves customers exposed during the investigation. <strong>Caveat:</strong> modern collectors (G1 tuning, ZGC, Shenandoah) can reduce pause times and are a valid complement, just not a containment strategy.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🗄️</div>
+          <h4>C — Externalize Caches to Redis</h4>
+          <p>Moving caches to Redis removes one common leak source from the JVM heap and can be a good long-term change. But it adds a network hop to every cache read, a new dependency and failure mode, and serialization overhead, while doing nothing about other long-lived graphs (listeners, ThreadLocals, static maps, buffers). It also does not limit the blast radius: a leaking JVM still takes down the same service. <strong>Caveat:</strong> if heap dumps confirm that in-process caches dominate growth, a bounded local L1 cache in front of an external L2 is often the best permanent fix.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🦀</div>
+          <h4>D — Rewrite in Rust or Go</h4>
+          <p>A rewrite is the slowest and riskiest option and does nothing for the current incident. The premise is also flawed: <strong>Go is garbage-collected</strong>, and only Rust (ownership-based) avoids a tracing GC. Any language can leak through unbounded caches, goroutine or task leaks, and reference cycles. Integrating native modules adds JNI/FFI and operational complexity. <strong>Caveat:</strong> moving a proven hotspot (for example a tight parsing loop) off-heap can be justified after profiling, but not as a first response.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Contain and Recycle: Stateless Units with Memory Guardrails ✓</h4>
+          <p>Restructure the system into smaller, stateless services paired with ephemeral worker processes to handle intensive or stateful workloads, thereby decentralizing runtime state. Implement container memo</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Customer Impact Reduction</th><th>Blast-Radius Containment</th><th>Time to Implement</th><th>Fixes Root Cause</th><th>Latency Stability</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — GC Tuning + Debug In Place</td><td>Low ❌</td><td>None ❌</td><td>Fast ✅</td><td>Possible ⚠ (depends on diagnosis)</td><td>Pauses persist ⚠</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Stateless + Guardrails ✓</td><td>High ✅</td><td>High ✅</td><td>Days to weeks ⚠</td><td>No ❌ (buys time)</td><td>Stable ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — Externalize Caches</td><td>Moderate ⚠</td><td>Low ⚠</td><td>Weeks ⚠</td><td>Partial ⚠</td><td>Added network hop ⚠</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Rewrite in Rust or Go</td><td>None short-term ❌</td><td>Partial ⚠</td><td>Months ❌</td><td>Maybe ⚠</td><td>Fewer GC pauses ⚠</td><td>Very high ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — GC Tuning + Debug In Place</h4>
+          <p>Early investigation on a non-critical service, or as a complement to other options (modern GC choices for latency). Not enough alone when customers are being impacted.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Stateless + Guardrails</h4>
+          <p>Production services with an active leak or unexplained memory growth, where availability must be protected while the root cause is found. Also a lasting good practice.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Externalize Caches</h4>
+          <p>Heap dumps show large, shareable caches dominate memory and cross-instance sharing adds value; keep a bounded local cache in front.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Rewrite in Rust or Go</h4>
+          <p>Proven, narrow hotspots with strict latency or footprint needs after profiling, as a deliberate multi-quarter investment rather than incident response.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Containment Architecture</h3>
+        <p>Stateless pods behind a load balancer, with orchestrator limits, a profiling sidecar, and ephemeral workers for heavy jobs:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    LB[Load Balancer] --&gt; P1[Stateless Pod 1]
+    LB --&gt; P2[Stateless Pod 2]
+    LB --&gt; P3[Stateless Pod 3]
+    P1 --- PR[Profiling Sidecar with JFR]
+    PR --&gt; OS[(Heap dumps and profiles in object storage)]
+    P1 --&gt; M[Metrics - heap after GC, GC time, restarts]
+    M --&gt; AL[Alerts and dashboards]
+    Q[(Event Queue)] --&gt; W[Ephemeral Workers for heavy jobs]
+    W --&gt; OS
+    K[Orchestrator - limits, probes, restart policy] -.-&gt; P1
+    K -.-&gt; W">flowchart LR
+    LB[Load Balancer] --&gt; P1[Stateless Pod 1]
+    LB --&gt; P2[Stateless Pod 2]
+    LB --&gt; P3[Stateless Pod 3]
+    P1 --- PR[Profiling Sidecar with JFR]
+    PR --&gt; OS[(Heap dumps and profiles in object storage)]
+    P1 --&gt; M[Metrics - heap after GC, GC time, restarts]
+    M --&gt; AL[Alerts and dashboards]
+    Q[(Event Queue)] --&gt; W[Ephemeral Workers for heavy jobs]
+    W --&gt; OS
+    K[Orchestrator - limits, probes, restart policy] -.-&gt; P1
+    K -.-&gt; W</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Memory Guardrails: Container Limits, JVM Flags, and Probes</h3>
+        <p>An illustrative Kubernetes container spec: a hard memory cap, JVM flags that fail fast and keep evidence, readiness tied to memory pressure, and a lenient liveness probe:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">yaml</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">containers:</span>
+<span class="line">  <span class="tk-op">-</span> name: event<span class="tk-op">-</span>processor</span>
+<span class="line">    resources:</span>
+<span class="line">      requests: { memory: 3Gi, cpu: <span class="tk-str">&#x27;2&#x27;</span> }</span>
+<span class="line">      limits:   { memory: 4Gi }              <span class="tk-com"># hard cap: container is killed above this</span></span>
+<span class="line">    env:</span>
+<span class="line">      <span class="tk-op">-</span> name: JAVA_TOOL_OPTIONS</span>
+<span class="line">        value: <span class="tk-op">&gt;</span><span class="tk-op">-</span></span>
+<span class="line">          <span class="tk-op">-</span>XX:MaxRAMPercentage<span class="tk-op">=</span><span class="tk-num">65</span></span>
+<span class="line">          <span class="tk-op">-</span>XX:<span class="tk-op">+</span>ExitOnOutOfMemoryError</span>
+<span class="line">          <span class="tk-op">-</span>XX:<span class="tk-op">+</span>HeapDumpOnOutOfMemoryError</span>
+<span class="line">          <span class="tk-op">-</span>XX:HeapDumpPath<span class="tk-op">=</span><span class="tk-op">/</span>dumps</span>
+<span class="line">          <span class="tk-op">-</span>XX:<span class="tk-op">+</span>UseG1GC</span>
+<span class="line">          <span class="tk-op">-</span>Xlog:gc<span class="tk-op">*</span>:file<span class="tk-op">=</span><span class="tk-op">/</span>logs<span class="tk-op">/</span>gc.log:time,uptime:filecount<span class="tk-op">=</span><span class="tk-num">5</span>,filesize<span class="tk-op">=</span><span class="tk-num">20m</span></span>
+<span class="line">          <span class="tk-op">-</span>XX:StartFlightRecording<span class="tk-op">=</span>maxage<span class="tk-op">=</span><span class="tk-num">6h</span>,disk<span class="tk-op">=</span><span class="tk-lit">true</span>,dumponexit<span class="tk-op">=</span><span class="tk-lit">true</span>,filename<span class="tk-op">=</span><span class="tk-op">/</span>dumps<span class="tk-op">/</span>rec.jfr</span>
+<span class="line">    readinessProbe:                          <span class="tk-com"># pull from rotation under memory pressure</span></span>
+<span class="line">      httpGet: { path: <span class="tk-op">/</span>ready, port: <span class="tk-num">8080</span> }  <span class="tk-com"># app returns 503 if heap-after-GC &gt; 80% of max</span></span>
+<span class="line">      periodSeconds: <span class="tk-num">10</span></span>
+<span class="line">      failureThreshold: <span class="tk-num">2</span></span>
+<span class="line">    livenessProbe:                           <span class="tk-com"># only for a stuck process, with generous timeouts</span></span>
+<span class="line">      httpGet: { path: <span class="tk-op">/</span>live, port: <span class="tk-num">8080</span> }</span>
+<span class="line">      periodSeconds: <span class="tk-num">20</span></span>
+<span class="line">      timeoutSeconds: <span class="tk-num">10</span></span>
+<span class="line">      failureThreshold: <span class="tk-num">6</span></span>
+<span class="line">    lifecycle:</span>
+<span class="line">      preStop:</span>
+<span class="line">        exec: { command: [<span class="tk-str">&#x27;sh&#x27;</span>, <span class="tk-str">&#x27;-c&#x27;</span>, <span class="tk-str">&#x27;sleep 15&#x27;</span>] }   <span class="tk-com"># give the load balancer time to drain</span></span>
+<span class="line">terminationGracePeriodSeconds: <span class="tk-num">60</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Treating restarts as the fix:</strong> Without a restart-rate budget and an active investigation, the leak becomes permanent technical debt.</li>
+          <li><strong>Heap equal to the container limit:</strong> The JVM uses memory beyond the heap, so the kernel kills the container (exit code 137) with no dump. Leave headroom.</li>
+          <li><strong>Synchronized restarts:</strong> All replicas recycle together and capacity collapses at peak. Add jitter and PodDisruptionBudgets.</li>
+          <li><strong>Liveness probes that kill busy pods:</strong> A liveness probe that fails during a long GC pause creates a restart storm. Separate liveness (process stuck) from readiness (drain me), and use generous timeouts.</li>
+          <li><strong>Losing the evidence:</strong> Restarting without capturing a heap dump or profile means the next incident is investigated blind. Write dumps to durable storage on OOM and cap their count.</li>
+          <li><strong>Unbounded queues between stages:</strong> Buffers without limits look like leaks and turn backpressure problems into OOMs.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams that handle production leaks well <strong>stabilize first, diagnose second, fix third</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Stabilize:</strong> Set container limits, <code>ExitOnOutOfMemoryError</code>, health checks, and rolling restarts so the service survives while you investigate.</li>
+          <li><strong>Step 1 — Add evidence:</strong> Alert on old-generation occupancy after GC, enable GC logging and continuous profiling (JFR), and write heap dumps on OOM to object storage.</li>
+          <li><strong>Step 2 — Contain:</strong> Split memory-heavy or stateful flows into separate deployments or ephemeral workers, and add bulkheads, circuit breakers, and bounded queues (the answer to this question).</li>
+          <li><strong>Step 3 — Diagnose:</strong> Compare two heap dumps taken hours apart (dominator tree and leak suspects in Eclipse MAT or VisualVM). Look for unbounded maps, listeners that are never removed, ThreadLocals, and classloader leaks.</li>
+          <li><strong>Step 4 — Fix:</strong> Bound every cache (maximum size, TTL, weigher), release references, and add a soak test with memory assertions as a regression guard.</li>
+          <li><strong>Step 5 — Prevent:</strong> Keep heap-trend alerts and soak tests in CI/CD, and treat recycling as a safety net, not a crutch.</li>
+        </ul>
+        <p>Containment buys time; only the fix removes the leak.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When you cannot fix a leak quickly, <strong>design so a leak is cheap, contained, and visible</strong>: small stateless units, hard memory limits, fast clean restarts, and built-in profiling. Pair that with a disciplined root-cause hunt and bounded caches, because restarting forever is not a strategy.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

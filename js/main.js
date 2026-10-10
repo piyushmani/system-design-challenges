@@ -76,22 +76,38 @@
 
     let activeTag = null;
     let currentPage = 1;
-    const CARDS_PER_PAGE = 9;
+    const CARDS_PER_PAGE = 12;
 
     searchInput.addEventListener('input', () => {
       currentPage = 1;
       filterAndPaginate();
     });
 
+    const moreBtn = document.getElementById('filterMoreBtn');
+    if (moreBtn) {
+      moreBtn.addEventListener('click', () => {
+        const bar = document.querySelector('.filter-bar');
+        if (bar.classList.contains('show-hidden-tags')) {
+          bar.classList.remove('show-hidden-tags');
+          moreBtn.textContent = moreBtn.dataset.originalText || moreBtn.textContent;
+        } else {
+          bar.classList.add('show-hidden-tags');
+          moreBtn.dataset.originalText = moreBtn.textContent;
+          moreBtn.textContent = "Show less";
+        }
+      });
+    }
+
     filterTags.forEach(tag => {
       tag.addEventListener('click', () => {
-        if (tag.classList.contains('active')) {
-          tag.classList.remove('active');
-          activeTag = null;
+        if (tag.dataset.tag === 'all') {
+            filterTags.forEach(t => t.classList.remove('active'));
+            tag.classList.add('active');
+            activeTag = null;
         } else {
-          filterTags.forEach(t => t.classList.remove('active'));
-          tag.classList.add('active');
-          activeTag = tag.dataset.tag.toLowerCase();
+            filterTags.forEach(t => t.classList.remove('active'));
+            tag.classList.add('active');
+            activeTag = tag.dataset.tag.toLowerCase();
         }
         currentPage = 1;
         filterAndPaginate();
@@ -206,75 +222,6 @@
   }
 
   // Palettes tuned to match the site's CSS themes
-  const MERMAID_THEMES = {
-    dark: {
-      background: 'transparent',
-      fontFamily: 'Inter, system-ui, sans-serif',
-      fontSize: '14px',
-      primaryColor: '#241f3d',
-      primaryBorderColor: '#7c5cfc',
-      primaryTextColor: '#ece9ff',
-      secondaryColor: '#123128',
-      secondaryBorderColor: '#34d399',
-      secondaryTextColor: '#d1fae5',
-      tertiaryColor: '#1e1e28',
-      tertiaryBorderColor: '#3a3a4d',
-      tertiaryTextColor: '#e4e4eb',
-      lineColor: '#8b8ca3',
-      textColor: '#e4e4eb',
-      edgeLabelBackground: '#15151f',
-      clusterBkg: '#16161f',
-      clusterBorder: '#2a2a38',
-      nodeTextColor: '#ece9ff',
-      actorBkg: '#241f3d',
-      actorBorder: '#7c5cfc',
-      actorTextColor: '#ece9ff',
-      signalColor: '#8b8ca3',
-      signalTextColor: '#e4e4eb',
-      noteBkgColor: '#2b2416',
-      noteBorderColor: '#fbbf24',
-      noteTextColor: '#fde68a',
-    },
-    light: {
-      background: 'transparent',
-      fontFamily: 'Inter, system-ui, sans-serif',
-      fontSize: '14px',
-      primaryColor: '#eef2ff',
-      primaryBorderColor: '#6366f1',
-      primaryTextColor: '#1e1b4b',
-      secondaryColor: '#ecfdf5',
-      secondaryBorderColor: '#10b981',
-      secondaryTextColor: '#064e3b',
-      tertiaryColor: '#f8fafc',
-      tertiaryBorderColor: '#cbd5e1',
-      tertiaryTextColor: '#1e293b',
-      lineColor: '#64748b',
-      textColor: '#1e293b',
-      edgeLabelBackground: '#ffffff',
-      clusterBkg: '#f8fafc',
-      clusterBorder: '#e2e8f0',
-      nodeTextColor: '#1e1b4b',
-      actorBkg: '#eef2ff',
-      actorBorder: '#6366f1',
-      actorTextColor: '#1e1b4b',
-      signalColor: '#64748b',
-      signalTextColor: '#1e293b',
-      noteBkgColor: '#fffbeb',
-      noteBorderColor: '#f59e0b',
-      noteTextColor: '#78350f',
-    },
-  };
-
-  // Extra polish applied inside the rendered SVG
-  const MERMAID_CSS = `
-    .node rect, .node polygon, .node circle, .node path { stroke-width: 1.5px; }
-    .node rect { rx: 10px; ry: 10px; }
-    .edgePath .path, .flowchart-link { stroke-width: 1.6px; }
-    .edgeLabel { font-size: 12px; padding: 2px 6px; border-radius: 6px; }
-    .label { font-weight: 500; }
-    .cluster rect { rx: 12px; ry: 12px; stroke-dasharray: 4 3; }
-  `;
-
   async function renderDiagrams() {
     const nodes = document.querySelectorAll('pre.mermaid[data-source]');
     if (!nodes.length) return;
@@ -284,12 +231,28 @@
       const isLight = document.documentElement.getAttribute('data-theme') === 'light';
       mermaid.initialize({
         startOnLoad: false,
-        theme: 'base',
-        themeVariables: MERMAID_THEMES[isLight ? 'light' : 'dark'],
-        themeCSS: MERMAID_CSS,
+        theme: isLight ? 'default' : 'dark',
         securityLevel: 'strict',
-        flowchart: { curve: 'basis', padding: 16, nodeSpacing: 45, rankSpacing: 55, htmlLabels: true },
-        sequence: { mirrorActors: false, messageAlign: 'center' },
+        fontFamily: 'Inter, system-ui, sans-serif',
+        flowchart: { 
+          htmlLabels: true, 
+          padding: 15,
+          nodeSpacing: 50,
+          rankSpacing: 50,
+          curve: 'linear'
+        },
+        sequence: { 
+          mirrorActors: false,
+          actorMargin: 50,
+          messageMargin: 40
+        },
+        themeCSS: `
+          .node rect, .node circle, .node polygon, .node path { stroke-width: 2px; }
+          .edgePath .path, .flowchart-link { stroke-width: 2px; }
+          .edgeLabel { font-size: 13px; font-weight: 600; padding: 4px 8px; border-radius: 4px; }
+          .label { font-weight: 600; font-family: Inter, system-ui, sans-serif; letter-spacing: 0.2px; }
+          .cluster rect { stroke-width: 2px; stroke-dasharray: 8 4; rx: 8px; ry: 8px; }
+        `
       });
 
       // Reset each node to its original source before (re-)rendering

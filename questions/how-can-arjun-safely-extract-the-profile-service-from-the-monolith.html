@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How Can Arjun Safely Extract the Profile Service from the Monolith? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">05 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Microservices</span>
+      <span class="tag tag--green">Monolith Decomposition</span>
+      <span class="tag tag--amber">Data Migration</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">How Can Arjun Safely Extract the Profile Service from the Monolith?</h1>
+      <p class="q-scenario"><strong>Arjun</strong>, an engineering lead, owns a large monolith that handles <strong>user profiles, settings, and session customization for 20 million monthly active users</strong>. The workload is <strong>read-heavy (about 10 reads per write)</strong>, with a <strong>p95 profile read SLA under 50 ms</strong> and a <strong>99.9% availability</strong> target. The monolith's database has become the bottleneck for scaling and deployment safety: schema changes are slow and releases are tightly coupled. The team wants to use the <strong>Strangler Fig pattern</strong> to extract the Profile domain with negligible user impact. Most attributes (personalization) can be <strong>eventually consistent</strong>, but a small set of <strong>legal-compliance fields at checkout needs strong consistency</strong>. Which migration architecture best balances scalability, availability, latency, consistency, observability, and fault tolerance?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Separate out a Profile microservice while continuing to read and write directly to the current monolith database in a shared DB setup. The new service functions as a lightweight API wrapper, sending any requests that alter the schema back to the monolith. Direct traffic via an API gateway that incrementally routes to the new service, with both applications sharing the underlying database.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Make the new Profile service handle only the write operations by setting up application-level dual writes, synchronizing data to both the monolith database and the new service&#x27;s database. Read operations are directed to the active service, utilizing distributed tracing and periodic reconciliation jobs to resolve any data inconsistencies caused by write failures.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Provide the new Profile service with a dedicated database and establish an anti-corruption layer. Employ change-data-capture (CDC) or an event stream from the monolith to asynchronously update the new database, allowing eventual consistency for personalization data while maintaining synchronous interactions or a strong-consistency proxy for the few critical checkout fields. Shift read traffic incrementally using an API gateway and traffic-splitting, leveraging feature flags, monitoring, and retries to identify and manage data divergence.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Maintain the monolith as the primary source of truth, but introduce a sidecar or cache layer on each host that provides a Profile interface. Rely on central materialized views (such as read replicas or materialized tables) refreshed by scheduled batch processes to ensure fast reads. The new microservice acts merely as a facade with the bulk of the write operations remaining in the monolith, while the sidecar manages cache invalidation and local data retrieval.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Dedicated DB + Anti-Corruption Layer + CDC with Incremental Cutover</h3>
+        <p>The Strangler Fig pattern puts a routing facade in front of the monolith and moves capabilities out one slice at a time. For that to deliver autonomy, the new service must <strong>own its data</strong>; otherwise it is just a renamed module. Option C does exactly that: Profile gets its own datastore, an <strong>anti-corruption layer</strong> keeps the legacy model from leaking in, <strong>change-data-capture (CDC)</strong> replaces fragile application-level dual writes, and traffic shifts gradually behind flags with a rollback path. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Removes the real bottleneck:</strong> A dedicated database lets Profile scale reads independently (replicas, cache, read-optimized schema) and change its schema without coordinating with monolith releases. A shared database (option A) keeps both problems.</li>
+          <li><strong>CDC avoids the dual-write problem:</strong> Reading the monolith's transaction log (or an outbox table) yields an ordered, durable stream of changes that commits atomically with the source write. Two independent writes (option B) can fail halfway and diverge with no atomic way to repair them.</li>
+          <li><strong>Fits mixed consistency needs:</strong> Personalization attributes tolerate seconds of lag, so asynchronous replication is fine. The few checkout-critical fields take a strongly consistent path (read from the current system of record, or a synchronous call), so legal-compliance reads are never stale.</li>
+          <li><strong>Meets the latency SLA:</strong> Reads are served from the Profile service's own store, usually fronted by a cache, with no cross-service hop to the monolith. A p95 under 50 ms is realistic for key-based reads on a purpose-built store.</li>
+          <li><strong>Safe, reversible rollout:</strong> The gateway splits traffic by percentage or cohort, shadow reads compare old and new responses, feature flags allow instant rollback, and metrics (mismatch rate, CDC lag, error rate, p95) gate each step.</li>
+          <li><strong>Fault isolation:</strong> If the new service degrades, the gateway can fall back to the monolith, which still holds a correct copy during the migration. That protects the 99.9% availability target.</li>
+        </ul>
+        <p>Plan the migration as phases with <strong>clear exit criteria</strong>: backfill, CDC lag under a threshold, shadow-read mismatch near zero, incremental traffic shifts (for example 1%, 10%, 50%, 100%), write-ownership cutover, then retirement of monolith code. Track <strong>CDC lag, mismatch rate, p95/p99 latency, and error-budget burn</strong>, and keep the rollback switch until the monolith path is deleted.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🪞</div>
+          <h4>A — Shared Database Facade</h4>
+          <p>Two services reading and writing the same tables form a <strong>distributed monolith</strong>: the schema is still coupled, migrations still need cross-team coordination, and the database bottleneck is unchanged. Sending schema-changing requests back to the monolith means the new service cannot evolve on its own. <strong>Caveat:</strong> a shared database is a defensible, short-lived <em>first step</em> to prove routing and API contracts, as long as there is a concrete plan to split the data.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">✌️</div>
+          <h4>B — Application-Level Dual Writes</h4>
+          <p>Writing to two databases from application code is not atomic: one write can succeed while the other fails, or concurrent requests can interleave differently in each store, causing silent divergence. Reconciliation jobs detect drift after the fact but cannot always tell which side is right, and checkout-critical fields cannot tolerate that. <strong>Caveat:</strong> dual writes driven by a transactional outbox or log are fine; naive dual writes are the problem.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧊</div>
+          <h4>D — Sidecar + Cache Facade</h4>
+          <p>Sidecar caches and materialized views speed up reads, but the monolith database remains the source of truth and the write bottleneck, so deployment coupling and slow schema changes remain. Batch refresh makes staleness unpredictable, and per-host cache invalidation across a large fleet is error-prone. It is an optimization, not a decomposition.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Dedicated DB + Anti-Corruption Layer + CDC with Incremental Cutover ✓</h4>
+          <p>Provide the new Profile service with a dedicated database and establish an anti-corruption layer. Employ change-data-capture (CDC) or an event stream from the monolith to asynchronously update the new</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Data Ownership / Autonomy</th><th>Read Latency Impact</th><th>Consistency Control</th><th>Migration Risk</th><th>Operational Complexity</th><th>Rollback Ease</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Shared DB Facade</td><td>None ❌ (shared schema)</td><td>Unchanged ⚠</td><td>Strong ✅ (same DB)</td><td>Low ✅ (but goal not met)</td><td>Low ✅</td><td>Easy ✅</td></tr>
+            <tr><td class="tt-option">B — Dual Writes</td><td>Partial ⚠</td><td>Good ✅</td><td>Weak ❌ (divergence)</td><td>High ❌</td><td>Medium ⚠</td><td>Hard ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Own DB + ACL + CDC ✓</td><td>Full ✅</td><td>Good ✅ (local reads)</td><td>Field-level control ✅</td><td>Low–Medium ⚠</td><td>High ❌</td><td>Easy ✅ (flags)</td></tr>
+            <tr><td class="tt-option">D — Sidecar + Cache</td><td>None ❌</td><td>Good ✅ (cache hits)</td><td>Unpredictable ⚠</td><td>Low ✅</td><td>Medium ⚠</td><td>Easy ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Shared DB Facade</h4>
+          <p>A very short-lived first step to validate routing and API contracts, never as the final state.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Dual Writes</h4>
+          <p>Only with a transactional outbox or log-based mechanism; avoid naive dual writes for anything that needs correctness.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Own DB + ACL + CDC</h4>
+          <p>Extracting a data-owning, read-heavy domain from a monolith where autonomy, scalability, and gradual rollout all matter.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Sidecar + Cache</h4>
+          <p>Quick read-latency relief on a monolith that will remain the system of record; not a decomposition strategy.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Strangler Fig Architecture with CDC</h3>
+        <p>The gateway splits traffic between the monolith and the new Profile service, which stays in sync through CDC and reads critical fields from the system of record:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    U[Clients] --&gt; GW[API Gateway with traffic split and feature flags]
+    GW --&gt;|legacy path| M[Monolith]
+    GW --&gt;|migrated cohorts| P[Profile Service with ACL]
+    M --&gt; MDB[(Monolith DB)]
+    MDB --&gt;|CDC or outbox| K[Event Stream]
+    K --&gt; P
+    P --&gt; PDB[(Profile DB)]
+    P --&gt; C[(Read Cache)]
+    P -.-&gt;|critical checkout fields, strongly consistent read| MDB
+    GW --&gt; OBS[Tracing, mismatch metrics, CDC lag]">flowchart LR
+    U[Clients] --&gt; GW[API Gateway with traffic split and feature flags]
+    GW --&gt;|legacy path| M[Monolith]
+    GW --&gt;|migrated cohorts| P[Profile Service with ACL]
+    M --&gt; MDB[(Monolith DB)]
+    MDB --&gt;|CDC or outbox| K[Event Stream]
+    K --&gt; P
+    P --&gt; PDB[(Profile DB)]
+    P --&gt; C[(Read Cache)]
+    P -.-&gt;|critical checkout fields, strongly consistent read| MDB
+    GW --&gt; OBS[Tracing, mismatch metrics, CDC lag]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Gateway Routing, Shadow Reads, and Field-Level Ownership</h3>
+        <p>Reads are routed by flag with fallback to the monolith, critical fields follow an explicit owner, and the CDC consumer is idempotent and ownership-aware:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Routing at the gateway / facade ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getProfile</span>(userId, fields):</span>
+<span class="line">    useNew <span class="tk-op">=</span> flags.<span class="tk-fn">isEnabled</span>(<span class="tk-str">&#x27;profile-svc-read&#x27;</span>, userId)          <span class="tk-com">// percentage or cohort rollout</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> useNew:</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            result <span class="tk-op">=</span> profileService.<span class="tk-fn">get</span>(userId, fields, timeout <span class="tk-op">=</span> <span class="tk-num">40ms</span>)</span>
+<span class="line">            <span class="tk-kw">if</span> <span class="tk-fn">shadowCompareSampled</span>(userId):</span>
+<span class="line">                <span class="tk-kw">async</span> <span class="tk-fn">compare</span>(result, monolith.<span class="tk-fn">getProfile</span>(userId, fields))   <span class="tk-com">// log and count mismatches</span></span>
+<span class="line">            <span class="tk-kw">return</span> result</span>
+<span class="line">        <span class="tk-kw">catch</span> (Timeout | Unavailable):</span>
+<span class="line">            metrics.<span class="tk-fn">increment</span>(<span class="tk-str">&#x27;profile.fallback_to_monolith&#x27;</span>)</span>
+<span class="line">            <span class="tk-kw">return</span> monolith.<span class="tk-fn">getProfile</span>(userId, fields)            <span class="tk-com">// fault isolation</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">return</span> monolith.<span class="tk-fn">getProfile</span>(userId, fields)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Field-level consistency routing inside the Profile service ----</span></span>
+<span class="line">CRITICAL_FIELDS <span class="tk-op">=</span> {legalName, taxId, consentStatus}               <span class="tk-com">// illustrative names</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">readField</span>(userId, field):</span>
+<span class="line">    <span class="tk-kw">if</span> field <span class="tk-kw">in</span> CRITICAL_FIELDS:</span>
+<span class="line">        owner <span class="tk-op">=</span> ownership.<span class="tk-fn">get</span>(field)                              <span class="tk-com">// MONOLITH or PROFILE_SERVICE</span></span>
+<span class="line">        <span class="tk-kw">if</span> owner <span class="tk-op">==</span> MONOLITH:</span>
+<span class="line">            <span class="tk-kw">return</span> monolith.<span class="tk-fn">read</span>(userId, field)                   <span class="tk-com">// strong read from the system of record</span></span>
+<span class="line">        <span class="tk-kw">return</span> profileDb.<span class="tk-fn">readPrimary</span>(userId, field)</span>
+<span class="line">    <span class="tk-kw">return</span> cache.<span class="tk-fn">getOrLoad</span>(userId, field, ttl <span class="tk-op">=</span> <span class="tk-num">60s</span>, loader <span class="tk-op">=</span> profileDb.readReplica)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- CDC consumer (monolith -&gt; Profile DB), ordered per userId ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onChange</span>(event):</span>
+<span class="line">    <span class="tk-kw">if</span> ownership.<span class="tk-fn">get</span>(event.field) <span class="tk-op">!=</span> MONOLITH:</span>
+<span class="line">        <span class="tk-kw">return</span>                                                    <span class="tk-com">// new owner already; ignore stale legacy events</span></span>
+<span class="line">    <span class="tk-kw">if</span> event.version <span class="tk-op">&lt;=</span> profileDb.<span class="tk-fn">versionOf</span>(event.userId, event.field):</span>
+<span class="line">        <span class="tk-kw">return</span>                                                    <span class="tk-com">// idempotent: already applied</span></span>
+<span class="line">    profileDb.<span class="tk-fn">upsert</span>(<span class="tk-fn">translateViaACL</span>(event))                      <span class="tk-com">// anti-corruption mapping</span></span>
+<span class="line">    cache.<span class="tk-fn">invalidate</span>(event.userId)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Big-bang cutover:</strong> Moving reads, writes, and data at once. Slice by capability and field, and keep each step reversible.</li>
+          <li><strong>Skipping the snapshot-to-stream handoff:</strong> Starting CDC without a recorded log position leaves gaps or duplicates. Snapshot at a known position, then stream from it.</li>
+          <li><strong>Two writers for the same field:</strong> Concurrent writers across old and new systems cause lost updates. Assign a single owner per field and enforce it.</li>
+          <li><strong>Letting the monolith's model leak:</strong> Without an anti-corruption layer, legacy naming and semantics spread into the new service and re-couple it.</li>
+          <li><strong>No observability on divergence:</strong> Without shadow comparison, mismatch metrics, and CDC lag alerts, customers find the drift before you do.</li>
+          <li><strong>Ignoring read-your-writes:</strong> Users who just saved a change expect to see it. Plan for it explicitly.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams that extract data-owning services successfully treat it as a <strong>sequence of low-risk, reversible steps</strong>:</p>
+        <ul>
+          <li><strong>Step 0 — Define the seam:</strong> Inventory profile tables, consumers, and access patterns; classify each field as eventually or strongly consistent; publish an API contract and put the gateway in front of the monolith.</li>
+          <li><strong>Step 1 — Build and backfill:</strong> Stand up the Profile service and its store, snapshot existing data, then start CDC from the log position recorded at snapshot time so nothing is missed.</li>
+          <li><strong>Step 2 — Shadow reads:</strong> Keep serving from the monolith while comparing against the new service in the background; fix mapping bugs in the anti-corruption layer.</li>
+          <li><strong>Step 3 — Shift reads incrementally:</strong> Percentage and cohort rollouts through the gateway, with automatic rollback when an SLO is breached.</li>
+          <li><strong>Step 4 — Move write ownership:</strong> Flip per field group, reverse the sync direction, keep the old path as a fallback, and handle critical fields last with extra reconciliation.</li>
+          <li><strong>Step 5 — Decommission:</strong> Remove monolith code and tables only after a clean soak period and a verified final reconciliation.</li>
+        </ul>
+        <p>Never move reads, writes, and data in the same step; separate them so any failure is easy to attribute and undo.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>A strangler migration succeeds when the new service <strong>owns its data</strong> and the cutover is <strong>incremental and reversible</strong>. Use CDC (not dual writes) to keep stores aligned, treat strongly consistent fields as a separate explicit path, and let metrics, not the calendar, decide when to shift more traffic.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

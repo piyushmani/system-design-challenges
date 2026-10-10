@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nina&#x27;s flash-sale challenge: Preventing oversell without sacrificing throughput — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">04 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Flash Sales</span>
+      <span class="tag tag--green">Inventory Management</span>
+      <span class="tag tag--amber">High Throughput</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Nina&#x27;s flash-sale challenge: Preventing oversell without sacrificing throughput</h1>
+      <p class="q-scenario"><strong>Nina</strong>, a backend engineer, is building checkout for a <strong>flash sale</strong> with <strong>tens of thousands of concurrent requests</strong> hitting a <strong>very small set of SKUs</strong>. Payments, Orders, and Inventory are <strong>separate microservices with their own databases</strong>. The business rule is absolute: <strong>never oversell</strong>, while checkout stays <strong>highly available and low-latency</strong>. Which transaction and isolation strategy best balances correctness, availability, scalability, latency, and operability?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Merge payments, orders, and inventory into a single relational database and run each checkout under serializable transactions.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Keep separate services and databases, but use distributed transactions (2PC/XA) across Orders, Payments, and Inventory for fully ACID checkouts.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Avoid cross-service transactions: shard inventory by SKU with a single writer per shard and a strongly consistent atomic decrement (CAS or linearizable ops), then run Payment and Order steps asynchronously or via a Saga with compensations, idempotent retries, and tracing.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Let each service write to its own database with eventual consistency, tolerate brief oversell, and fix it afterward with reconciliation, notifications, and refunds.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Atomic Stock Reservation + Saga</h3>
+        <p>Overselling is a <strong>single-invariant problem</strong>: sold ≤ stock. That invariant lives in <em>one place</em>, the stock counter for each SKU, so it needs <strong>one linearizable atomic operation</strong>, not a transaction spanning payments and orders. Option C enforces the invariant at the narrowest possible point (an atomic conditional decrement on the SKU's shard) and handles everything else with a Saga that can compensate, which keeps checkout available and fast. Here's why it stands out:</p>
+        <ul>
+          <li><strong>The invariant is enforced once, atomically:</strong> A conditional decrement (<code>available = available - n WHERE available >= n</code>, or compare-and-set on a linearizable store) makes overselling impossible by construction, regardless of concurrency. Everything after the reservation can fail without breaking the invariant.</li>
+          <li><strong>No cross-service locks on the hot path:</strong> The synchronous part is one short operation on one shard. Payment, which calls an external PSP and can take seconds, never holds inventory locks, so latency stays flat under load.</li>
+          <li><strong>Failures are compensated, not blocked:</strong> If payment fails or the user abandons checkout, the Saga releases the reservation (idempotently), and a reservation TTL returns abandoned stock automatically so it is not stranded.</li>
+          <li><strong>Scales with SKU sharding:</strong> Different SKUs live on different shards, so throughput scales horizontally. For one extremely hot SKU, split its stock into several sub-counters (buckets) on different partitions and try buckets in random order to avoid a single hot key.</li>
+          <li><strong>Operable and observable:</strong> The reservation ID doubles as an idempotency key across services and the PSP, every Saga step emits traces and state transitions, and a reconciliation job verifies <code>sold + reserved + available = initial stock</code> as an audit rather than as the primary defense.</li>
+          <li><strong>Why not 2PC or one big serializable database?</strong> Both put hot-row contention and long lock hold times on the critical path. With tens of thousands of concurrent requests for a few rows, queues form behind locks, tail latency explodes, and availability drops; a payment provider cannot join an XA transaction at all.</li>
+        </ul>
+        <p>A solid design includes <strong>idempotent reservation IDs</strong>, a <strong>reservation state machine</strong> (RESERVED to CONFIRMED, RELEASED, or EXPIRED) with conditional transitions, <strong>TTL expiry</strong>, a <strong>transactional outbox</strong> for events, <strong>admission control</strong>, and a <strong>reconciliation audit</strong>. Load-test with a realistic hot-SKU burst and verify <code>sold ≤ stock</code> under failure injection (shard failover, duplicate requests, PSP timeouts).</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🗄️</div>
+          <h4>A — Single Database + Serializable Transactions</h4>
+          <p>Serializable isolation gives the strongest guarantees and the simplest mental model, but it centralizes everything: all checkouts contend for the same few inventory rows, producing lock waits or serialization-failure retries that grow with concurrency, and any payment call inside the transaction holds locks for seconds. The database becomes both a throughput ceiling and a single point of failure, and merging the services' data defeats service ownership. <strong>Caveat:</strong> at moderate scale it is the simplest correct solution; the hot-row problem only bites at flash-sale concurrency. Note that C's atomic decrement uses the same database ideas, just narrowly scoped.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔗</div>
+          <h4>B — Distributed Transactions (2PC/XA)</h4>
+          <p>2PC gives atomicity across services but holds locks on every participant until the coordinator finishes, so hot inventory rows stay locked for the duration of payment latency. The coordinator is a blocking point (a failure can leave participants in doubt), availability becomes the product of all participants' availability, and external payment providers cannot enlist in XA anyway. It also couples service deployments and database technologies. <strong>Caveat:</strong> acceptable for low-volume internal workflows where all participants are XA-capable databases, not for flash-sale throughput.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🎲</div>
+          <h4>D — Eventual Consistency with Post-Hoc Reconciliation</h4>
+          <p>This violates the stated business requirement (<strong>no oversell</strong>). Compensating after the fact means cancelling orders and refunding paying customers, which costs trust, support effort, and sometimes legal exposure, and it gets worse exactly during the event when volume is highest. Reconciliation is a safety net, not a substitute for an atomic gate. <strong>Caveat:</strong> a legitimate choice only where overselling is tolerable, such as backorderable products or pre-orders.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Atomic Stock Reservation + Saga ✓</h4>
+          <p>Avoid cross-service transactions: shard inventory by SKU with a single writer per shard and a strongly consistent atomic decrement (CAS or linearizable ops), then run Payment and Order steps asynchron</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Oversell Prevention</th><th>Checkout Latency Under Load</th><th>Availability</th><th>Horizontal Scalability</th><th>Service Autonomy</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Single DB, Serializable</td><td>Strong ✅</td><td>Degrades with contention ❌</td><td>Single database is a SPOF ❌</td><td>Limited ❌</td><td>Lost ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — 2PC / XA</td><td>Strong ✅</td><td>Poor (locks held across hops) ❌</td><td>Poor (all participants must be up) ❌</td><td>Limited ❌</td><td>Low ❌</td><td>High ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Atomic Reserve + Saga ✓</td><td>Strong (atomic gate) ✅</td><td>Low and stable ✅</td><td>High (compensation, no global locks) ✅</td><td>High (per-SKU shards) ✅</td><td>Preserved ✅</td><td>Medium–High ⚠</td></tr>
+            <tr><td class="tt-option">D — Eventual + Reconcile</td><td>None, by design ❌</td><td>Excellent ✅</td><td>Excellent ✅</td><td>Excellent ✅</td><td>Preserved ✅</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Single DB, Serializable</h4>
+          <p>Moderate scale, a single team, and a single database technology, where simplicity beats independent scaling and hot-row contention is manageable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — 2PC / XA</h4>
+          <p>Low-throughput internal workflows across XA-capable databases that truly need atomic multi-resource commits.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Atomic Reserve + Saga</h4>
+          <p>High-contention, high-concurrency commerce events with strict no-oversell rules and independent services: flash sales, ticketing, limited drops.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Eventual + Reconcile</h4>
+          <p>Backorderable products, pre-orders, or businesses that explicitly accept oversell and handle it with refunds or waitlists.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Reserve Atomically, Then Pay Asynchronously with Compensation</h3>
+        <p>The only synchronous step is the atomic reservation on the SKU's shard. Payment and order completion run as a Saga that confirms or releases the reservation:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U as User
+    participant G as Checkout API
+    participant I as Inventory Shard, SKU owner
+    participant O as Order Service
+    participant S as Saga and Outbox
+    participant P as Payment Service
+    U-&gt;&gt;G: POST checkout with idempotency key
+    G-&gt;&gt;I: 1. Reserve qty, atomic conditional decrement
+    alt Stock available
+        I--&gt;&gt;G: Reservation ID, expires in 10 min
+        G-&gt;&gt;O: 2. Create pending order with reservation ID
+        G--&gt;&gt;U: 202 Accepted, order pending
+        S-&gt;&gt;P: 3. Charge, idempotency key is reservation ID
+        alt Payment succeeded
+            P--&gt;&gt;S: Paid
+            S-&gt;&gt;I: 4a. Confirm reservation, RESERVED to CONFIRMED
+            S-&gt;&gt;O: Mark order PAID
+        else Payment failed or timed out
+            P--&gt;&gt;S: Failed or unknown
+            S-&gt;&gt;I: 4b. Release reservation, conditional and idempotent
+            S-&gt;&gt;O: Mark order CANCELLED
+        end
+    else Sold out
+        I--&gt;&gt;G: Rejected, no stock
+        G--&gt;&gt;U: 409 Sold out
+    end
+    Note over I: Expiry sweeper releases unpaid reservations after the TTL">sequenceDiagram
+    participant U as User
+    participant G as Checkout API
+    participant I as Inventory Shard, SKU owner
+    participant O as Order Service
+    participant S as Saga and Outbox
+    participant P as Payment Service
+    U-&gt;&gt;G: POST checkout with idempotency key
+    G-&gt;&gt;I: 1. Reserve qty, atomic conditional decrement
+    alt Stock available
+        I--&gt;&gt;G: Reservation ID, expires in 10 min
+        G-&gt;&gt;O: 2. Create pending order with reservation ID
+        G--&gt;&gt;U: 202 Accepted, order pending
+        S-&gt;&gt;P: 3. Charge, idempotency key is reservation ID
+        alt Payment succeeded
+            P--&gt;&gt;S: Paid
+            S-&gt;&gt;I: 4a. Confirm reservation, RESERVED to CONFIRMED
+            S-&gt;&gt;O: Mark order PAID
+        else Payment failed or timed out
+            P--&gt;&gt;S: Failed or unknown
+            S-&gt;&gt;I: 4b. Release reservation, conditional and idempotent
+            S-&gt;&gt;O: Mark order CANCELLED
+        end
+    else Sold out
+        I--&gt;&gt;G: Rejected, no stock
+        G--&gt;&gt;U: 409 Sold out
+    end
+    Note over I: Expiry sweeper releases unpaid reservations after the TTL</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent Reservation State Machine with a Saga</h3>
+        <p>The atomic conditional decrement on the shard, conditional state transitions that make confirm and release safe to retry, and the Saga that pays and then confirms or compensates:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Inventory shard: single writer per SKU shard, durable and linearizable store</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reserve</span>(sku, qty, reservationId, ttl):</span>
+<span class="line">    existing <span class="tk-op">=</span> reservations.<span class="tk-fn">get</span>(reservationId)</span>
+<span class="line">    <span class="tk-kw">if</span> existing <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> existing                                    <span class="tk-com">// idempotent retry returns the same result</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">begin</span> transaction on <span class="tk-fn">shard</span>(sku)                        <span class="tk-com">// local, short, single shard</span></span>
+<span class="line">        n <span class="tk-op">=</span> <span class="tk-fn">exec</span>(<span class="tk-str">&#x27;UPDATE stock SET available = available - ?, reserved = reserved + ? WHERE sku = ? AND available &gt;= ?&#x27;</span>, qty, qty, sku, qty)</span>
+<span class="line">        <span class="tk-kw">if</span> n <span class="tk-op">==</span> <span class="tk-num">0</span>:</span>
+<span class="line">            rollback</span>
+<span class="line">            <span class="tk-kw">return</span> SOLD_OUT</span>
+<span class="line">        reservations.<span class="tk-fn">insert</span>(reservationId, sku, qty, state <span class="tk-op">=</span> RESERVED, expiresAt <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">+</span> ttl)</span>
+<span class="line">    commit</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">RESERVED</span>(reservationId)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// For one extremely hot SKU: split stock into K buckets on different partitions,</span></span>
+<span class="line"><span class="tk-com">// try buckets in random order, and return SOLD_OUT only after all K bucket attempts fail.</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">confirm</span>(reservationId):</span>
+<span class="line">    <span class="tk-kw">begin</span> transaction</span>
+<span class="line">        r <span class="tk-op">=</span> <span class="tk-fn">transition</span>(reservationId, <span class="tk-kw">from</span> <span class="tk-op">=</span> RESERVED, to <span class="tk-op">=</span> CONFIRMED)   <span class="tk-com">// conditional: false if not RESERVED</span></span>
+<span class="line">        <span class="tk-kw">if</span> r: stock.reserved <span class="tk-op">-</span><span class="tk-op">=</span> r.qty; stock.sold <span class="tk-op">+</span><span class="tk-op">=</span> r.qty</span>
+<span class="line">    commit</span>
+<span class="line">    <span class="tk-com">// Already CONFIRMED is a no-op. If the reservation EXPIRED before payment arrived: refund, or re-reserve if stock remains.</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">release</span>(reservationId):                           <span class="tk-com">// payment failed, user abandoned, or TTL expired</span></span>
+<span class="line">    <span class="tk-kw">begin</span> transaction</span>
+<span class="line">        r <span class="tk-op">=</span> <span class="tk-fn">transition</span>(reservationId, <span class="tk-kw">from</span> <span class="tk-op">=</span> RESERVED, to <span class="tk-op">=</span> RELEASED)</span>
+<span class="line">        <span class="tk-kw">if</span> r: stock.reserved <span class="tk-op">-</span><span class="tk-op">=</span> r.qty; stock.available <span class="tk-op">+</span><span class="tk-op">=</span> r.qty         <span class="tk-com">// happens at most once</span></span>
+<span class="line">    commit</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Checkout path: one synchronous step, then return</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">checkout</span>(userId, sku, qty, idempotencyKey):</span>
+<span class="line">    res <span class="tk-op">=</span> inventory.<span class="tk-fn">reserve</span>(sku, qty, reservationId <span class="tk-op">=</span> idempotencyKey, ttl <span class="tk-op">=</span> 10min)</span>
+<span class="line">    <span class="tk-kw">if</span> res <span class="tk-op">==</span> SOLD_OUT: <span class="tk-kw">return</span> <span class="tk-num">409</span></span>
+<span class="line">    orders.<span class="tk-fn">createPending</span>(orderId <span class="tk-op">=</span> idempotencyKey, reservation <span class="tk-op">=</span> res.id)   <span class="tk-com">// outbox event written in the same transaction</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-num">202</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Saga step: consumed from the outbox, at-least-once delivery</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onOrderCreated</span>(event):</span>
+<span class="line">    result <span class="tk-op">=</span> payments.<span class="tk-fn">charge</span>(event.orderId, event.amount, idempotencyKey <span class="tk-op">=</span> event.orderId)</span>
+<span class="line">    <span class="tk-kw">if</span> result.status <span class="tk-op">==</span> SUCCEEDED:</span>
+<span class="line">        inventory.<span class="tk-fn">confirm</span>(event.reservationId); orders.<span class="tk-fn">markPaid</span>(event.orderId)</span>
+<span class="line">    <span class="tk-kw">else</span> <span class="tk-kw">if</span> result.status <span class="tk-op">==</span> FAILED:</span>
+<span class="line">        inventory.<span class="tk-fn">release</span>(event.reservationId); orders.<span class="tk-fn">cancel</span>(event.orderId)</span>
+<span class="line">    <span class="tk-kw">else</span>:                                                  <span class="tk-com">// UNKNOWN or timeout: never release blindly</span></span>
+<span class="line">        <span class="tk-fn">scheduleRecheck</span>(event, payments.<span class="tk-fn">getStatus</span>(event.orderId))</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Check-then-act races:</strong> Reading stock and then decrementing in a separate step lets concurrent requests oversell. Use a single atomic conditional update.</li>
+          <li><strong>Non-durable counters:</strong> Using a cache or asynchronously replicated store as the source of truth can lose acknowledged decrements on failover. Use a durable, single-leader consistent store.</li>
+          <li><strong>Holding reservations forever:</strong> Abandoned carts strand stock. Use TTLs and a sweeper that releases expired reservations idempotently.</li>
+          <li><strong>Non-idempotent compensation:</strong> Releasing stock twice (retries, duplicate events) inflates inventory and causes oversell. Guard transitions with conditions (RESERVED to RELEASED happens at most once).</li>
+          <li><strong>Retrying payments blindly:</strong> A timeout does not mean the charge failed. Use idempotency keys and query PSP status before releasing or retrying.</li>
+          <li><strong>Ignoring hot-key limits:</strong> One counter on one partition caps throughput. Bucket stock for hot SKUs and shape traffic before it reaches the gate.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, flash-sale systems combine <strong>traffic shaping</strong> with a <strong>narrow atomic gate</strong> and compensating workflows. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Shape the traffic:</strong> Use a virtual waiting room or rate limiting so only as many users enter checkout as the system (and the stock) can handle. Cache static product content at the edge.</li>
+          <li><strong>Step 1 — Atomic reservation:</strong> Decrement stock with a conditional atomic operation on the SKU's shard, producing a reservation (ID, quantity, expiry).</li>
+          <li><strong>Step 2 — Create the pending order:</strong> Persist the pending order and emit events through a transactional outbox so state changes and messages cannot diverge.</li>
+          <li><strong>Step 3 — Payment with idempotency:</strong> Call the PSP using the reservation or order ID as the idempotency key, and handle timeouts by querying status rather than blindly retrying.</li>
+          <li><strong>Step 4 — Confirm or compensate:</strong> On success, mark the reservation CONFIRMED and the order PAID; on failure, release the reservation with a conditional transition that prevents double release.</li>
+          <li><strong>Step 5 — Audit and reconcile:</strong> Run continuous invariant checks (<code>sold + reserved + available = initial</code>), alert on drift, and keep traces for every checkout.</li>
+        </ul>
+        <p>Make the invariant atomic and local, and make everything else retryable.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Protect the one invariant that matters (<strong>sold ≤ stock</strong>) with an <strong>atomic, linearizable decrement on a per-SKU shard</strong>, and treat payment and order creation as a <strong>Saga with compensation and idempotency</strong>. Global ACID (a single database or 2PC) trades availability and latency for guarantees you only need at one point, and eventual consistency with refunds breaks the business rule.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

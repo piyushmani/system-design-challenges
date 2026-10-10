@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mateo&#x27;s choice: Selecting the right API Gateway pattern for checkout latency and scale — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">04 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">API Gateway</span>
+      <span class="tag tag--green">Latency</span>
+      <span class="tag tag--amber">System Scaling</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Mateo&#x27;s choice: Selecting the right API Gateway pattern for checkout latency and scale</h1>
+      <p class="q-scenario"><strong>Mateo</strong>, a senior backend engineer at an e-commerce company, supports <strong>web, mobile, and in-store POS</strong> traffic peaking near <strong>5,000 requests per second</strong>. Checkout has an SLO of <strong>under 100 ms at p95</strong>. Independent teams own and deploy <strong>microservices across several regions</strong>. Today a <strong>monolithic, feature-heavy API gateway</strong> handles rate limiting, authentication, payload transformation, aggregation, retries, and view composition, and has become a <strong>source of latency spikes, a deployment chokepoint, and a cross-team coordination bottleneck</strong>. Which gateway strategy improves availability and scalability, keeps checkout fast, preserves observability, and reduces inter-team dependencies?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep one feature-rich gateway for rate limiting, auth, and aggregation for all clients; scale it horizontally and add caching and circuit breakers.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Slim the gateway into an edge layer (TLS, routing, global rate-limit and auth policy) and add per-client Backend-for-Frontends (BFFs); push composition and aggregation into the BFFs or backend services so teams deploy and scale independently.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Replace the REST gateway with a federated GraphQL gateway that exposes a unified schema, composes fields across service subgraphs, and avoids over-fetching.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Go edge-first: serve read-heavy traffic from edge workers and CDN, handle writes through micro-gateway sidecars next to services, and move non-essential aggregation to asynchronous, event-driven flows.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Thin Edge Gateway + BFFs</h3>
+        <p>The symptoms point at <strong>concentration of responsibilities</strong>, not insufficient capacity: one component owns cross-cutting policy <em>and</em> client-specific composition, so every team's change funnels through it and every request pays for its heaviest features. Option B separates concerns: a <strong>thin, rarely changing edge</strong> for universal policy, and <strong>client-aligned BFFs</strong> owned and deployed by the teams who understand each client. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Removes the latency tax from the checkout path:</strong> The edge does only fast, stateless work (TLS termination, routing, token validation, coarse rate limits), typically adding a few milliseconds. Payload transformation, aggregation, and retries leave the shared hot path, so p95 is no longer hostage to the slowest feature in a shared gateway.</li>
+          <li><strong>Breaks the deployment chokepoint:</strong> BFFs are owned per client or domain and deployed independently, while the edge changes rarely and is configured declaratively (routes and policies in Git). Teams stop queuing behind one release train.</li>
+          <li><strong>Right-sized composition per client:</strong> Web, mobile, and POS need different payloads, call patterns, and latency behavior. A BFF per client shapes responses for that client without bloating a one-size-fits-all gateway.</li>
+          <li><strong>Smaller blast radius and better availability:</strong> A failure or bad deploy in the POS BFF does not affect web checkout. Edge and BFFs scale independently, and regional deployments keep traffic local.</li>
+          <li><strong>Observability stays strong:</strong> Trace context (W3C <code>traceparent</code>) starts at the edge and flows through the BFF to the services, so a single trace shows the per-hop latency budget, and RED metrics (rate, errors, duration) per route and per BFF make regressions attributable.</li>
+          <li><strong>Why not GraphQL federation as the answer?</strong> It is a strong composition tool, but used as a single gateway it recreates a central composition point on the critical path (query planning, N+1 fan-out, schema governance) and suits read-heavy composition better than a strict-SLO write flow like checkout.</li>
+        </ul>
+        <p>A solid implementation uses a <strong>thin edge</strong> (Envoy, Kong, NGINX, or a managed gateway) with declarative routes and global policies, <strong>per-client BFFs</strong> with deadline propagation, parallel fan-out, and fallbacks, <strong>mesh-level mTLS, timeouts, and budgeted retries</strong>, and <strong>distributed tracing from the edge</strong>. Define per-hop latency budgets, load-test the checkout path, and track p95 and p99 per hop before and after migration.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🏛️</div>
+          <h4>A — Keep the Monolithic Gateway and Scale It</h4>
+          <p>Horizontal scaling adds capacity but does not change the architecture's problems: all teams still deploy through one component, every request still passes through the heaviest feature set, and one bad change or hot path can degrade all traffic. Caching and breakers help with surges but do not address coordination cost or the latency of in-gateway aggregation. <strong>Caveat:</strong> a reasonable stopgap while migrating, and fine for small organizations with few teams.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🕸️</div>
+          <h4>C — Federated GraphQL Gateway</h4>
+          <p>Federation gives clients flexible queries and a unified schema, reduces over-fetching, and lets teams own subgraphs. But the router is still a central component on the critical path: query planning, entity resolution, and N+1 fan-out add latency and variance; schema composition and governance require cross-team coordination; and performance work (persisted queries, caching, depth and cost limits) is specialized. It also suits read-heavy views better than the strict-SLO, write-oriented checkout flow. <strong>Caveat:</strong> GraphQL works well <em>inside</em> a BFF (for example for browse experiences), just not as a substitute for splitting responsibilities.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🌐</div>
+          <h4>D — Edge-First with Micro-Gateways and Async Flows</h4>
+          <p>Edge caching for read-heavy catalog traffic is valuable and is typically part of a mature setup, but checkout is personalized, write-heavy, and mostly uncacheable, so the edge helps little there. Sidecar micro-gateways for writes add per-service operational surface (configuration, upgrades, policy drift), and pushing aggregation to asynchronous flows does not work for responses the client needs synchronously. It tackles pieces of the problem but leaves ownership of client-specific composition unclear and creates a patchwork of mechanisms to operate. <strong>Caveat:</strong> adopt the edge-caching and async ideas <em>on top of</em> B for browse traffic and non-critical aggregation.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Thin Edge Gateway + BFFs ✓</h4>
+          <p>Slim the gateway into an edge layer (TLS, routing, global rate-limit and auth policy) and add per-client Backend-for-Frontends (BFFs); push composition and aggregation into the BFFs or backend service</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Checkout p95 Latency</th><th>Deployment Independence</th><th>Blast Radius</th><th>Client-Specific Optimization</th><th>Operational Complexity</th><th>Observability</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Scale the Monolith</td><td>Poor (shared heavy path) ❌</td><td>Poor ❌</td><td>Large ❌</td><td>Poor ❌</td><td>Low ✅</td><td>Simple, one place ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Thin Edge + BFFs ✓</td><td>Good (thin edge, short path) ✅</td><td>High ✅</td><td>Small ✅</td><td>High ✅</td><td>Medium ⚠</td><td>Good (trace from the edge) ✅</td></tr>
+            <tr><td class="tt-option">C — Federated GraphQL</td><td>Variable (planning, fan-out) ⚠</td><td>Medium (schema coordination) ⚠</td><td>Medium–Large ⚠</td><td>High ✅</td><td>Medium–High ⚠</td><td>Good, needs resolver-level tracing ⚠</td></tr>
+            <tr><td class="tt-option">D — Edge-First + Micro-Gateways</td><td>Good for reads, neutral for checkout ⚠</td><td>Medium ⚠</td><td>Small ✅</td><td>Medium ⚠</td><td>High ❌</td><td>Fragmented ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Scale the Monolith</h4>
+          <p>Small organizations or early-stage systems with few teams and modest traffic, or as a temporary state during migration.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Thin Edge + BFFs</h4>
+          <p>Many teams, multiple client types, strict latency SLOs, and a need for independent deployment. The default for this scenario.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Federated GraphQL</h4>
+          <p>Read-heavy, graph-shaped data access across many domains (catalog, content, profile) where client flexibility matters more than strict per-call latency, preferably behind a BFF.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Edge-First + Micro-Gateways</h4>
+          <p>Global read-heavy traffic with large cacheable fractions (catalog, content), combined with a thin edge and BFFs.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Thin Edge with Client-Aligned BFFs</h3>
+        <p>All clients enter through one thin edge; each client type has its own BFF owned by its team, and BFFs call domain services directly:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    W[&quot;Web client&quot;] --&gt; E
+    M[&quot;Mobile client&quot;] --&gt; E
+    P[&quot;In-store POS&quot;] --&gt; E
+    E[&quot;Thin edge gateway: TLS, routing, global auth and rate-limit policy&quot;]
+    E --&gt; BW[&quot;Web BFF, web team&quot;]
+    E --&gt; BM[&quot;Mobile BFF, mobile team&quot;]
+    E --&gt; BP[&quot;POS BFF, store-systems team&quot;]
+    BW --&gt; CK[&quot;Checkout service&quot;]
+    BM --&gt; CK
+    BP --&gt; CK
+    BW --&gt; CT[&quot;Catalog service&quot;]
+    BM --&gt; CT
+    BW --&gt; RC[&quot;Recommendations service&quot;]
+    CK --&gt; PAY[&quot;Payments&quot;]
+    CK --&gt; INV[&quot;Inventory&quot;]
+    CK --&gt; ORD[&quot;Orders&quot;]
+    CDN[&quot;CDN and edge cache for catalog reads&quot;] -.-&gt; E
+    TR[&quot;Trace context starts at the edge&quot;] -.-&gt; E">flowchart LR
+    W[&quot;Web client&quot;] --&gt; E
+    M[&quot;Mobile client&quot;] --&gt; E
+    P[&quot;In-store POS&quot;] --&gt; E
+    E[&quot;Thin edge gateway: TLS, routing, global auth and rate-limit policy&quot;]
+    E --&gt; BW[&quot;Web BFF, web team&quot;]
+    E --&gt; BM[&quot;Mobile BFF, mobile team&quot;]
+    E --&gt; BP[&quot;POS BFF, store-systems team&quot;]
+    BW --&gt; CK[&quot;Checkout service&quot;]
+    BM --&gt; CK
+    BP --&gt; CK
+    BW --&gt; CT[&quot;Catalog service&quot;]
+    BM --&gt; CT
+    BW --&gt; RC[&quot;Recommendations service&quot;]
+    CK --&gt; PAY[&quot;Payments&quot;]
+    CK --&gt; INV[&quot;Inventory&quot;]
+    CK --&gt; ORD[&quot;Orders&quot;]
+    CDN[&quot;CDN and edge cache for catalog reads&quot;] -.-&gt; E
+    TR[&quot;Trace context starts at the edge&quot;] -.-&gt; E</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Edge Routing per BFF and a Deadline-Aware BFF Composition</h3>
+        <p>Gateway API config where the shared edge only terminates TLS and routes while each BFF team owns its own route, followed by a BFF that composes a checkout summary in parallel under a propagated deadline and degrades only optional data:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">yaml + pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com"># --- Part 1: thin edge (Gateway API). Global auth and rate limits attach here via your gateway&#x27;s policy resources. ---</span></span>
+<span class="line">apiVersion: gateway.networking.k8s.io<span class="tk-op">/</span>v1</span>
+<span class="line">kind: Gateway</span>
+<span class="line">metadata: {name: edge, namespace: edge<span class="tk-op">-</span>system}</span>
+<span class="line">spec:</span>
+<span class="line">  gatewayClassName: edge<span class="tk-op">-</span>envoy</span>
+<span class="line">  listeners:</span>
+<span class="line">  <span class="tk-op">-</span> name: https</span>
+<span class="line">    port: <span class="tk-num">443</span></span>
+<span class="line">    protocol: HTTPS</span>
+<span class="line">    hostname: shop.example.com</span>
+<span class="line">    tls:</span>
+<span class="line">      mode: Terminate</span>
+<span class="line">      certificateRefs: [{name: shop<span class="tk-op">-</span>example<span class="tk-op">-</span>com<span class="tk-op">-</span>cert}]</span>
+<span class="line">    allowedRoutes:</span>
+<span class="line">      namespaces:</span>
+<span class="line">        <span class="tk-kw">from</span>: Selector</span>
+<span class="line">        selector: {matchLabels: {gateway<span class="tk-op">-</span>access: edge}}</span>
+<span class="line"><span class="tk-op">-</span><span class="tk-op">-</span><span class="tk-op">-</span></span>
+<span class="line"><span class="tk-com"># Owned and deployed by the web team: routing only, no business logic</span></span>
+<span class="line">apiVersion: gateway.networking.k8s.io<span class="tk-op">/</span>v1</span>
+<span class="line">kind: HTTPRoute</span>
+<span class="line">metadata: {name: web<span class="tk-op">-</span>bff, namespace: web<span class="tk-op">-</span>bff}</span>
+<span class="line">spec:</span>
+<span class="line">  parentRefs: [{name: edge, namespace: edge<span class="tk-op">-</span>system}]</span>
+<span class="line">  hostnames: [<span class="tk-str">&#x27;shop.example.com&#x27;</span>]</span>
+<span class="line">  rules:</span>
+<span class="line">  <span class="tk-op">-</span> matches: [{path: {type: PathPrefix, value: <span class="tk-op">/</span>web<span class="tk-op">/</span>}}]</span>
+<span class="line">    backendRefs: [{name: web<span class="tk-op">-</span>bff, port: <span class="tk-num">8080</span>}]</span>
+<span class="line">    timeouts: {request: <span class="tk-num">300ms</span>}          <span class="tk-com"># hard ceiling; the p95 target is 100 ms</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com"># --- Part 2: web BFF composing the checkout summary (pseudocode) ---</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getCheckoutSummary</span>(request):</span>
+<span class="line">    deadline <span class="tk-op">=</span> request.deadline ?? <span class="tk-fn">now</span>() <span class="tk-op">+</span> <span class="tk-num">80ms</span>          <span class="tk-com">// propagated from the edge; leaves headroom for the 100 ms p95 SLO</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// All calls start together; critical data fails the request, optional data degrades</span></span>
+<span class="line">    cartF     <span class="tk-op">=</span> <span class="tk-fn">callAsync</span>(cartService.<span class="tk-fn">get</span>(request.cartId),          timeout <span class="tk-op">=</span> <span class="tk-fn">remaining</span>(deadline))</span>
+<span class="line">    priceF    <span class="tk-op">=</span> <span class="tk-fn">callAsync</span>(pricingService.<span class="tk-fn">quote</span>(request.cartId),     timeout <span class="tk-op">=</span> <span class="tk-fn">remaining</span>(deadline))</span>
+<span class="line">    shippingF <span class="tk-op">=</span> <span class="tk-fn">callAsync</span>(shippingService.<span class="tk-fn">options</span>(request.address), timeout <span class="tk-op">=</span> <span class="tk-num">40ms</span>)    <span class="tk-com">// optional</span></span>
+<span class="line">    recsF     <span class="tk-op">=</span> <span class="tk-fn">callAsync</span>(recsService.<span class="tk-fn">forCart</span>(request.cartId),      timeout <span class="tk-op">=</span> <span class="tk-num">25ms</span>)    <span class="tk-com">// optional</span></span>
+<span class="line"></span>
+<span class="line">    cart     <span class="tk-op">=</span> <span class="tk-kw">await</span> cartF  <span class="tk-kw">or</span> <span class="tk-fn">fail</span>(<span class="tk-num">502</span>)</span>
+<span class="line">    price    <span class="tk-op">=</span> <span class="tk-kw">await</span> priceF <span class="tk-kw">or</span> <span class="tk-fn">fail</span>(<span class="tk-num">502</span>)</span>
+<span class="line">    shipping <span class="tk-op">=</span> <span class="tk-kw">await</span> shippingF <span class="tk-kw">or</span> DEFAULT_SHIPPING_OPTIONS         <span class="tk-com">// degrade and mark in the response</span></span>
+<span class="line">    recs     <span class="tk-op">=</span> <span class="tk-kw">await</span> recsF <span class="tk-kw">or</span> EMPTY</span>
+<span class="line"></span>
+<span class="line">    span.<span class="tk-fn">setAttribute</span>(<span class="tk-str">&#x27;bff.degraded&#x27;</span>, shipping.isDefault <span class="tk-kw">or</span> recs.isEmpty)</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">shapeForWeb</span>(cart, price, shipping, recs)                <span class="tk-com">// client-specific payload shaping lives here</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>A 'thin' edge that keeps growing:</strong> Business logic creeps back in through plugins and scripts. Enforce a rule that only cross-cutting, stateless policy lives at the edge.</li>
+          <li><strong>One shared BFF for all clients:</strong> A single BFF recreates the monolith. Keep one per client experience or domain, with clear owners.</li>
+          <li><strong>Orchestrating checkout in the BFF:</strong> Business workflow belongs in the domain service. BFFs should compose and shape responses.</li>
+          <li><strong>Serial fan-out:</strong> Calling services one after another blows the latency budget. Fan out in parallel with deadlines and fallbacks for non-critical data.</li>
+          <li><strong>Retries at every hop:</strong> Layered retries multiply load during incidents. Retry at one layer, with a budget.</li>
+          <li><strong>No per-hop latency budget:</strong> Without budgets and traces, nobody owns the 100 ms. Allocate and monitor budgets per hop.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams migrate <strong>incrementally</strong> (strangler pattern), measure latency per hop, and keep the edge thin. A typical path:</p>
+        <ul>
+          <li><strong>Step 0 — Measure the current gateway:</strong> Attribute p95 and p99 to gateway features (auth, transformation, aggregation, retries) and identify the most sensitive routes (checkout).</li>
+          <li><strong>Step 1 — Slim the edge:</strong> Move TLS, routing, token validation, and coarse rate limiting to a lean, declarative edge, and remove transformation and aggregation from it.</li>
+          <li><strong>Step 2 — Introduce BFFs by client:</strong> Start with the highest-value client (for example web), route through the edge, and migrate endpoints one at a time with the strangler pattern.</li>
+          <li><strong>Step 3 — Move resilience to the right layer:</strong> Timeouts, retries (with budgets), circuit breakers, and mTLS belong in the mesh or client libraries, not in a shared gateway.</li>
+          <li><strong>Step 4 — Protect the checkout path:</strong> Keep checkout orchestration in its domain service, give it dedicated capacity and rate-limit tiers, and minimize hops and payload size.</li>
+          <li><strong>Step 5 — Add edge caching and async where they fit:</strong> CDN or edge caching for catalog reads, event-driven flows for non-critical aggregation, and optional GraphQL inside BFFs for read-heavy views.</li>
+        </ul>
+        <p>Keep shared policy thin and central; keep composition close to the teams and clients that own it.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Split the monolith by <strong>responsibility</strong>: a <strong>thin edge</strong> for universal, fast policy and <strong>client-aligned BFFs</strong> for composition, owned and deployed independently. Scaling the monolith, centralizing in a federated gateway, or relying on edge and async tricks each address part of the problem but leave either the chokepoint or the critical-path latency in place.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

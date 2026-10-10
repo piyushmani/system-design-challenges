@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Noah&#x27;s heartbeat dilemma: Balancing scale, speed, and simplicity — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">04 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Health Checks</span>
+      <span class="tag tag--green">Heartbeats</span>
+      <span class="tag tag--amber">System Monitoring</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Noah&#x27;s heartbeat dilemma: Balancing scale, speed, and simplicity</h1>
+      <p class="q-scenario"><strong>Noah</strong> is designing a heartbeat and health-check mechanism for a distributed backend with about <strong>5,000 transient worker processes across multiple geographic regions</strong>. The failure detector must: (1) detect <strong>crashes and network partitions within roughly 5 seconds</strong> to drive routing and load balancing, (2) keep <strong>CPU and network overhead</strong> minimal, (3) keep working across regions <strong>even during partial network outages</strong>, and (4) give operators enough <strong>visibility</strong> to debug unstable nodes. Which architecture fits best?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Centralized collector: every worker sends a 1-second heartbeat to a central aggregation service (a VM cluster behind one endpoint); a node is dead after 3 seconds of silence; history goes to a time-series database with alerts.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Decentralized SWIM-style gossip failure detector: peers probe randomly and use indirect probes and suspicion (optionally phi-accrual) tuned to about 5 seconds, with no single point of failure.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Orchestrator-native health only: rely on readiness and liveness probes and service-registry TTLs, with no application-level heartbeats and graceful-shutdown hooks for routing updates.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Hybrid push: workers send a heartbeat every 5 seconds to a distributed time-series pipeline, liveness is inferred from TTLs and request activity, with jitter, exponential backoff, and a leader quorum to confirm evictions.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: SWIM-Style Gossip Detection</h3>
+        <p>The requirements pull in different directions: <strong>fast detection</strong> (~5 s) rules out slow, coarse probes; <strong>cross-region partial outages</strong> rule out judging health from a single vantage point; and <strong>low overhead at 5,000 nodes</strong> favors constant per-node cost. A SWIM-style detector gives every node a small, constant probe load, uses <strong>indirect probing</strong> (other peers vouch for a node before it is declared dead), and removes the central collector as both bottleneck and sole viewpoint. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Constant per-node overhead:</strong> Each member sends roughly one probe per protocol period regardless of cluster size, with membership updates piggybacked on those messages. At a 250–500 ms period that is a few small UDP packets per second per node, negligible next to worker traffic.</li>
+          <li><strong>Fewer false positives under partial partitions:</strong> A node is suspected only after a direct probe <em>and</em> several indirect probes (relayed through other peers) fail. One bad network path between two nodes, or between a node and one collector, does not get a healthy node declared dead. The suspicion phase, during which the suspect can refute, cuts flapping further.</li>
+          <li><strong>No single point of failure or single viewpoint:</strong> A central collector sees health from where it sits. If a region is partitioned from the collector, every worker in that region looks dead at once. Gossip detects failures from many vantage points, and each region keeps operating on its own view during a partition, converging when it heals.</li>
+          <li><strong>Reaches the ~5 s target with tuning:</strong> Rough budget: first detection ≈ 1–2 probe periods (about 0.5–1 s) + suspicion window (about 1.5–2 s) + dissemination to the routing layer (about 1–2 s) ≈ 4–5 s. In HashiCorp memberlist-style implementations the suspicion timeout scales with log(N) and shrinks as independent confirmations arrive, so larger clusters do not need to slow down much.</li>
+          <li><strong>Operable with the right plumbing:</strong> Membership events (join, suspect, dead, refute) can be exported as metrics, logs, and traces by a few observer nodes, and nodes can expose local health scores (Lifeguard-style) for debugging. This meets the visibility requirement without making a central collector the liveness authority.</li>
+          <li><strong>Why not just centralize at 1 Hz?</strong> At 5,000 workers, 5,000 messages per second is easy to ingest. The risk is not load, it is <em>topology</em>: one vantage point, one failure domain, and a 3-second timeout over cross-region paths invites mass false positives.</li>
+        </ul>
+        <p>A good implementation uses <strong>SWIM with indirect probes and suspicion</strong>, <strong>regional pools</strong>, <strong>local health awareness</strong>, <strong>observer nodes</strong> that export events to metrics, traces, and the routing registry, and a <strong>mass-failure circuit breaker</strong>. Measure detection time (crash to routing update), false-positive rate, and gossip bandwidth under fault injection (kill nodes, drop packets, partition regions), then tune the protocol period and suspicion multiplier from the results.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🏢</div>
+          <h4>A — Centralized Heartbeat Collector</h4>
+          <p>Simple, easy to debug, and cheap at 5,000 nodes, so it is a respectable choice for single-region or small fleets. But it fails the cross-region requirement: it judges health from one vantage point, so a partition between a region and the collector makes every worker there look dead, causing mass eviction exactly when the system is stressed. A 3-second timeout on 1-second heartbeats tolerates only about two lost beats, and WAN jitter will cause false positives. Making the collector highly available (regional collectors, quorum) is possible but starts to recreate the complexity of a distributed detector. <strong>Caveat:</strong> a central store is still very useful for <em>history and visibility</em>, just not as the sole liveness authority.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">☸️</div>
+          <h4>C — Orchestrator-Native Probes Only</h4>
+          <p>Readiness and liveness probes answer 'is this container healthy?' at coarse granularity (a default probe period of 10 s with failure thresholds, and node-failure detection and eviction measured in tens of seconds to minutes by default), well outside a 5-second target. They also run from the node's own kubelet, so they do not detect a node that is partitioned from its <em>peers or routers</em>, and they do not cover transient workers that are not managed as pods. Cross-region partial outages are essentially invisible to them. <strong>Caveat:</strong> keep them; they are the right tool for restarting hung processes and gating rollouts, but not as the routing failure detector.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📡</div>
+          <h4>D — Low-Rate Push with Quorum Eviction</h4>
+          <p>A 5-second heartbeat interval means you need at least two or three missed beats (10–15 s) to be safe before declaring a node dead, which misses the 5-second target by 2–3×. Adding exponential backoff makes detection even slower, and heartbeats through a time-series pipeline add ingestion and query lag. The leader-quorum idea (confirm before evicting) is good and reduces false positives, but it adds latency and a leader dependency. <strong>Caveat:</strong> this pattern suits <em>observability and capacity planning</em>, or use cases where 15–30 s detection is acceptable.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — SWIM-Style Gossip Detection ✓</h4>
+          <p>Decentralized SWIM-style gossip failure detector: peers probe randomly and use indirect probes and suspicion (optionally phi-accrual) tuned to about 5 seconds, with no single point of failure.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Detection Speed (~5 s)</th><th>Per-Node Overhead</th><th>Partition Tolerance</th><th>False-Positive Resistance</th><th>Operator Visibility</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Centralized Collector</td><td>Good (3 s timeout) ✅</td><td>Low ✅</td><td>Poor (single vantage point) ❌</td><td>Poor over WAN ❌</td><td>Excellent (central history) ✅</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — SWIM Gossip ✓</td><td>Good with tuning ⚠</td><td>Low and constant ✅</td><td>High ✅</td><td>High (indirect probes, suspicion) ✅</td><td>Needs observers ⚠</td><td>Medium–High ⚠</td></tr>
+            <tr><td class="tt-option">C — Orchestrator Probes</td><td>Poor (tens of seconds) ❌</td><td>Low ✅</td><td>Poor ❌</td><td>Medium ⚠</td><td>Medium ⚠</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">D — Low-Rate Push + Quorum</td><td>Poor (10–15 s or more) ❌</td><td>Low ✅</td><td>Medium ⚠</td><td>Medium (quorum helps) ⚠</td><td>Good ✅</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Centralized Collector</h4>
+          <p>Single-region or small fleets (hundreds of nodes) where simplicity and a central audit trail matter more than partition tolerance, ideally with regional collectors.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — SWIM Gossip</h4>
+          <p>Large, multi-region fleets of transient nodes that need fast, partition-tolerant failure detection with low overhead.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Orchestrator Probes</h4>
+          <p>Container workloads where seconds-to-minutes detection is acceptable and the orchestrator already owns routing. Best used to restart hung processes.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Low-Rate Push + Quorum</h4>
+          <p>Observability-driven liveness for long-lived services where 15–30 s detection suffices, or as a complement for capacity dashboards.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> SWIM Probe, Suspicion, and Dissemination</h3>
+        <p>A prober asks peers to vouch for a silent node, marks it suspect, gossips the suspicion, and an observer evicts it from routing if it is not refuted:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant A as Node A, prober
+    participant B as Node B, target
+    participant C as Peer C
+    participant D as Peer D
+    participant O as Observer
+    participant R as Routing Registry
+    A-&gt;&gt;B: 1. Direct ping
+    Note over A,B: No ack within probe timeout
+    par Indirect probe via C
+        A-&gt;&gt;C: 2. Ask C to ping B
+        C-&gt;&gt;B: ping
+    and Indirect probe via D
+        A-&gt;&gt;D: 2. Ask D to ping B
+        D-&gt;&gt;B: ping
+    end
+    Note over A: No ack from B directly or via C and D
+    A-&gt;&gt;A: 3. Mark B suspect
+    A--&gt;&gt;C: 4. Gossip B suspect, piggybacked on probes
+    C--&gt;&gt;O: Gossip B suspect
+    Note over B: If B is alive it refutes with a higher incarnation number
+    Note over A,O: Suspicion timeout expires without refutation
+    O-&gt;&gt;R: 5. Mark B dead and remove from routing
+    O-&gt;&gt;O: Export event to metrics and traces">sequenceDiagram
+    participant A as Node A, prober
+    participant B as Node B, target
+    participant C as Peer C
+    participant D as Peer D
+    participant O as Observer
+    participant R as Routing Registry
+    A-&gt;&gt;B: 1. Direct ping
+    Note over A,B: No ack within probe timeout
+    par Indirect probe via C
+        A-&gt;&gt;C: 2. Ask C to ping B
+        C-&gt;&gt;B: ping
+    and Indirect probe via D
+        A-&gt;&gt;D: 2. Ask D to ping B
+        D-&gt;&gt;B: ping
+    end
+    Note over A: No ack from B directly or via C and D
+    A-&gt;&gt;A: 3. Mark B suspect
+    A--&gt;&gt;C: 4. Gossip B suspect, piggybacked on probes
+    C--&gt;&gt;O: Gossip B suspect
+    Note over B: If B is alive it refutes with a higher incarnation number
+    Note over A,O: Suspicion timeout expires without refutation
+    O-&gt;&gt;R: 5. Mark B dead and remove from routing
+    O-&gt;&gt;O: Export event to metrics and traces</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> SWIM Probe Loop with Suspicion, and an Observer with Eviction Safety Rails</h3>
+        <p>The per-node probe and suspicion logic with tuning values for a ~1,700-node regional pool, plus an observer that turns membership events into routing updates only when it is safe to evict:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Per-region gossip pool (about 1,700 workers). Values are starting points: validate by load test.</span></span>
+<span class="line">PROBE_INTERVAL   <span class="tk-op">=</span> <span class="tk-num">250ms</span></span>
+<span class="line">PROBE_TIMEOUT    <span class="tk-op">=</span> <span class="tk-num">100ms</span>          <span class="tk-com">// intra-region round trip is a few ms</span></span>
+<span class="line">INDIRECT_PROBES  <span class="tk-op">=</span> <span class="tk-num">3</span></span>
+<span class="line">SUSPICION_MULT   <span class="tk-op">=</span> <span class="tk-num">2</span>              <span class="tk-com">// suspicion timeout is about mult * log10(N) * interval, about 1.6 s here,</span></span>
+<span class="line">                                  <span class="tk-com">// and it shrinks as independent peers confirm the suspicion</span></span>
+<span class="line"></span>
+<span class="line">every PROBE_INTERVAL on <span class="tk-kw">each</span> member:</span>
+<span class="line">    target <span class="tk-op">=</span> <span class="tk-fn">nextFromShuffledMembers</span>()</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">ping</span>(target, PROBE_TIMEOUT) fails:</span>
+<span class="line">        acks <span class="tk-op">=</span> <span class="tk-fn">parallel</span>(<span class="tk-fn">askPeerToPing</span>(peer, target) <span class="tk-kw">for</span> peer <span class="tk-kw">in</span> <span class="tk-fn">randomPeers</span>(INDIRECT_PROBES))</span>
+<span class="line">        <span class="tk-kw">if</span> no ack <span class="tk-kw">in</span> acks:</span>
+<span class="line">            <span class="tk-fn">markSuspect</span>(target)</span>
+<span class="line">            <span class="tk-fn">gossip</span>(<span class="tk-fn">Suspect</span>(target, target.incarnation))      <span class="tk-com">// piggybacked on normal probe traffic</span></span>
+<span class="line"></span>
+<span class="line">on receive <span class="tk-fn">Suspect</span>(node, inc):</span>
+<span class="line">    <span class="tk-kw">if</span> node <span class="tk-op">==</span> self:</span>
+<span class="line">        self.incarnation <span class="tk-op">=</span> <span class="tk-fn">max</span>(self.incarnation, inc) <span class="tk-op">+</span> <span class="tk-num">1</span>    <span class="tk-com">// refute: I am alive</span></span>
+<span class="line">        <span class="tk-fn">gossip</span>(<span class="tk-fn">Alive</span>(self, self.incarnation))</span>
+<span class="line">    <span class="tk-kw">else</span> <span class="tk-kw">if</span> inc <span class="tk-op">&gt;=</span> node.incarnation <span class="tk-kw">and</span> node.state <span class="tk-op">==</span> ALIVE:</span>
+<span class="line">        node.state <span class="tk-op">=</span> SUSPECT</span>
+<span class="line">        <span class="tk-fn">startTimer</span>(<span class="tk-fn">suspicionTimeout</span>(N, confirmations), onExpire <span class="tk-op">=</span> <span class="tk-fn">declareDead</span>(node))</span>
+<span class="line"></span>
+<span class="line">on receive <span class="tk-fn">Alive</span>(node, inc):</span>
+<span class="line">    <span class="tk-kw">if</span> inc <span class="tk-op">&gt;</span> node.incarnation:</span>
+<span class="line">        node.state <span class="tk-op">=</span> ALIVE; <span class="tk-fn">cancelTimer</span>(node)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Observer: a pool member that is not a worker. It turns events into routing updates and telemetry.</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onMemberEvent</span>(event):</span>
+<span class="line">    metrics.<span class="tk-fn">increment</span>(<span class="tk-str">&#x27;membership.&#x27;</span> <span class="tk-op">+</span> event.type)</span>
+<span class="line">    trace.<span class="tk-fn">record</span>(event)</span>
+<span class="line">    <span class="tk-kw">if</span> event.type <span class="tk-op">==</span> DEAD:</span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-fn">evictionsInLast</span>(<span class="tk-num">10s</span>) <span class="tk-op">&gt;</span> MAX_EVICTIONS <span class="tk-kw">or</span> <span class="tk-fn">deadFraction</span>(event.region) <span class="tk-op">&gt;</span> <span class="tk-num">0.2</span>:</span>
+<span class="line">            <span class="tk-fn">alert</span>(<span class="tk-str">&#x27;possible partition or detector fault, holding evictions&#x27;</span>)</span>
+<span class="line">            <span class="tk-kw">return</span>                                           <span class="tk-com">// safety rail: do not mass-evict</span></span>
+<span class="line">        registry.<span class="tk-fn">deregister</span>(event.node, incarnation <span class="tk-op">=</span> event.incarnation)   <span class="tk-com">// idempotent</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Declaring death from one vantage point:</strong> A missed heartbeat at one observer says little about the node. Use indirect probes or multiple observers before evicting.</li>
+          <li><strong>Timeouts too close to the heartbeat interval:</strong> A timeout of 3× the interval tolerates only two losses. Add jitter and adaptive thresholds (phi accrual) to cope with variance.</li>
+          <li><strong>Ignoring GC pauses and CPU starvation:</strong> A slow node can be mistaken for a dead one, causing flapping. Use suspicion periods and local health awareness.</li>
+          <li><strong>Mass eviction on partition:</strong> When a region loses connectivity, evicting all of its nodes can overload the rest. Add a mass-failure circuit breaker and rate-limited eviction.</li>
+          <li><strong>One gossip pool across the WAN:</strong> High-latency links need different probe timeouts. Use per-region pools with gateways.</li>
+          <li><strong>No visibility into the detector itself:</strong> Without metrics for probe latency, suspicion counts, and refutations, you cannot tell false alarms from real failures. Export detector internals.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams separate <strong>detection</strong> (fast, decentralized, approximate) from <strong>decision and visibility</strong> (consistent, centralized, auditable). A typical approach:</p>
+        <ul>
+          <li><strong>Step 0 — Define the budget:</strong> Break '5 s' into detection, confirmation, dissemination, and routing-update time, and agree on a tolerable false-positive rate.</li>
+          <li><strong>Step 1 — Regional gossip pools:</strong> Run SWIM (for example memberlist or Serf) per region with sub-second probe periods, indirect probes, and suspicion; connect regions through a few gateway nodes.</li>
+          <li><strong>Step 2 — Observer nodes feed the registry:</strong> Non-worker members subscribe to membership events and update the routing registry and load balancers; they also export metrics and traces.</li>
+          <li><strong>Step 3 — Application-level health:</strong> Gossip says the process is reachable. Piggyback a lightweight readiness signal (load, queue depth) in node metadata so the load balancer can shed traffic from degraded nodes before they die.</li>
+          <li><strong>Step 4 — Safety rails:</strong> Mass-failure breaker, rate-limited eviction, incarnation numbers, and a manual override for operators.</li>
+          <li><strong>Step 5 — Fault-injection testing:</strong> Kill nodes, add latency and loss, partition regions, and measure time to routing update and false-positive rate before production.</li>
+        </ul>
+        <p>Detect in a decentralized way; decide and record in a centralized one.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Use a <strong>decentralized, SWIM-style detector</strong> with indirect probes and suspicion for fast, low-overhead, partition-tolerant detection, and export membership events to a small set of observers for routing and operator visibility. Central collectors, orchestrator probes, and slow low-rate pushes each fail at least one of the four requirements (speed, overhead, partition tolerance, or visibility).</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

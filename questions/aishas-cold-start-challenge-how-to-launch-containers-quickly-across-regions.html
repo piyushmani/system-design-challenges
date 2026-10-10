@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aisha&#x27;s cold-start challenge: How to launch containers quickly across regions? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">04 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Cold Starts</span>
+      <span class="tag tag--green">Serverless</span>
+      <span class="tag tag--amber">Containerization</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Aisha&#x27;s cold-start challenge: How to launch containers quickly across regions?</h1>
+      <p class="q-scenario"><strong>Aisha</strong>, an SRE, runs numerous microservices on <strong>Kubernetes across three cloud regions</strong>. Container images are <strong>moderate-to-large (200–800 MB)</strong>. During sudden traffic surges, autoscaling must be quick, but pods take a long time to start (dominated by image pulls) and some users see failures during <strong>temporary regional registry outages</strong>. She needs an image distribution and startup strategy that <strong>minimizes startup delay</strong>, <strong>tolerates regional registry disruption</strong>, <strong>scales to thousands of instances</strong>, and <strong>avoids excessive operational overhead</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Pre-pull every service image onto every node (DaemonSets or node bootstrap scripts) so new pods never pull over the network.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Deploy regional registry mirrors (read-through caches or replicated registries) for availability, and pre-warm only the most latency-sensitive services; use immutable tags and automated warm-up for the rest.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Use lazy image streaming (OCI lazy-pull snapshotters such as Nydus or stargz) so containers start while remaining layers are fetched on demand.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Merge microservices into fewer, larger images (or ship one monolithic image per region, VM-style) to avoid frequent pulls.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Regional Mirrors + Targeted Pre-Warming</h3>
+        <p>Aisha has <em>two distinct problems</em>: slow pod starts (dominated by pulling 200–800 MB images) and the <strong>availability of the image supply path</strong> during regional registry outages. Option B is the only choice that addresses both with proportionate effort: regional mirrors make the registry a local, redundant dependency, and targeted pre-warming removes the pull from the critical path for the few services where seconds matter. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Removes the single-registry dependency:</strong> Each region pulls from a local read-through cache or replicated registry, with an ordered fallback to a peer region and then the origin. A regional registry outage degrades to a slower pull instead of failed pod starts, and layers already cached keep serving even if the origin is down.</li>
+          <li><strong>Cuts pull time where it matters:</strong> A pull from an in-region cache is typically much faster than a cross-region or internet pull, and a node that already holds the layers starts a pod in seconds (container start only). Pre-warming just the latency-critical services (for example the top handful by autoscaling urgency) captures most of the benefit.</li>
+          <li><strong>Scales to thousands of pods:</strong> Instead of thousands of nodes hammering one origin during a surge (a thundering herd), pulls fan out across horizontally scalable regional caches. Peer-to-peer distribution (Dragonfly, Kraken) can be added later without changing the model.</li>
+          <li><strong>Proportionate operational overhead:</strong> Pre-warming is limited to a short, explicit tier-1 list, so node disk use, bootstrap time, and image garbage-collection pressure stay bounded. Immutable tags (or digests) make caching safe and let warm-up be automated from CI: push, mirror, warm.</li>
+          <li><strong>Why not lazy-pull alone?</strong> Lazy-pull shortens startup but keeps the registry on the <em>runtime</em> path: parts of the image are fetched while the container runs, so a registry or mirror outage can stall a running container, not just a starting one. It also needs converted images and snapshotter support on every node. It is a good second-phase optimization on top of mirrors, not a replacement.</li>
+        </ul>
+        <p>A robust setup combines <strong>regional mirrors</strong> (ordered fallback in the containerd <code>hosts.toml</code>), <strong>digest-pinned immutable tags</strong>, <strong>slim images</strong> (multi-stage builds, shared base layers), <strong>CI-driven warm-up</strong> for tier-1 services, and <strong>baked node images</strong>. Measure p50/p95 pod-ready time, pull duration, and mirror hit rate before and after; if pull time is still the dominant term after mirrors and slimming, add lazy-pull for the largest images.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📦</div>
+          <h4>A — Pre-Pull Everything on Every Node</h4>
+          <p>Pre-pulling gives the fastest possible start for images already on the node, but pre-pulling <strong>every</strong> image on <strong>every</strong> node does not scale: with dozens of services at 200–800 MB it consumes tens to hundreds of GB of disk per node, bloats node bootstrap, and triggers kubelet image garbage collection under disk pressure, which evicts the very layers you cached. It does not help <em>new nodes</em> created by the autoscaler (they start empty), and every release re-pulls everything fleet-wide, creating its own thundering herd against the registry. <strong>Caveat:</strong> pre-pulling a <em>small, targeted</em> set is exactly the right tool, which is why it appears inside Option B.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🌊</div>
+          <h4>C — Lazy Image Streaming</h4>
+          <p>Nydus and stargz/eStargz snapshotters let a container start after fetching only the chunks it needs, which can cut start time substantially for large images that read little at boot. But it does not fix the availability problem: the registry stays on the runtime path, so an outage can stall running containers on remote reads. It also requires converting images, installing and tuning a snapshotter on every node, and extra observability for remote reads, and apps that read most of their files at startup gain little. <strong>Caveat:</strong> it pairs well with mirrors for very large images and is worth piloting after the basics are in place.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧱</div>
+          <h4>D — Merge Images / Monolithic Image per Region</h4>
+          <p>Combining microservices into larger images <strong>makes each pull bigger, not smaller</strong>, and couples the deployment, scaling, and blast radius of unrelated services, which undoes the benefits of microservices. A monolithic image per region does not remove the registry dependency; it concentrates it. The real fix for image size is slimming each image (multi-stage builds, distroless bases, shared base layers that are cached across services), not merging services.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Regional Mirrors + Targeted Pre-Warming ✓</h4>
+          <p>Deploy regional registry mirrors (read-through caches or replicated registries) for availability, and pre-warm only the most latency-sensitive services; use immutable tags and automated warm-up for th</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Startup Latency Improvement</th><th>Registry-Outage Resilience</th><th>Scales to Thousands of Pods</th><th>Operational Overhead</th><th>Node Disk / Resource Cost</th><th>Reversibility</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Pre-Pull Everything</td><td>Very high on warm nodes ✅</td><td>Partial (only for cached images) ⚠</td><td>Poor (new nodes start cold, release herd) ❌</td><td>Medium (DaemonSets, GC tuning) ⚠</td><td>High (disk on every node) ❌</td><td>Easy ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Mirrors + Targeted Pre-Warm ✓</td><td>High for tier-1, good for the rest ✅</td><td>High (regional fallback) ✅</td><td>Good (mirrors fan out load) ✅</td><td>Low–Medium ⚠</td><td>Low–Medium ✅</td><td>Easy ✅</td></tr>
+            <tr><td class="tt-option">C — Lazy Streaming</td><td>High for large, low-read-at-boot images ⚠</td><td>Low (registry stays on runtime path) ❌</td><td>Good ✅</td><td>Medium–High (conversion, snapshotter) ⚠</td><td>Low ✅</td><td>Moderate ⚠</td></tr>
+            <tr><td class="tt-option">D — Merge Images</td><td>Negative (bigger pulls) ❌</td><td>None ❌</td><td>Poor ❌</td><td>High (coupled releases) ❌</td><td>High ❌</td><td>Very hard ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Pre-Pull Everything</h4>
+          <p>Small, fixed fleets with a handful of images, or air-gapped nodes with no registry reachable. Also a good model for a very small tier-1 set (as part of B).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Mirrors + Targeted Pre-Warm</h4>
+          <p>Multi-region Kubernetes with many services and surge-driven autoscaling that needs registry-outage tolerance with bounded operational overhead. The default recommendation here.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Lazy Streaming</h4>
+          <p>Very large images (multiple GB, such as ML or data tooling) where containers read only a fraction of files at startup, once mirrors are in place and an image conversion pipeline is acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Merge Images</h4>
+          <p>Rarely appropriate. Consider merging only when separate services are always deployed and scaled together, in which case they were arguably one service.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Regional Mirror with Ordered Fallback and Targeted Warm-Up</h3>
+        <p>Nodes pull from their local mirror first, then a peer region, then the origin. CI warms the mirror and only the tier-1 nodes:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    CI[&quot;CI pipeline: build and push, digest-pinned&quot;] --&gt; O[(&quot;Origin registry&quot;)]
+    O --&gt;|replicate or read-through| M1[(&quot;Mirror: region 1&quot;)]
+    O --&gt;|replicate or read-through| M2[(&quot;Mirror: region 2&quot;)]
+    O --&gt;|replicate or read-through| M3[(&quot;Mirror: region 3&quot;)]
+    CI -.-&gt;|&quot;trigger warm-up, tier-1 only&quot;| W[&quot;Warm-up job&quot;]
+    W -.-&gt;|pre-pull| N1
+    subgraph R1[&quot;Region 1 cluster&quot;]
+        N1[&quot;Node with tier-1 images cached&quot;]
+        N2[&quot;New node from autoscaler&quot;]
+    end
+    N1 --&gt;|&quot;1. pull from local mirror&quot;| M1
+    N2 --&gt;|&quot;1. pull from local mirror&quot;| M1
+    N2 -.-&gt;|&quot;2. fallback if mirror fails&quot;| M2
+    N2 -.-&gt;|&quot;3. last resort&quot;| O">flowchart LR
+    CI[&quot;CI pipeline: build and push, digest-pinned&quot;] --&gt; O[(&quot;Origin registry&quot;)]
+    O --&gt;|replicate or read-through| M1[(&quot;Mirror: region 1&quot;)]
+    O --&gt;|replicate or read-through| M2[(&quot;Mirror: region 2&quot;)]
+    O --&gt;|replicate or read-through| M3[(&quot;Mirror: region 3&quot;)]
+    CI -.-&gt;|&quot;trigger warm-up, tier-1 only&quot;| W[&quot;Warm-up job&quot;]
+    W -.-&gt;|pre-pull| N1
+    subgraph R1[&quot;Region 1 cluster&quot;]
+        N1[&quot;Node with tier-1 images cached&quot;]
+        N2[&quot;New node from autoscaler&quot;]
+    end
+    N1 --&gt;|&quot;1. pull from local mirror&quot;| M1
+    N2 --&gt;|&quot;1. pull from local mirror&quot;| M1
+    N2 -.-&gt;|&quot;2. fallback if mirror fails&quot;| M2
+    N2 -.-&gt;|&quot;3. last resort&quot;| O</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> containerd Mirror Fallback and Tier-1 Warm-Up</h3>
+        <p>Node-side ordered registry fallback (containerd hosts.toml) plus a DaemonSet that pre-pulls only the latency-critical images on labeled nodes:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">toml + yaml</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com"># --- File 1: /etc/containerd/certs.d/registry.example.com/hosts.toml ---</span></span>
+<span class="line"><span class="tk-com"># containerd 1.x: set config_path = &#x27;/etc/containerd/certs.d&#x27; under [plugins.&#x27;io.containerd.grpc.v1.cri&#x27;.registry]</span></span>
+<span class="line"><span class="tk-com"># containerd 2.x: the same setting lives under [plugins.&#x27;io.containerd.cri.v1.images&#x27;.registry]</span></span>
+<span class="line">server <span class="tk-op">=</span> <span class="tk-str">&#x27;https://registry.example.com&#x27;</span>        <span class="tk-com"># origin: tried last</span></span>
+<span class="line"></span>
+<span class="line">[host.<span class="tk-str">&#x27;https://mirror.region1.internal&#x27;</span>]         <span class="tk-com"># local mirror: tried first</span></span>
+<span class="line">  capabilities <span class="tk-op">=</span> [<span class="tk-str">&#x27;pull&#x27;</span>, <span class="tk-str">&#x27;resolve&#x27;</span>]</span>
+<span class="line"></span>
+<span class="line">[host.<span class="tk-str">&#x27;https://mirror.region2.internal&#x27;</span>]         <span class="tk-com"># peer-region mirror: tried second</span></span>
+<span class="line">  capabilities <span class="tk-op">=</span> [<span class="tk-str">&#x27;pull&#x27;</span>, <span class="tk-str">&#x27;resolve&#x27;</span>]</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com"># --- File 2: warm-up DaemonSet, limited to latency-critical nodes and tier-1 images ---</span></span>
+<span class="line">apiVersion: apps<span class="tk-op">/</span>v1</span>
+<span class="line">kind: DaemonSet</span>
+<span class="line">metadata:</span>
+<span class="line">  name: tier1<span class="tk-op">-</span>image<span class="tk-op">-</span>warmup</span>
+<span class="line">  namespace: infra</span>
+<span class="line">spec:</span>
+<span class="line">  selector:</span>
+<span class="line">    matchLabels: {app: tier1<span class="tk-op">-</span>image<span class="tk-op">-</span>warmup}</span>
+<span class="line">  template:</span>
+<span class="line">    metadata:</span>
+<span class="line">      labels: {app: tier1<span class="tk-op">-</span>image<span class="tk-op">-</span>warmup}</span>
+<span class="line">    spec:</span>
+<span class="line">      nodeSelector:</span>
+<span class="line">        workload<span class="tk-op">-</span>tier: latency<span class="tk-op">-</span>critical          <span class="tk-com"># warm only the nodes that serve tier-1 services</span></span>
+<span class="line">      containers:</span>
+<span class="line">      <span class="tk-op">-</span> name: warmup</span>
+<span class="line">        image: registry.example.com<span class="tk-op">/</span>tools<span class="tk-op">/</span>crictl@sha256:DIGEST_HERE</span>
+<span class="line">        command: [<span class="tk-str">&#x27;sh&#x27;</span>, <span class="tk-str">&#x27;-c&#x27;</span>]</span>
+<span class="line">        args:</span>
+<span class="line">        <span class="tk-op">-</span> |</span>
+<span class="line">          <span class="tk-kw">for</span> img <span class="tk-kw">in</span> $(cat <span class="tk-op">/</span>config<span class="tk-op">/</span>tier1<span class="tk-op">-</span>images.txt); <span class="tk-kw">do</span></span>
+<span class="line">            crictl <span class="tk-op">-</span><span class="tk-op">-</span>runtime<span class="tk-op">-</span>endpoint unix:<span class="tk-com">///run/containerd/containerd.sock pull $img || echo warm-up-failed:$img</span></span>
+<span class="line">          done</span>
+<span class="line">          sleep infinity</span>
+<span class="line">        volumeMounts:</span>
+<span class="line">        <span class="tk-op">-</span> {name: containerd<span class="tk-op">-</span>sock, mountPath: <span class="tk-op">/</span>run<span class="tk-op">/</span>containerd<span class="tk-op">/</span>containerd.sock}</span>
+<span class="line">        <span class="tk-op">-</span> {name: tier1<span class="tk-op">-</span>list, mountPath: <span class="tk-op">/</span>config}</span>
+<span class="line">      volumes:</span>
+<span class="line">      <span class="tk-op">-</span> name: containerd<span class="tk-op">-</span>sock                    <span class="tk-com"># mounts the runtime socket: restrict this namespace via RBAC and Pod Security</span></span>
+<span class="line">        hostPath: {path: <span class="tk-op">/</span>run<span class="tk-op">/</span>containerd<span class="tk-op">/</span>containerd.sock, type: Socket}</span>
+<span class="line">      <span class="tk-op">-</span> name: tier1<span class="tk-op">-</span>list</span>
+<span class="line">        configMap: {name: tier1<span class="tk-op">-</span>images}          <span class="tk-com"># digest-pinned list, regenerated by CI after each release</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Skipping measurement:</strong> Assuming pulls are the bottleneck when node provisioning, scheduling, or slow app initialization may dominate. Break down pod-ready time before choosing a fix.</li>
+          <li><strong>Mutable tags (<code>:latest</code>) with caches:</strong> Mirrors and node caches can serve different content for the same tag, making rollouts inconsistent. Use immutable tags or pin by digest.</li>
+          <li><strong>Single-instance mirror:</strong> A mirror that is not redundant simply relocates the single point of failure. Run it multi-AZ with durable backing storage.</li>
+          <li><strong>No fallback ordering on nodes:</strong> If the runtime knows only one registry endpoint, mirror redundancy is wasted. Configure ordered hosts (local mirror, peer, origin) in containerd or CRI-O.</li>
+          <li><strong>Ignoring node disk pressure:</strong> Over-warming triggers kubelet image garbage collection, which deletes layers (including the ones you warmed). Cap the warm set and size disks for it.</li>
+          <li><strong>Forgetting the cold mirror on release day:</strong> The first scale-out after a release hits an empty cache. Push-triggered warm-up of the mirror (and tier-1 nodes) prevents a self-inflicted stampede on the origin.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams layer these techniques and <strong>measure where pod-ready time actually goes</strong> (scheduling, node provisioning, image pull, container start, readiness). A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Measure first:</strong> Break pod-ready time into scheduling, node provisioning, image pull, runtime start, and readiness probe time (kubelet events, <code>kubectl describe pod</code>, runtime metrics). If node provisioning or slow app initialization dominates, image work will not fix it.</li>
+          <li><strong>Step 1 — Slim and standardize images:</strong> Multi-stage builds, minimal or distroless bases, a few shared base layers, and layer ordering so frequently changing code comes last. Smaller images pull faster and cache better.</li>
+          <li><strong>Step 2 — Regional mirrors:</strong> Read-through caches or replicated registries in each region, with ordered fallback (local mirror, peer region, origin) configured in containerd or CRI-O.</li>
+          <li><strong>Step 3 — Targeted warm-up:</strong> Bake tier-1 images into node images and/or run a warm-up DaemonSet limited to latency-sensitive services; trigger warm-up from CI after each release.</li>
+          <li><strong>Step 4 — Keep spare capacity:</strong> Warm node pools or overprovisioning (low-priority placeholder pods) so surges land on nodes that are already running and already hold images.</li>
+          <li><strong>Step 5 — Lazy pulling or P2P (optional):</strong> For very large images or very large fan-out, add lazy-pull snapshotters or P2P distribution once the earlier steps are measured and still insufficient.</li>
+        </ul>
+        <p>Fix the supply path first, then optimize the start path, and let measurements decide how far to go.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Treat image delivery as a <strong>reliability and latency dependency</strong>: make the registry local and redundant (regional mirrors with fallback), then remove pulls from the critical path only for the few services that need it (targeted pre-warming). Pre-pulling everything, merging images, or relying on streaming alone each fixes one symptom while leaving scale, cost, or availability exposed.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

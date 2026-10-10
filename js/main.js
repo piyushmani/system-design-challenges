@@ -63,19 +63,25 @@
     }
   }
 
-  // ── Home page search & filter ────────────────── 
+  // ── Home page search & filter & pagination ─────── 
   function initHome() {
     const searchInput = document.getElementById('searchInput');
     const filterTags = document.querySelectorAll('.filter-tag');
-    const cards = document.querySelectorAll('.problem-card');
+    const cards = Array.from(document.querySelectorAll('.problem-card'));
     const noResults = document.getElementById('noResults');
     const countEl = document.getElementById('visibleCount');
+    const paginationEl = document.getElementById('pagination');
 
     if (!searchInput || !cards.length) return;
 
     let activeTag = null;
+    let currentPage = 1;
+    const CARDS_PER_PAGE = 9;
 
-    searchInput.addEventListener('input', filter);
+    searchInput.addEventListener('input', () => {
+      currentPage = 1;
+      filterAndPaginate();
+    });
 
     filterTags.forEach(tag => {
       tag.addEventListener('click', () => {
@@ -87,31 +93,86 @@
           tag.classList.add('active');
           activeTag = tag.dataset.tag.toLowerCase();
         }
-        filter();
+        currentPage = 1;
+        filterAndPaginate();
       });
     });
 
-    function filter() {
+    function filterAndPaginate() {
       const query = searchInput.value.toLowerCase().trim();
-      let visible = 0;
-
-      cards.forEach(card => {
+      
+      // 1. Filter
+      const matchedCards = cards.filter(card => {
         const title = (card.dataset.title || '').toLowerCase();
         const tags = (card.dataset.tags || '').toLowerCase();
         const matchesSearch = !query || title.includes(query) || tags.includes(query);
         const matchesTag = !activeTag || tags.includes(activeTag);
-
-        if (matchesSearch && matchesTag) {
-          card.style.display = '';
-          visible++;
-        } else {
-          card.style.display = 'none';
-        }
+        return matchesSearch && matchesTag;
       });
 
-      if (noResults) noResults.style.display = visible === 0 ? '' : 'none';
-      if (countEl) countEl.textContent = visible;
+      // Hide all cards first
+      cards.forEach(card => card.style.display = 'none');
+
+      // 2. Paginate
+      const totalPages = Math.ceil(matchedCards.length / CARDS_PER_PAGE);
+      if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
+      
+      const startIndex = (currentPage - 1) * CARDS_PER_PAGE;
+      const visibleCards = matchedCards.slice(startIndex, startIndex + CARDS_PER_PAGE);
+      
+      visibleCards.forEach(card => card.style.display = '');
+
+      // 3. Update UI
+      if (noResults) noResults.style.display = matchedCards.length === 0 ? '' : 'none';
+      if (countEl) countEl.textContent = matchedCards.length;
+      
+      renderPagination(totalPages);
     }
+
+    function renderPagination(totalPages) {
+      if (!paginationEl) return;
+      if (totalPages <= 1) {
+        paginationEl.style.display = 'none';
+        return;
+      }
+      
+      paginationEl.style.display = 'flex';
+      let html = '';
+      
+      // Prev
+      if (currentPage > 1) {
+        html += `<button class="page-btn" data-page="${currentPage - 1}">&laquo; Prev</button>`;
+      }
+      
+      // Pages
+      for (let i = 1; i <= totalPages; i++) {
+        html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
+      }
+      
+      // Next
+      if (currentPage < totalPages) {
+        html += `<button class="page-btn" data-page="${currentPage + 1}">Next &raquo;</button>`;
+      }
+      
+      paginationEl.innerHTML = html;
+      
+      // Add events
+      paginationEl.querySelectorAll('.page-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          currentPage = parseInt(e.target.dataset.page, 10);
+          filterAndPaginate();
+          // Scroll back to grid top
+          const grid = document.getElementById('problemGrid');
+          if (grid) {
+            const offset = grid.getBoundingClientRect().top + window.scrollY - 80;
+            window.scrollTo({ top: offset, behavior: 'smooth' });
+          }
+        });
+      });
+    }
+
+    // Initial render
+    filterAndPaginate();
   }
 
   // ── Theme Toggle ───────────────────────────────

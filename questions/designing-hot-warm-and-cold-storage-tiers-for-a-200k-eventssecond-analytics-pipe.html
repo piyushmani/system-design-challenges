@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Designing Hot, Warm and Cold Storage Tiers for a 200K Events/Second Analytics Pipeline — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">02 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Data Tiering</span>
+      <span class="tag tag--green">Storage</span>
+      <span class="tag tag--amber">Cost Optimization</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Designing Hot, Warm and Cold Storage Tiers for a 200K Events/Second Analytics Pipeline</h1>
+      <p class="q-scenario"><strong>Ravi</strong>, a backend engineer, is designing the storage tier for an analytics pipeline ingesting <strong>200,000 events per second</strong>. The system needs <strong>sub-100 ms queries over the last 24 hours</strong>, <strong>ad-hoc analytical queries across months</strong> (minutes are acceptable), <strong>3-year retention</strong> for legal reasons, and a <strong>constrained long-term storage budget</strong>. Operators also need visibility into <strong>replication delay</strong> and <strong>reprocessing errors</strong>. He must pick a hot/warm/cold architecture that best balances <em>latency, cost, availability, consistency and operational simplicity</em>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Deploy a unified datastore for all data tiers: operate a massive search or analytics cluster (such as Elasticsearch, OpenSearch, or ClickHouse) and leverage its native lifecycle management features to migrate indices across hot, warm, and cold nodes within the same cluster, maintaining a single source of truth.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Implement a polyglot tiered architecture: maintain a highly responsive hot store (like a time-series database or Kafka with hot indices) for recent 24-hour queries, writing events to it synchronously alongside a durable Kafka commit log. Use an asynchronous CDC/ETL process to compact and store partitioned ORC/Parquet files in object storage (e.g., S3) for warm and cold data, serving these via a query engine like Trino or Athena based on data age, while monitoring lag and errors via the commit log.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Adopt a synchronous dual-write strategy: configure all producers to write events concurrently to both a hot datastore (for fast reads) and cold object storage (like Parquet files on S3) to guarantee immediate durability and availability of cold data without an asynchronous pipeline, using a metadata index to track cold objects.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Utilize a decentralized, edge-oriented tiering approach: deploy ephemeral hot caches in each region to guarantee sub-100ms reads, replicate data periodically across regions, and execute resource-intensive aggregation jobs to move combined data into centralized warm/cold storage. Fulfill cross-region queries by aggregating data from regional caches on the fly or falling back to the warm/cold stores.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Polyglot Tiers with a Log-First Pipeline</h3>
+        <p>The two query requirements pull in opposite directions: <strong>sub-100 ms on a small, recent window</strong> and <strong>cheap minutes-scale scans over years</strong>. A single engine has to compromise on one of them. A polyglot design lets each tier do one job: a small, fast hot store for the last day, a durable <strong>Kafka log</strong> as the replayable system of record for ingest, and <strong>columnar files on object storage</strong> queried by a separate engine for everything older. A back-of-envelope check shows why: 200,000 events/s is about <strong>17.3 billion events per day</strong>, which at an assumed ~500 bytes per event is roughly <strong>8.6 TB/day raw</strong> and about <strong>9.5 PB over 3 years</strong> before compression. That is feasible on compressed Parquet in object storage and prohibitively expensive on replicated SSD cluster nodes. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Sub-100 ms where it matters:</strong> The hot tier only holds roughly 24 to 48 hours of data (low single-digit TB after columnar compression, under the same assumptions), small enough to live on NVMe and in cache. Query latency stays flat as history grows, because history lives elsewhere.</li>
+          <li><strong>Cost matches access pattern:</strong> Months and years of data sit in compressed columnar files on object storage, with lifecycle rules moving older data to cheaper storage classes. Compute is separate and scales (or is billed per query) only when someone actually runs a historical query.</li>
+          <li><strong>Workload isolation:</strong> Months-long ad-hoc scans run on Trino or Athena against object storage, so they cannot starve ingestion or the hot-path queries. In a single cluster, those workloads share CPU, memory, disk and failure domains.</li>
+          <li><strong>A replayable log gives the observability and recovery the operators asked for:</strong> Consumer lag on Kafka is a direct measure of replication delay, dead-letter topics capture reprocessing errors, and retention of days allows rebuilding the hot store or re-running ETL after a bug fix.</li>
+          <li><strong>Why not one cluster with lifecycle policies (option A)?</strong> It is simpler to operate at small scale, but it couples ingest, hot queries and historical scans into one failure domain, and holding three years on replicated cluster storage is expensive. S3-backed or searchable-snapshot tiers narrow the gap but do not give you independent compute or a replay log.</li>
+        </ul>
+        <p>A well-designed tiering includes <strong>Kafka retention longer than your ETL SLA plus a replay window</strong>, <strong>idempotent event IDs</strong>, <strong>event-time partitioning</strong>, <strong>atomic table commits with compaction</strong>, a <strong>hot-tier window deliberately longer than ETL lag</strong> (for example 48 hours of hot data for a 24-hour SLA), a <strong>query router that respects a committed watermark</strong>, and <strong>lifecycle and retention locks</strong> on the archive. Track hot-tier p99 latency, consumer lag, ETL freshness, dead-letter rate and cost per TB-month per tier. If hot p99 climbs, shrink the hot window or pre-aggregate common queries.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🗄️</div>
+          <h4>A — Unified Cluster with Lifecycle Tiers</h4>
+          <p>One engine and one source of truth is operationally attractive, and modern engines can push cold data to object storage. But ingest, hot queries and months-long scans still share one cluster, so a heavy analytical query can hurt the 100 ms SLA, and there is no independent replay log for reprocessing. Keeping three years on replicated cluster nodes also costs far more than columnar files on object storage. <strong>Caveat:</strong> at lower volumes (tens of thousands of events per second or less) or shorter retention, this is a sensible, simpler choice.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔀</div>
+          <h4>C — Synchronous Dual-Write to Hot and Cold</h4>
+          <p>There is no atomic commit across two stores, so a failure between the two writes leaves the tiers permanently inconsistent. Writing to object storage per event (or per tiny batch) creates a huge number of small files, which makes cold queries slow and expensive, and producers inherit the tail latency of the slowest store. Without a durable log there is also nothing to replay when something goes wrong.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🌍</div>
+          <h4>D — Decentralized Edge Tiering</h4>
+          <p>Nothing in the requirements asks for multi-region reads. Ephemeral regional caches lose data on restart, periodic cross-region replication adds lag and inconsistency, and aggregating across regions on the fly increases latency and cost for exactly the queries that should be simple. It is worth considering only when users and data are genuinely regional with data-residency rules.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Polyglot Tiers with a Log-First Pipeline ✓</h4>
+          <p>Implement a polyglot tiered architecture: maintain a highly responsive hot store (like a time-series database or Kafka with hot indices) for recent 24-hour queries, writing events to it synchronously</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Hot Query Latency (24h)</th><th>Long-Term Storage Cost</th><th>Workload Isolation</th><th>Operational Complexity</th><th>Replay and Reprocessing</th><th>Consistency Across Tiers</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Unified Cluster</td><td>Good ⚠ (degrades under scans)</td><td>High ❌</td><td>Poor ❌</td><td>Low ✅</td><td>Weak ❌ (no separate log)</td><td>Strong ✅ (single store)</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Polyglot Tiers ✓</td><td>Excellent ✅</td><td>Low ✅</td><td>Strong ✅</td><td>High ❌</td><td>Strong ✅ (Kafka log)</td><td>Eventual ⚠ (ETL lag)</td></tr>
+            <tr><td class="tt-option">C — Synchronous Dual-Write</td><td>Excellent ✅</td><td>Medium ⚠ (small-file overhead)</td><td>Medium ⚠</td><td>Medium ⚠</td><td>Weak ❌ (no log)</td><td>Weak ❌ (dual-write drift)</td></tr>
+            <tr><td class="tt-option">D — Edge Tiering</td><td>Good ⚠ (regional only)</td><td>Medium ⚠</td><td>Medium ⚠</td><td>Very high ❌</td><td>Weak ❌</td><td>Weak ❌ (cross-region)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Unified Cluster</h4>
+          <p>Moderate volume or short retention, a small team, and tolerance for one shared failure domain. The simplest option when the scale does not justify multiple systems.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Polyglot Tiers</h4>
+          <p>High-volume ingest with a strict hot-query SLA, long and cheap retention, independent scaling of storage and compute, and a need to replay or rebuild tiers.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Synchronous Dual-Write</h4>
+          <p>Low-volume pipelines where the archive must be durable before acknowledgement, and writes can go through a single batching writer so small files stay manageable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Edge Tiering</h4>
+          <p>Genuinely multi-region data with residency rules or local-latency needs, where regional queries dominate and cross-region queries are rare.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Log-First Hot, Warm and Cold Architecture</h3>
+        <p>Producers write once to Kafka. The hot store and the ETL both consume from the log, and a query engine serves older data from object storage:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    P[&quot;Producers&lt;br/&gt;200K events per second&quot;] --&gt; K[(&quot;Kafka commit log&lt;br/&gt;retention: days&quot;)]
+    K --&gt; H[(&quot;Hot store&lt;br/&gt;last 24 to 48 hours&lt;br/&gt;ClickHouse, Druid or Pinot&quot;)]
+    K --&gt; E[&quot;Stream ETL&lt;br/&gt;Flink, Spark or Kafka Connect&quot;]
+    E --&gt; W[(&quot;Warm tier&lt;br/&gt;Parquet plus Iceberg on object storage&lt;br/&gt;months&quot;)]
+    W --&gt; C[(&quot;Cold tier&lt;br/&gt;cheaper storage classes&lt;br/&gt;up to 3 years&quot;)]
+    Q[&quot;Query router&quot;] --&gt; H
+    Q --&gt; T[&quot;Trino or Athena&quot;]
+    T --&gt; W
+    T --&gt; C
+    K -. &quot;consumer lag&quot; .-&gt; M[&quot;Monitoring: lag, freshness, dead letters&quot;]
+    E -. &quot;ETL errors&quot; .-&gt; M">flowchart LR
+    P[&quot;Producers&lt;br/&gt;200K events per second&quot;] --&gt; K[(&quot;Kafka commit log&lt;br/&gt;retention: days&quot;)]
+    K --&gt; H[(&quot;Hot store&lt;br/&gt;last 24 to 48 hours&lt;br/&gt;ClickHouse, Druid or Pinot&quot;)]
+    K --&gt; E[&quot;Stream ETL&lt;br/&gt;Flink, Spark or Kafka Connect&quot;]
+    E --&gt; W[(&quot;Warm tier&lt;br/&gt;Parquet plus Iceberg on object storage&lt;br/&gt;months&quot;)]
+    W --&gt; C[(&quot;Cold tier&lt;br/&gt;cheaper storage classes&lt;br/&gt;up to 3 years&quot;)]
+    Q[&quot;Query router&quot;] --&gt; H
+    Q --&gt; T[&quot;Trino or Athena&quot;]
+    T --&gt; W
+    T --&gt; C
+    K -. &quot;consumer lag&quot; .-&gt; M[&quot;Monitoring: lag, freshness, dead letters&quot;]
+    E -. &quot;ETL errors&quot; .-&gt; M</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Watermark-Aware Router and Idempotent ETL Commit</h3>
+        <p>The router splits queries at the committed watermark, and the ETL commits files together with Kafka offsets so retries are safe:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">HOT_RETENTION <span class="tk-op">=</span> <span class="tk-num">48h</span>          <span class="tk-com">// deliberately longer than the worst-case ETL lag</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">queryEvents</span>(sql, <span class="tk-kw">from</span>, to):</span>
+<span class="line">    watermark <span class="tk-op">=</span> icebergTable.<span class="tk-fn">committedWatermark</span>()      <span class="tk-com">// everything before this is fully committed to the cold tier</span></span>
+<span class="line">    <span class="tk-kw">if</span> watermark <span class="tk-op">&lt;</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> HOT_RETENTION:</span>
+<span class="line">        <span class="tk-fn">alert</span>(<span class="tk-str">&#x27;gap risk: ETL is behind hot retention&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">from</span> <span class="tk-op">&gt;=</span> watermark: <span class="tk-kw">return</span> hot.<span class="tk-fn">run</span>(sql, <span class="tk-kw">from</span>, to)              <span class="tk-com">// recent only: sub-100 ms path</span></span>
+<span class="line">    <span class="tk-kw">if</span> to <span class="tk-op">&lt;=</span> watermark:   <span class="tk-kw">return</span> trino.<span class="tk-fn">run</span>(sql, <span class="tk-kw">from</span>, to)            <span class="tk-com">// historical only: minutes are fine</span></span>
+<span class="line"></span>
+<span class="line">    older  <span class="tk-op">=</span> trino.<span class="tk-fn">run</span>(sql, <span class="tk-kw">from</span>, watermark)                         <span class="tk-com">// half-open range [from, watermark)</span></span>
+<span class="line">    recent <span class="tk-op">=</span> hot.<span class="tk-fn">run</span>(sql, watermark, to)                             <span class="tk-com">// half-open range [watermark, to)</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">mergeAggregates</span>(older, recent)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- ETL micro-batch (idempotent) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">etlMicroBatch</span>(partition, startOffset, endOffset):</span>
+<span class="line">    events <span class="tk-op">=</span> kafka.<span class="tk-fn">read</span>(partition, startOffset, endOffset)</span>
+<span class="line">    rows   <span class="tk-op">=</span> <span class="tk-fn">dedupe</span>(events, key <span class="tk-op">=</span> event_id)                          <span class="tk-com">// at-least-once delivery is safe</span></span>
+<span class="line">    files  <span class="tk-op">=</span> <span class="tk-fn">writeParquet</span>(rows, partitionBy <span class="tk-op">=</span> event_date, targetSize <span class="tk-op">=</span> 256MB)</span>
+<span class="line">    icebergTable.<span class="tk-fn">commit</span>(files, metadata <span class="tk-op">=</span> {partition: partition, endOffset: endOffset})   <span class="tk-com">// atomic snapshot</span></span>
+<span class="line">    kafka.<span class="tk-fn">commitOffset</span>(partition, endOffset)                         <span class="tk-com">// only AFTER the table commit succeeds</span></span>
+<span class="line">    <span class="tk-com">// A crash before the commit repeats the same range and produces the same result</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- reconciliation (hourly) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reconcile</span>(hour):</span>
+<span class="line">    k <span class="tk-op">=</span> kafka.<span class="tk-fn">countEvents</span>(hour)</span>
+<span class="line">    h <span class="tk-op">=</span> hot.<span class="tk-fn">count</span>(hour)   <span class="tk-com">// only while the hour is inside the hot window</span></span>
+<span class="line">    c <span class="tk-op">=</span> trino.<span class="tk-fn">count</span>(hour) <span class="tk-com">// once the hour is below the watermark</span></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">abs</span>(k <span class="tk-op">-</span> c) <span class="tk-op">&gt;</span> TOLERANCE: <span class="tk-fn">alert</span>(<span class="tk-str">&#x27;cold tier mismatch&#x27;</span>, hour, k, c)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Dual-writing from producers:</strong> Writing to two stores without an atomic commit lets them drift apart silently. Write once to a log and derive every tier from it.</li>
+          <li><strong>No watermark at the tier boundary:</strong> Without a committed watermark, queries spanning hot and cold data double count the overlap or miss a gap. Route by watermark and keep the hot window longer than ETL lag.</li>
+          <li><strong>The small-files problem:</strong> Writing thousands of tiny Parquet files makes cold queries slow and costly. Batch writes and run compaction on a schedule.</li>
+          <li><strong>Partitioning cold data badly:</strong> Partition by event date (and a low-cardinality key if needed), not by a high-cardinality field that creates millions of partitions or by ingestion time that scatters late events.</li>
+          <li><strong>Hot retention equal to ETL lag:</strong> If the hot tier drops data exactly when ETL finishes, any ETL delay opens a gap. Keep a deliberate buffer.</li>
+          <li><strong>No reconciliation:</strong> Without periodic row-count and checksum comparison between tiers, silent loss goes unnoticed, which is a real risk when the data is under legal retention.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams building tiered analytics storage <strong>profile the workload first</strong> and then build the pipeline in layers:</p>
+        <ul>
+          <li><strong>Step 0 — Profile the workload:</strong> Event size and cardinality, which 24-hour queries truly need under 100 ms (and whether pre-aggregates would serve them), late-arrival distribution, and the exact retention and deletion rules.</li>
+          <li><strong>Step 1 — Kafka as the ingest system of record:</strong> Choose partition keys, set retention above the ETL SLA plus a replay window, and add a dead-letter topic.</li>
+          <li><strong>Step 2 — Hot tier:</strong> Pick an engine suited to low-latency aggregation (ClickHouse, Druid, Pinot or a time-series database), size it for 24 to 48 hours, and feed it by consuming from Kafka.</li>
+          <li><strong>Step 3 — Cold tier:</strong> Stream ETL (Flink, Spark or Kafka Connect) writes Parquet in an Iceberg-style table partitioned by event date, with scheduled compaction, queried through Trino or Athena.</li>
+          <li><strong>Step 4 — Retention and governance:</strong> Storage-class lifecycle rules, object lock for legal hold, a deletion workflow for privacy requests, and access controls.</li>
+          <li><strong>Step 5 — Observability and reconciliation:</strong> Dashboards for consumer lag, ETL freshness and dead-letter rate, plus hourly row-count reconciliation between Kafka, hot and cold tiers.</li>
+        </ul>
+        <p>Keep one replayable log as the source of truth and let every tier be a derived, rebuildable view.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Match each tier to its access pattern: a <strong>small, fast hot store</strong> for the last day, <strong>columnar files on object storage</strong> for months and years, and a <strong>durable Kafka log</strong> feeding both so any tier can be rebuilt and replication delay is directly measurable. Be careful at the tier boundary (watermarks, idempotency, compaction) and avoid synchronous dual writes. If your volume or retention is small, a single engine with lifecycle tiers may be the simpler right answer.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Decoupling Checkout: Nate&#x27;s Strangler Fig Dilemma — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">03 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Strangler Fig</span>
+      <span class="tag tag--green">Microservices</span>
+      <span class="tag tag--amber">Checkout</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Decoupling Checkout: Nate&#x27;s Strangler Fig Dilemma</h1>
+      <p class="q-scenario"><strong>Nate</strong>, a senior backend engineer on an e-commerce platform, is decoupling <strong>checkout and payment</strong> from a <strong>monolith</strong> (catalog, cart, checkout, payments, inventory) using the <strong>Strangler Fig pattern</strong> with <strong>zero downtime</strong>. The constraints are: checkout needs <strong>99.99% availability</strong>, payment confirmations need a <strong>p95 latency under 200 ms</strong>, stock reductions must be <strong>strongly consistent</strong> to prevent overselling, and the transition must be <strong>gradual</strong> so other teams can keep deploying continuously. He must choose an architecture for <em>routing, data ownership, and consistency</em> during the shift. Which strategy best balances safety, operational simplicity, and these strict constraints?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Gradually direct traffic to a newly created Checkout service through the API gateway, segmenting by user groups. The new service maintains its own database with eventual consistency: it performs local writes and emits events for the monolith to consume, updating old read models. Asynchronous event consumers synchronize the monolith&#x27;s state. This avoids distributed transactions but results in eventually consistent order and inventory data.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Deploy a reverse proxy to route users to the new Checkout service. Use dual writes to ensure both the monolith and the new service update their databases synchronously. This requires a two-phase commit (XA-style) spanning both databases for inventory and order modifications to guarantee strong consistency during the transition.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Implement an anti-corruption layer (ACL) ahead of the monolith. Construct the new Checkout as a standalone service possessing its own database. Use the monolith&#x27;s outbox pattern and events for general domain synchronization to update the new service&#x27;s read models (event-driven approach). For crucial operations needing strong consistency, such as payment capture and inventory reduction, the new service makes a synchronous, idempotent request via the ACL to the monolith or a designated source-of-truth service, using circuit breakers, timeouts, and retries. Use the API gateway and feature flags for gradual routing.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Maintain one shared database for the monolith and the new Checkout service throughout the migration phase. Control routing using feature flags, allowing some requests to execute the new code while both systems access identical tables. Depend on database-level constraints and transactions within the shared database to ensure consistency, applying any schema modifications in-place.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: ACL + Outbox Events + Synchronous Idempotent Calls for Critical Writes</h3>
+        <p>The four constraints do not apply equally to all data. Catalog, cart, and order-history data can tolerate seconds of staleness; <strong>stock decrement and payment capture cannot</strong>. Option C is the only design that treats these two classes differently: it uses <strong>asynchronous, event-driven synchronization</strong> (transactional outbox) for the general domain, and a <strong>narrow, synchronous, idempotent path</strong> to a single source of truth for the few operations that must be strongly consistent. It also keeps data ownership unambiguous (exactly one writer per piece of data at any moment), which is what makes the migration gradual and reversible. Here's why it stands out:</p>
+        <ul>
+          <li><strong>One writer per datum, no distributed transaction:</strong> Inventory stays owned by the monolith (or a designated inventory service). Strong consistency comes from having a single authority, not from coordinating two databases. Idempotency keys plus at-least-once delivery give an effectively-once outcome without holding locks across systems.</li>
+          <li><strong>Availability math works:</strong> Serial dependencies multiply. Two 99.9% systems in a 2PC give at best about 99.8% (0.999 × 0.999), which already misses a 99.99% target. C limits synchronous coupling to two calls (stock, payment), each behind a circuit breaker with a defined degraded mode, and keeps everything else (read models, emails, analytics) off the critical path.</li>
+          <li><strong>Latency stays controllable:</strong> The p95 budget is spent on a small, known set of hops with explicit per-hop timeouts and a bounded retry budget. Event consumers run asynchronously and cannot slow a payment confirmation.</li>
+          <li><strong>The ACL protects the new domain model:</strong> It translates the monolith's legacy contracts and schema into the new Checkout model, so legacy concepts do not leak. Later, the monolith's inventory can be replaced by a real service behind the same ACL without touching Checkout.</li>
+          <li><strong>Gradual and reversible rollout:</strong> The gateway plus feature flags allow routing by cohort (staff, 1%, 10%, 50%, 100%) with instant rollback by flipping a flag. The monolith's schema is not changed in place, so other teams keep deploying.</li>
+        </ul>
+        <p>Sequence the work: (1) put the gateway and ACL in front of the monolith at 0% traffic, (2) run the new Checkout in shadow mode and compare results, (3) ramp by cohort with SLO-based automatic rollback, (4) move inventory and payment ownership out of the monolith and delete the synchronous hop. Track checkout success rate, p95 payment-confirmation latency, <strong>oversell count (target: 0)</strong>, and outbox lag per cohort.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🌊</div>
+          <h4>A — Eventual Consistency Only</h4>
+          <p>Local writes plus events means the stock decrement exists in two places at different times. Two concurrent checkouts, one routed to each side, can both see stock = 1 and both succeed, which violates the strong-consistency requirement. It also leaves the monolith serving stale order and inventory data to other teams' features. <strong>Caveat:</strong> eventual consistency is exactly right for non-critical data (order history, recommendations, notifications), and C uses it there.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔗</div>
+          <h4>B — Dual Writes + Two-Phase Commit (XA)</h4>
+          <p>Dual writes without a coordinator are unsafe (one write can succeed while the other fails). 2PC restores atomicity but <strong>blocks</strong>: locks are held across network round trips, a coordinator failure leaves in-doubt transactions, and transaction availability is the product of both systems' availability, which makes 99.99% and p95 under 200 ms hard to hold. XA is also often unsupported by managed cloud databases and NoSQL stores, and it ties the two teams' deployments together.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🗄️</div>
+          <h4>D — Shared Database</h4>
+          <p>A shared database gives easy strong consistency and is sometimes a deliberate, short-lived tactic. As the strategy for the whole migration it defeats the purpose: no data ownership, in-place schema changes can break the monolith and other teams (violating continuous deployment), and both codebases couple to one schema. You cannot scale or fault-isolate checkout independently, and you can never retire the monolith. It turns a migration into a permanent distributed monolith.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — ACL + Outbox Events + Synchronous Idempotent Calls for Critical Writes ✓</h4>
+          <p>Implement an anti-corruption layer (ACL) ahead of the monolith. Construct the new Checkout as a standalone service possessing its own database. Use the monolith&#x27;s outbox pattern and events for general</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Strong Consistency for Stock</th><th>Checkout Availability (99.99%)</th><th>p95 Latency Risk</th><th>Team Independence / CD</th><th>Rollback Ease</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Eventual Consistency Only</td><td>Overselling risk ❌</td><td>No sync dependency ✅</td><td>Low ✅</td><td>Monolith serves stale data ⚠</td><td>Easy ✅</td><td>Low–Medium ✅</td></tr>
+            <tr><td class="tt-option">B — Dual Writes + 2PC</td><td>Strong (when it works) ✅</td><td>Poor (coupled) ❌</td><td>High ❌</td><td>Poor (coupled deploys) ❌</td><td>Hard ❌</td><td>High ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — ACL + Outbox + Sync Critical Calls ✓</td><td>Strong on critical paths ✅</td><td>Good with breakers and degraded mode ⚠</td><td>Controlled ⚠</td><td>Good ✅</td><td>Easy ✅</td><td>Medium–High ⚠</td></tr>
+            <tr><td class="tt-option">D — Shared Database</td><td>Strong ✅</td><td>Good until DB contention ⚠</td><td>Low ✅</td><td>Poor ❌</td><td>Medium ⚠</td><td>Low now, high long-term ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Eventual Consistency Only</h4>
+          <p>Non-critical domains such as order history, recommendations, notifications, and analytics, where seconds of staleness are acceptable and no invariant (stock, balance) is at stake.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Dual Writes + 2PC</h4>
+          <p>Rarely. Low-volume internal back-office flows where both stores support XA, downtime tolerance is high, and the arrangement is short-lived.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — ACL + Outbox + Sync Critical Calls</h4>
+          <p>Live, revenue-critical migrations with strict consistency on a few operations and strict availability and latency targets overall, and where other teams must keep shipping.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Shared Database</h4>
+          <p>A deliberate, time-boxed tactic to carve out a low-risk, mostly read-only module before data ownership is split, with a written exit plan.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Checkout Request Path During Migration</h3>
+        <p>The gateway routes by feature flag. The new Checkout reaches the monolith's inventory and payments only through the ACL, with idempotency keys on every call:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U as User
+    participant G as API Gateway
+    participant K as New Checkout Service
+    participant A as Anti-Corruption Layer
+    participant M as Monolith - Inventory and Payments
+    U-&gt;&gt;G: POST /checkout
+    G-&gt;&gt;G: Feature flag picks route for this user cohort
+    alt Flag ON for cohort
+        G-&gt;&gt;K: Forward request
+        K-&gt;&gt;A: 1. Reserve stock (idempotency key)
+        A-&gt;&gt;M: Translate and call inventory
+        M--&gt;&gt;A: Reserved (strongly consistent)
+        A--&gt;&gt;K: Reservation OK
+        K-&gt;&gt;A: 2. Capture payment (idempotency key)
+        A-&gt;&gt;M: Translate and call payments
+        M--&gt;&gt;A: Captured
+        A--&gt;&gt;K: Payment OK
+        K--&gt;&gt;G: 200 Order confirmed
+    else Flag OFF
+        G-&gt;&gt;M: Forward to monolith (legacy path)
+        M--&gt;&gt;G: 200 Order confirmed
+    end
+    G--&gt;&gt;U: Response">sequenceDiagram
+    participant U as User
+    participant G as API Gateway
+    participant K as New Checkout Service
+    participant A as Anti-Corruption Layer
+    participant M as Monolith - Inventory and Payments
+    U-&gt;&gt;G: POST /checkout
+    G-&gt;&gt;G: Feature flag picks route for this user cohort
+    alt Flag ON for cohort
+        G-&gt;&gt;K: Forward request
+        K-&gt;&gt;A: 1. Reserve stock (idempotency key)
+        A-&gt;&gt;M: Translate and call inventory
+        M--&gt;&gt;A: Reserved (strongly consistent)
+        A--&gt;&gt;K: Reservation OK
+        K-&gt;&gt;A: 2. Capture payment (idempotency key)
+        A-&gt;&gt;M: Translate and call payments
+        M--&gt;&gt;A: Captured
+        A--&gt;&gt;K: Payment OK
+        K--&gt;&gt;G: 200 Order confirmed
+    else Flag OFF
+        G-&gt;&gt;M: Forward to monolith (legacy path)
+        M--&gt;&gt;G: 200 Order confirmed
+    end
+    G--&gt;&gt;U: Response</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Checkout with Idempotent Critical Calls and Outbox</h3>
+        <p>Stock and payment go through the ACL with timeouts, breakers, and idempotency keys. Unknown outcomes are reconciled, not guessed, and the order event is committed via the outbox:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">checkout</span>(request):</span>
+<span class="line">    orderId <span class="tk-op">=</span> request.orderId</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 0. Idempotent entry: a retried request returns the same terminal result</span></span>
+<span class="line">    existing <span class="tk-op">=</span> db.<span class="tk-fn">findOrder</span>(orderId)</span>
+<span class="line">    <span class="tk-kw">if</span> existing <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> existing.<span class="tk-fn">isTerminal</span>():</span>
+<span class="line">        <span class="tk-kw">return</span> existing.result</span>
+<span class="line">    db.<span class="tk-fn">createOrderIfAbsent</span>(orderId, status <span class="tk-op">=</span> PENDING)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 1. Reserve stock at the single source of truth (strongly consistent)</span></span>
+<span class="line">    reservation <span class="tk-op">=</span> <span class="tk-fn">callWithResilience</span>(</span>
+<span class="line">        call    <span class="tk-op">=</span> acl.inventory.<span class="tk-fn">reserve</span>(items <span class="tk-op">=</span> request.items),</span>
+<span class="line">        key     <span class="tk-op">=</span> orderId <span class="tk-op">+</span> <span class="tk-str">&quot;:reserve&quot;</span>,</span>
+<span class="line">        timeout <span class="tk-op">=</span> <span class="tk-num">80ms</span>, retries <span class="tk-op">=</span> <span class="tk-num">1</span>, breaker <span class="tk-op">=</span> inventoryBreaker)</span>
+<span class="line">    <span class="tk-kw">if</span> reservation.failed:</span>
+<span class="line">        db.<span class="tk-fn">markOrder</span>(orderId, REJECTED)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">rejectOrDegrade</span>(reservation.reason)       <span class="tk-com">// never oversell</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 2. Capture payment (idempotent on the provider side too)</span></span>
+<span class="line">    payment <span class="tk-op">=</span> <span class="tk-fn">callWithResilience</span>(</span>
+<span class="line">        call    <span class="tk-op">=</span> acl.payments.<span class="tk-fn">capture</span>(amount <span class="tk-op">=</span> request.total),</span>
+<span class="line">        key     <span class="tk-op">=</span> orderId <span class="tk-op">+</span> <span class="tk-str">&quot;:capture&quot;</span>,</span>
+<span class="line">        timeout <span class="tk-op">=</span> <span class="tk-num">120ms</span>, retries <span class="tk-op">=</span> <span class="tk-num">1</span>, breaker <span class="tk-op">=</span> paymentBreaker)</span>
+<span class="line">    <span class="tk-kw">if</span> payment.outcome <span class="tk-op">==</span> UNKNOWN:                       <span class="tk-com">// timeout is NOT failure</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">pendingResponse</span>(orderId)                  <span class="tk-com">// reconcile by key, do not release yet</span></span>
+<span class="line">    <span class="tk-kw">if</span> payment.failed:</span>
+<span class="line">        acl.inventory.<span class="tk-fn">release</span>(key <span class="tk-op">=</span> orderId <span class="tk-op">+</span> <span class="tk-str">&quot;:release&quot;</span>, reservationId <span class="tk-op">=</span> reservation.id)</span>
+<span class="line">        db.<span class="tk-fn">markOrder</span>(orderId, FAILED)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">paymentFailedResponse</span>()</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 3. Order state and outbox event commit atomically in the LOCAL database</span></span>
+<span class="line">    db.transaction:</span>
+<span class="line">        db.<span class="tk-fn">markOrder</span>(orderId, CONFIRMED)</span>
+<span class="line">        outbox.<span class="tk-fn">insert</span>(<span class="tk-fn">OrderConfirmed</span>(orderId, eventId <span class="tk-op">=</span> <span class="tk-fn">newUuid</span>()))</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">confirmed</span>(orderId)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">callWithResilience</span>(call, key, timeout, retries, breaker):</span>
+<span class="line">    <span class="tk-kw">if</span> breaker.<span class="tk-fn">isOpen</span>(): <span class="tk-kw">return</span> <span class="tk-fn">failure</span>(UNAVAILABLE)     <span class="tk-com">// fail fast, protect the monolith</span></span>
+<span class="line">    <span class="tk-kw">for</span> attempt <span class="tk-kw">in</span> <span class="tk-num">0</span>..retries:</span>
+<span class="line">        result <span class="tk-op">=</span> call.<span class="tk-fn">withHeader</span>(<span class="tk-str">&quot;Idempotency-Key&quot;</span>, key).<span class="tk-fn">withDeadline</span>(timeout)</span>
+<span class="line">        <span class="tk-kw">if</span> result.ok <span class="tk-kw">or</span> result.<span class="tk-fn">isBusinessRejection</span>(): <span class="tk-kw">return</span> result</span>
+<span class="line">        <span class="tk-fn">sleep</span>(<span class="tk-fn">jitteredBackoff</span>(attempt))                  <span class="tk-com">// bounded retry budget</span></span>
+<span class="line">    breaker.<span class="tk-fn">recordFailure</span>()</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">failure</span>(UNKNOWN)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Skipping idempotency keys:</strong> Retries on timeouts will double-reserve stock or double-capture payments. Every cross-system call needs a stable key that the callee de-duplicates on.</li>
+          <li><strong>Dual write instead of outbox:</strong> Writing to the database and then publishing an event as two separate steps loses events on a crash. Write the event to an outbox table in the same local transaction and relay it.</li>
+          <li><strong>Treating timeout as failure:</strong> Releasing stock or retrying payment after a timeout can duplicate effects. Query the outcome by idempotency key first.</li>
+          <li><strong>Letting the ACL grow business logic:</strong> The ACL translates models and contracts only. Logic placed there becomes a second, hidden monolith.</li>
+          <li><strong>Making decisions from event-fed read models:</strong> Use them for display, never for stock or payment checks.</li>
+          <li><strong>No rollback path or SLO gates:</strong> A big-bang cutover removes the main safety property of the strangler pattern. Keep flags and automatic rollback on error-rate and latency regressions.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, strangler migrations succeed by <strong>shrinking risk one capability at a time</strong>, not by choosing a clever pattern. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Map seams and ownership:</strong> Identify aggregates (order, cart, stock, payment), assign one writer to each, and classify every data flow as strong or eventual.</li>
+          <li><strong>Step 1 — Put a façade in front:</strong> Gateway or reverse proxy plus ACL in front of the monolith, with no behavior change and 0% traffic to new code.</li>
+          <li><strong>Step 2 — Shadow and dark-launch:</strong> Mirror requests to the new Checkout without side effects and compare responses.</li>
+          <li><strong>Step 3 — Ramp by cohort:</strong> Staff, 1%, 10%, 50%, 100%, with automatic rollback when SLOs breach.</li>
+          <li><strong>Step 4 — Extract the owners:</strong> Move inventory and payment ownership into their own services and replace the monolith call behind the ACL.</li>
+          <li><strong>Step 5 — Retire legacy:</strong> Remove old code paths and tables only after a soak period with the rollback flag still available.</li>
+        </ul>
+        <p>Strangle one capability at a time, and always keep a rollback path.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Use <strong>one writer per piece of data</strong>: events for what can be eventually consistent, and a narrow synchronous idempotent call for the few operations (stock, payment) that cannot. Avoid 2PC and shared databases; they buy short-term simplicity at the cost of availability or independence. The ACL, gateway, and flags are what make the migration gradual and reversible.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

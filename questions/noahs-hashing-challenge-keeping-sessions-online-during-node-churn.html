@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Noah&#x27;s Hashing Challenge: Keeping Sessions Online During Node Churn — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">03 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Consistent Hashing</span>
+      <span class="tag tag--green">Session Management</span>
+      <span class="tag tag--amber">Load Balancing</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Noah&#x27;s Hashing Challenge: Keeping Sessions Online During Node Churn</h1>
+      <p class="q-scenario"><strong>Noah</strong>, a backend engineer, is building a <strong>distributed in-memory session cache</strong> for an international web app facing a <strong>10x traffic surge</strong> over six months. The cache needs <strong>high availability with low tail latency</strong>, must survive <strong>node failures</strong>, and must allow <strong>rolling upgrades</strong> without long rebalancing periods. He needs a key-to-node mapping that <strong>limits key reassignment</strong> when nodes join or leave, <strong>minimizes hot-spot imbalance</strong>, supports <strong>replication</strong> for availability, and avoids a <strong>single metadata bottleneck</strong>. Which architectural design best fits?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Traditional ring-based consistent hashing, assigning one hash entry per physical node. A central coordinator manages updates to all clients and initiates explicit rebalancing upon topology changes. The rebalancing process is synchronized to migrate keys right away.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Ring-based consistent hashing employing multiple virtual nodes (vnodes) for each physical node, alongside a replication factor greater than one (R&gt;1). Cluster membership is managed through a gossip protocol. Every node or client independently calculates the key mapping, ensuring that node departures or arrivals impact only a small portion of keys, while replicas manage failures. Eventual re-replication is managed by background repair processes.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Rendezvous hashing, also known as highest-score hashing, where clients select the node producing the highest hash score for a given key. Maintain one authoritative topology within a centralized configuration store like etcd for clients to query. To streamline write operations, keys are not replicated, meaning each key has a single owner.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Consistent hashing that mandates synchronous, global rebalancing whenever the topology changes. This involves pausing writes for impacted key ranges, transferring data to new owners instantly, and verifying the migration before traffic resumes, thereby guaranteeing strict ownership and avoiding duplicate records.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Virtual-Node Consistent Hashing with Replication and Gossip</h3>
+        <p>Each requirement maps almost one-to-one onto a property of this design. <strong>Minimal remapping</strong> comes from consistent hashing, <strong>balance</strong> from virtual nodes, <strong>availability</strong> from R>1 replicas on distinct physical nodes, <strong>no metadata bottleneck</strong> from gossip plus local computation of the mapping, and <strong>cheap rolling upgrades</strong> from incremental, background re-replication instead of stop-the-world rebalancing. The other options each break at least one of these requirements. Here's why B stands out:</p>
+        <ul>
+          <li><strong>Minimal key movement:</strong> Adding the (N+1)th node moves roughly 1/(N+1) of the keys, and only onto the new node. Removing a node moves only that node's keys to its successors. Compare with <code>hash(key) mod N</code>, which remaps almost everything on any change.</li>
+          <li><strong>Load smoothing with vnodes:</strong> Each physical node owns many small ranges, so load is statistically even (variance falls roughly with 1/√v for v vnodes), and a departing node's load spreads across many survivors instead of doubling the load on one neighbor and triggering a cascade. Heterogeneous hardware gets proportional vnode counts.</li>
+          <li><strong>Availability through replication:</strong> Replicas are the next R <em>distinct physical nodes</em> (ideally in distinct zones) clockwise on the ring. Losing a node leaves R−1 copies serving traffic, and background repair restores R.</li>
+          <li><strong>No central bottleneck:</strong> Every client or node derives placement locally from its membership view. Gossip converges in O(log N) rounds, so there is no per-request metadata lookup and no coordinator in the data path.</li>
+          <li><strong>Rolling upgrades are cheap:</strong> Restarting a node shifts only its ranges to replicas. With drain-before-stop and hinted handoff there is no global pause, which matters when the fleet is growing 10x.</li>
+        </ul>
+        <p>Operate it deliberately: zone-aware replica placement, throttled repair streaming so tail latency is protected, a failure detector with hold-down timers so flapping nodes do not trigger repeated re-replication, and dashboards for key-range skew, hinted-handoff backlog, and gossip convergence time. Validate with chaos tests that kill nodes at random while measuring p99.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🎯</div>
+          <h4>A — One Hash Entry per Node + Central Coordinator</h4>
+          <p>With a single point per physical node the ring segments are very uneven (the largest arc is expected to be about ln N times the average), so some nodes are chronically hot. When a node leaves, its entire range falls onto one successor, which can double that node's load and cascade. A central coordinator pushing topology to all clients is a metadata bottleneck and a single point of failure, and synchronous immediate migration adds tail-latency spikes during every change. It also has no replication, so each node loss loses sessions.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🏆</div>
+          <h4>C — Rendezvous Hashing + Central etcd + No Replication</h4>
+          <p>Rendezvous (highest-random-weight) hashing is an excellent algorithm: minimal disruption, uniform balance without vnodes, and easy top-R selection for replicas. This particular option, however, makes clients depend on a central store for topology (a metadata dependency, though clients can cache and watch it) and, decisively, <strong>does not replicate keys</strong>. Any node failure destroys the sessions it owned, which breaks the availability requirement. Rendezvous with replication and decentralized membership would be a valid alternative to B.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🛑</div>
+          <h4>D — Synchronous Global Rebalancing</h4>
+          <p>Pausing writes for affected ranges on every topology change turns each rolling-upgrade step into a partial outage. It also needs global coordination, which becomes slower and riskier as the cluster grows 10x. The problem it solves (duplicate records during migration) is already solved cheaply by versioned values, hinted handoff, and read repair, without stopping traffic.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Virtual-Node Consistent Hashing with Replication and Gossip ✓</h4>
+          <p>Ring-based consistent hashing employing multiple virtual nodes (vnodes) for each physical node, alongside a replication factor greater than one (R&gt;1). Cluster membership is managed through a gossip pr</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Key Movement on Churn</th><th>Load Balance</th><th>Availability on Node Failure</th><th>Metadata Bottleneck Risk</th><th>Rolling-Upgrade Friendliness</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — 1 Point per Node + Coordinator</td><td>Low, but one neighbor absorbs it all ⚠</td><td>Poor ❌</td><td>Poor (no replicas) ❌</td><td>High (central coordinator) ❌</td><td>Poor ❌</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Vnodes + R&gt;1 + Gossip ✓</td><td>Minimal ✅</td><td>Good ✅</td><td>High ✅</td><td>None in data path ✅</td><td>Excellent ✅</td><td>Medium–High ⚠</td></tr>
+            <tr><td class="tt-option">C — Rendezvous + etcd, No Replicas</td><td>Minimal ✅</td><td>Excellent ✅</td><td>Poor (no replicas) ❌</td><td>Medium (cacheable) ⚠</td><td>Good ⚠</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">D — Synchronous Global Rebalance</td><td>Minimal but blocking ⚠</td><td>Good ✅</td><td>Poor (writes paused) ❌</td><td>High (global coordination) ❌</td><td>Poor ❌</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — 1 Point per Node + Coordinator</h4>
+          <p>Small, static clusters (a handful of nodes) where simplicity matters more than balance and a brief rebalance is acceptable. Not suitable for a growing, always-on fleet.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Vnodes + R&gt;1 + Gossip</h4>
+          <p>Large or growing clusters needing continuous availability, rolling upgrades, and no central coordinator, such as session stores, key-value stores, and distributed caches.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Rendezvous + Central Store</h4>
+          <p>Modest node counts where simple, uniform placement is wanted. Add replication (top-R scores) and cached or decentralized membership to make it production-ready for availability.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Synchronous Global Rebalance</h4>
+          <p>Strongly consistent stores where ownership transfer must be exclusive and short write pauses are acceptable, usually combined with fine-grained range-level handoff rather than global pauses.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Client-Side Routing with Replica Failover</h3>
+        <p>The client computes placement locally and falls back to the next replica if the primary is unavailable. No metadata service is on the request path:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client with local ring view
+    participant N1 as Node N1 - primary for key
+    participant N2 as Node N2 - replica
+    participant N3 as Node N3 - replica
+    C-&gt;&gt;C: Hash session key, walk ring, pick R distinct physical nodes
+    C-&gt;&gt;N1: GET session
+    alt N1 healthy
+        N1--&gt;&gt;C: Session value and version
+    else N1 down or timeout
+        C-&gt;&gt;N2: GET session (next replica)
+        N2--&gt;&gt;C: Session value and version
+    end
+    Note over N1,N3: Hinted handoff and read repair re-sync N1 when it returns">sequenceDiagram
+    participant C as Client with local ring view
+    participant N1 as Node N1 - primary for key
+    participant N2 as Node N2 - replica
+    participant N3 as Node N3 - replica
+    C-&gt;&gt;C: Hash session key, walk ring, pick R distinct physical nodes
+    C-&gt;&gt;N1: GET session
+    alt N1 healthy
+        N1--&gt;&gt;C: Session value and version
+    else N1 down or timeout
+        C-&gt;&gt;N2: GET session (next replica)
+        N2--&gt;&gt;C: Session value and version
+    end
+    Note over N1,N3: Hinted handoff and read repair re-sync N1 when it returns</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Vnode Ring, Replica Selection, and Quorum Writes</h3>
+        <p>Ring construction with weighted vnodes, a zone-aware preference list of distinct physical nodes, quorum writes with hinted handoff, replica-failover reads, and gossip-driven background repair:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">V <span class="tk-op">=</span> <span class="tk-num">128</span>                      <span class="tk-com">// vnodes per physical node (scaled by node weight)</span></span>
+<span class="line">R <span class="tk-op">=</span> <span class="tk-num">3</span>                        <span class="tk-com">// replication factor</span></span>
+<span class="line">W <span class="tk-op">=</span> <span class="tk-num">2</span>                        <span class="tk-com">// write quorum</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">buildRing</span>(members):</span>
+<span class="line">    tokens <span class="tk-op">=</span> []</span>
+<span class="line">    <span class="tk-kw">for</span> node <span class="tk-kw">in</span> members where node.state <span class="tk-kw">in</span> (NORMAL, LEAVING):</span>
+<span class="line">        <span class="tk-kw">for</span> i <span class="tk-kw">in</span> <span class="tk-num">0</span> .. V <span class="tk-op">*</span> node.weight:</span>
+<span class="line">            tokens.<span class="tk-fn">add</span>( (<span class="tk-fn">hash64</span>(node.id <span class="tk-op">+</span> <span class="tk-str">&quot;#&quot;</span> <span class="tk-op">+</span> i), node) )</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">sortByToken</span>(tokens)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">preferenceList</span>(ring, key, R):</span>
+<span class="line">    pos <span class="tk-op">=</span> <span class="tk-fn">firstTokenAtOrAfter</span>(ring, <span class="tk-fn">hash64</span>(key))</span>
+<span class="line">    replicas <span class="tk-op">=</span> []; seenNodes <span class="tk-op">=</span> {}; seenZones <span class="tk-op">=</span> {}</span>
+<span class="line">    <span class="tk-kw">while</span> <span class="tk-fn">len</span>(replicas) <span class="tk-op">&lt;</span> R <span class="tk-kw">and</span> visited <span class="tk-op">&lt;</span> <span class="tk-fn">len</span>(ring):</span>
+<span class="line">        node <span class="tk-op">=</span> ring[pos].node</span>
+<span class="line">        <span class="tk-kw">if</span> node.id <span class="tk-kw">not</span> <span class="tk-kw">in</span> seenNodes:                       <span class="tk-com">// skip other vnodes of same physical node</span></span>
+<span class="line">            <span class="tk-kw">if</span> node.zone <span class="tk-kw">not</span> <span class="tk-kw">in</span> seenZones <span class="tk-kw">or</span> <span class="tk-fn">zonesExhausted</span>(ring, seenZones):</span>
+<span class="line">                replicas.<span class="tk-fn">add</span>(node); seenZones.<span class="tk-fn">add</span>(node.zone)</span>
+<span class="line">            seenNodes.<span class="tk-fn">add</span>(node.id)</span>
+<span class="line">        pos <span class="tk-op">=</span> (pos <span class="tk-op">+</span> <span class="tk-num">1</span>) <span class="tk-op">%</span> <span class="tk-fn">len</span>(ring)</span>
+<span class="line">    <span class="tk-kw">return</span> replicas</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">putSession</span>(sid, value):</span>
+<span class="line">    replicas <span class="tk-op">=</span> <span class="tk-fn">preferenceList</span>(localRing, sid, R)</span>
+<span class="line">    version  <span class="tk-op">=</span> <span class="tk-fn">nextVersion</span>(sid)                            <span class="tk-com">// e.g. counter or hybrid logical clock</span></span>
+<span class="line">    acks <span class="tk-op">=</span> <span class="tk-fn">sendToAll</span>(replicas, <span class="tk-fn">Write</span>(sid, value, version, ttl <span class="tk-op">=</span> <span class="tk-num">30m</span>))</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">waitForAcks</span>(acks, W, timeout <span class="tk-op">=</span> <span class="tk-num">20ms</span>):</span>
+<span class="line">        <span class="tk-kw">return</span> OK</span>
+<span class="line">    <span class="tk-kw">for</span> r <span class="tk-kw">in</span> replicas where <span class="tk-kw">not</span> acked: hints.<span class="tk-fn">store</span>(r, <span class="tk-fn">Write</span>(sid, value, version))   <span class="tk-com">// hinted handoff</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">OK_IF</span>(acksReceived <span class="tk-op">&gt;=</span> <span class="tk-num">1</span>) <span class="tk-kw">else</span> ERROR</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getSession</span>(sid):</span>
+<span class="line">    <span class="tk-kw">for</span> r <span class="tk-kw">in</span> <span class="tk-fn">preferenceList</span>(localRing, sid, R):            <span class="tk-com">// first healthy replica wins</span></span>
+<span class="line">        res <span class="tk-op">=</span> r.<span class="tk-fn">get</span>(sid, timeout <span class="tk-op">=</span> <span class="tk-num">10ms</span>)</span>
+<span class="line">        <span class="tk-kw">if</span> res.ok:</span>
+<span class="line">            <span class="tk-fn">asyncReadRepairIfStale</span>(sid, res)</span>
+<span class="line">            <span class="tk-kw">return</span> res.value</span>
+<span class="line">    <span class="tk-kw">return</span> NOT_FOUND</span>
+<span class="line"></span>
+<span class="line"><span class="tk-fn">onGossip</span>(update):</span>
+<span class="line">    localRing <span class="tk-op">=</span> <span class="tk-fn">buildRing</span>(<span class="tk-fn">mergeMembership</span>(localMembership, update))   <span class="tk-com">// pure local computation</span></span>
+<span class="line">    <span class="tk-kw">for</span> range <span class="tk-kw">in</span> <span class="tk-fn">rangesWhoseReplicaSetChanged</span>(oldRing, localRing):</span>
+<span class="line">        backgroundRepair.<span class="tk-fn">schedule</span>(range, rateLimit <span class="tk-op">=</span> <span class="tk-lit">true</span>)           <span class="tk-com">// re-replicate without hurting p99</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Replicas on the same physical node or zone:</strong> Naively taking the next R ring positions can pick several vnodes of one machine. Skip duplicates and spread across zones.</li>
+          <li><strong>Using <code>hash(key) % N</code> anywhere in the path:</strong> One stray modulo remaps nearly every key on any membership change.</li>
+          <li><strong>Unthrottled repair streaming:</strong> Re-replication competes with live traffic and spikes p99. Rate-limit and prioritize foreground reads.</li>
+          <li><strong>Assuming gossip is instant:</strong> Stale views are normal. Handle redirects or forwarding, and include a membership epoch or version.</li>
+          <li><strong>Declaring nodes dead too eagerly:</strong> Flapping nodes cause repeated range movement. Use a failure detector with hold-down time before re-replicating.</li>
+          <li><strong>Assuming vnodes fix hot keys:</strong> They balance range ownership, not request skew. Monitor per-key traffic and add bounded-load or L1 caching where needed.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Production systems rarely use consistent hashing in isolation. They combine it with <strong>replication, failure detection, and operational guardrails</strong>. A typical build-out looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define the loss budget:</strong> Is losing a session acceptable (forced re-login) or not? This decides R, W, and whether a persistent fallback store is needed.</li>
+          <li><strong>Step 1 — Ring with vnodes:</strong> Start with 64–256 vnodes per node, a uniform 64-bit hash, and weights for different instance sizes.</li>
+          <li><strong>Step 2 — Replication and placement:</strong> R=3 across zones, with quorum or primary-replica semantics chosen explicitly.</li>
+          <li><strong>Step 3 — Membership:</strong> Gossip with a failure detector (for example phi-accrual) and a hold-down timer before re-replicating.</li>
+          <li><strong>Step 4 — Repair and handoff:</strong> Hinted handoff for short outages, throttled anti-entropy for long ones.</li>
+          <li><strong>Step 5 — Hot-key defenses:</strong> Bounded-load hashing or client-side L1 caching if a few sessions or keys dominate.</li>
+        </ul>
+        <p>Treat topology change as a normal, continuous event, not an incident.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Choose <strong>consistent hashing with virtual nodes, R>1 replicas on distinct physical nodes, and decentralized gossip membership</strong>. It moves the fewest keys on churn, spreads load evenly, survives node loss, and avoids a central metadata choke point. Pair it with versioned values, throttled repair, and zone-aware placement.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

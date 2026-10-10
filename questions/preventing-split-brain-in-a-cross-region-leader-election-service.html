@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preventing Split-Brain in a Cross-Region Leader Election Service — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">02 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Leader Election</span>
+      <span class="tag tag--green">Split-Brain</span>
+      <span class="tag tag--amber">Consensus</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Preventing Split-Brain in a Cross-Region Leader Election Service</h1>
+      <p class="q-scenario"><strong>Lina</strong>, a lead backend engineer, is building a <strong>global coordination service</strong> that manages <strong>leader leases</strong> for highly active metadata such as feature flags and cluster membership. It must provide <strong>low-latency elections and smooth failovers</strong> across <strong>two main regions</strong>. During a <strong>network partition</strong> it must prevent <strong>split-brain</strong> (two nodes acting as leader at once) while staying <strong>highly available for users in the primary region</strong>. With freedom to change the replication and election design, which strategy should she use to avoid split-brain while optimizing for <em>availability and latency</em>?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Deploy a consensus algorithm (like Paxos or Raft) with voting nodes distributed across both regions, requiring a majority quorum across data centers. Leaders are only elected when a majority is accessible, ensuring strict consistency and eliminating split-brain, though this introduces higher election latency and potential downtime during inter-region network degradation.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Assign a local master to each region to accept write operations, utilizing asynchronous cross-region replication. Detect conflicts after the fact and resolve them using last-write-wins or CRDTs. This approach ensures maximum local availability and minimal latency, but introduces the risk of data divergence and complicated conflict resolution following a partition.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Implement a lease-based leader election system utilizing short, renewable leases along with fencing tokens and a compact, fast quorum of controller nodes situated in the preferred region. Use an external, monotonically increasing tie-breaker (such as a sequence service or a simple atomic store) for definitive arbitration during edge cases, combining health checks with fencing to guarantee an old leader cannot operate after losing its lease.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Offload leader arbitration entirely to a managed third-party centralized coordinator that synchronously dictates the leader. Mandate global synchronous replication for all writes; if the central coordinator becomes unreachable, force the cluster into a read-only state to prevent split-brain. This concentrates correctness logic but potentially increases latency and introduces a single point of failure.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Fenced Leases on a Local Quorum</h3>
+        <p>Split-brain is only harmful if two nodes can both <strong>act</strong> as leader, so safety has to be enforced at the <strong>resources the leader writes to</strong>, not just at election time. A short renewable <strong>lease</strong> granted by a small, linearizable quorum in the primary region gives local-latency elections and renewals. A monotonically increasing <strong>fencing token (epoch)</strong> checked by every protected resource makes a deposed leader harmless even if it was paused, partitioned or has a skewed clock. Consensus stays inside one region instead of spanning a WAN, which is what delivers both low latency and primary-region availability. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Local-latency elections and renewals:</strong> With the controller quorum in the preferred region, lease grants and renewals take a few milliseconds, and failover time is roughly the lease TTL (seconds) rather than a WAN election timeout.</li>
+          <li><strong>Safety that does not depend on clocks or pauses:</strong> A stale leader that wakes up after a garbage-collection pause or VM stall still carries an old epoch, and the resource rejects it. Leases alone cannot give this guarantee, because a leader can believe it still holds a lease it has already lost.</li>
+          <li><strong>Primary region stays available during a partition:</strong> The majority of controllers is local, so the primary side keeps electing and renewing. The other region cannot assemble a quorum, so it cannot promote its own leader.</li>
+          <li><strong>Definitive arbitration for edge cases:</strong> A linearizable, monotonically increasing epoch source gives every election a unique number, so simultaneous candidates and ambiguous health checks are settled by comparing epochs rather than by timing.</li>
+          <li><strong>Why not a quorum that spans both regions (option A)?</strong> Every election and commit then pays the WAN round trip, and with only two regions no split gives both sides fault tolerance. Option C keeps consensus local and gets split-brain protection from fencing at the resource.</li>
+        </ul>
+        <p>A well-designed service includes <strong>leases renewed at about a third of the TTL</strong>, <strong>epoch fencing enforced on every write path</strong>, <strong>self-fencing leaders</strong>, a <strong>replicated linearizable arbiter</strong>, a <strong>written plan for losing the primary region</strong> (witness or manual promotion), and <strong>chaos tests</strong> that pause leaders, partition regions and skew clocks. Track leader changes per hour, lease renewal latency, time without a leader and fenced-write rejections. A non-zero rejection count means the fence is saving you. If flaps or rejections rise, tune TTLs and health checks before changing topology.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🗳️</div>
+          <h4>A — WAN-Spanning Paxos or Raft</h4>
+          <p>This is safe by construction, but every election and commit crosses regions, and elections can time out when the inter-region link degrades. With two regions, any voter split leaves one side as a single point of failure: lose it and the cluster halts. <strong>Caveat:</strong> with three regions, or a small witness in a third site, a WAN-spanning consensus group is a strong and simple choice. Option C also uses consensus internally, just kept local.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧬</div>
+          <h4>B — Local Masters with Last-Write-Wins or CRDTs</h4>
+          <p>This is split-brain by design: both regions accept writes as leader during a partition. Last-write-wins silently discards updates and depends on clocks, and CRDTs can merge data such as counters or sets but cannot merge the idea of a single leader. It suits data that is meant to be writable everywhere, not leadership or lease state.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🏢</div>
+          <h4>D — Third-Party Central Coordinator with Global Sync Replication</h4>
+          <p>A single external coordinator is a single point of failure and a black box for correctness, global synchronous replication adds WAN latency to every write, and forcing read-only mode whenever the coordinator is unreachable turns a coordinator problem into an outage for the primary region too. Outsourcing arbitration also does not remove the need for fencing at the resources.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Fenced Leases on a Local Quorum ✓</h4>
+          <p>Implement a lease-based leader election system utilizing short, renewable leases along with fencing tokens and a compact, fast quorum of controller nodes situated in the preferred region. Use an exter</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Split-Brain Safety</th><th>Election and Failover Latency</th><th>Availability (Primary Region)</th><th>Availability (Secondary Region)</th><th>Operational Complexity</th><th>Consistency</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — WAN-Spanning Consensus</td><td>Strongest ✅</td><td>Higher ⚠ (WAN round trips)</td><td>Medium ⚠ (needs majority)</td><td>Medium ⚠</td><td>Medium ⚠</td><td>Strong ✅ (linearizable)</td></tr>
+            <tr><td class="tt-option">B — Local Masters + LWW/CRDT</td><td>None ❌ (by design)</td><td>Lowest ✅</td><td>Highest ✅</td><td>Highest ✅</td><td>High ❌ (conflict resolution)</td><td>Weak ❌ (divergence)</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Fenced Leases on Local Quorum ✓</td><td>Strong ✅ (if fenced everywhere)</td><td>Low ✅</td><td>High ✅</td><td>Limited ⚠ (stale or read-only)</td><td>Medium ⚠</td><td>Strong ✅ (epoch-ordered)</td></tr>
+            <tr><td class="tt-option">D — Central Coordinator</td><td>Strong ⚠ (depends on coordinator)</td><td>High ❌ (global sync)</td><td>Low ❌ (single point of failure)</td><td>Low ❌</td><td>Medium ⚠</td><td>Strong ⚠ (costly)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — WAN-Spanning Consensus</h4>
+          <p>Three or more regions (or a cheap third-site witness), strict linearizability, moderate write rates, and tolerance for WAN round trips.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Local Masters + LWW/CRDT</h4>
+          <p>Data (not leadership) that can merge, such as counters, sets or presence, and must stay writable in every region during partitions.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Fenced Leases on Local Quorum</h4>
+          <p>Latency-sensitive coordination with a clearly preferred region, a need for primary-region availability, and acceptance of stale or read-only service in the secondary region during partitions.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Central Coordinator</h4>
+          <p>Small systems already standardized on a managed lock or coordination service where global write latency is not critical.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Fencing Token Rejecting a Deposed Leader</h3>
+        <p>Node 1 loses its lease while paused. Node 2 is elected with a higher epoch, and the protected resource rejects Node 1's late write:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant N1 as Node 1 (old leader)
+    participant Q as Controller Quorum (primary region)
+    participant N2 as Node 2 (candidate)
+    participant S as Protected Resource
+    N1-&gt;&gt;Q: Acquire lease
+    Q--&gt;&gt;N1: Granted with epoch 41
+    N1-&gt;&gt;S: Write with epoch 41
+    S--&gt;&gt;N1: Accepted, max epoch seen is 41
+    Note over N1: Pause from GC or network stall, lease expires
+    N2-&gt;&gt;Q: Acquire lease
+    Q--&gt;&gt;N2: Granted with epoch 42
+    N2-&gt;&gt;S: Write with epoch 42
+    S--&gt;&gt;N2: Accepted, max epoch seen is 42
+    N1-&gt;&gt;S: Write with epoch 41 (resumes, unaware)
+    S--&gt;&gt;N1: Rejected, stale epoch">sequenceDiagram
+    participant N1 as Node 1 (old leader)
+    participant Q as Controller Quorum (primary region)
+    participant N2 as Node 2 (candidate)
+    participant S as Protected Resource
+    N1-&gt;&gt;Q: Acquire lease
+    Q--&gt;&gt;N1: Granted with epoch 41
+    N1-&gt;&gt;S: Write with epoch 41
+    S--&gt;&gt;N1: Accepted, max epoch seen is 41
+    Note over N1: Pause from GC or network stall, lease expires
+    N2-&gt;&gt;Q: Acquire lease
+    Q--&gt;&gt;N2: Granted with epoch 42
+    N2-&gt;&gt;S: Write with epoch 42
+    S--&gt;&gt;N2: Accepted, max epoch seen is 42
+    N1-&gt;&gt;S: Write with epoch 41 (resumes, unaware)
+    S--&gt;&gt;N1: Rejected, stale epoch</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Lease Acquisition, Self-Fencing Leader and Fenced Writes</h3>
+        <p>A candidate obtains a lease and epoch from the quorum, acts only until its local deadline, and every protected resource rejects stale epochs:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">TTL <span class="tk-op">=</span> <span class="tk-num">10s</span></span>
+<span class="line">RENEW_EVERY <span class="tk-op">=</span> TTL <span class="tk-op">/</span> <span class="tk-num">3</span></span>
+<span class="line">DRIFT_MARGIN <span class="tk-op">=</span> <span class="tk-num">500ms</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Candidate / leader ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">runElection</span>(node):</span>
+<span class="line">    <span class="tk-kw">loop</span> forever:</span>
+<span class="line">        started <span class="tk-op">=</span> <span class="tk-fn">monotonicNow</span>()                              <span class="tk-com">// local monotonic clock, not wall clock</span></span>
+<span class="line">        grant <span class="tk-op">=</span> quorum.<span class="tk-fn">acquireLease</span>(<span class="tk-str">&#x27;leader/feature-flags&#x27;</span>, owner <span class="tk-op">=</span> node.id, ttl <span class="tk-op">=</span> TTL)   <span class="tk-com">// linearizable compare-and-set</span></span>
+<span class="line">        <span class="tk-kw">if</span> grant.ok:</span>
+<span class="line">            epoch <span class="tk-op">=</span> grant.epoch                               <span class="tk-com">// monotonically increasing: this is the fencing token</span></span>
+<span class="line">            deadline <span class="tk-op">=</span> started <span class="tk-op">+</span> TTL <span class="tk-op">-</span> DRIFT_MARGIN           <span class="tk-com">// measured from request START</span></span>
+<span class="line">            <span class="tk-fn">leaderLoop</span>(node, epoch, deadline)</span>
+<span class="line">        <span class="tk-fn">sleep</span>(<span class="tk-fn">jitter</span>(<span class="tk-num">1s</span>, <span class="tk-num">3s</span>))</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">leaderLoop</span>(node, epoch, deadline):</span>
+<span class="line">    lastRenew <span class="tk-op">=</span> <span class="tk-fn">monotonicNow</span>()</span>
+<span class="line">    <span class="tk-kw">while</span> <span class="tk-fn">monotonicNow</span>() <span class="tk-op">&lt;</span> deadline:                          <span class="tk-com">// self-fence: stop acting when the lease may have lapsed</span></span>
+<span class="line">        <span class="tk-fn">doLeaderWork</span>(epoch)                                   <span class="tk-com">// every external write carries the epoch</span></span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-fn">monotonicNow</span>() <span class="tk-op">-</span> lastRenew <span class="tk-op">&gt;=</span> RENEW_EVERY:</span>
+<span class="line">            started <span class="tk-op">=</span> <span class="tk-fn">monotonicNow</span>()</span>
+<span class="line">            r <span class="tk-op">=</span> quorum.<span class="tk-fn">renewLease</span>(<span class="tk-str">&#x27;leader/feature-flags&#x27;</span>, owner <span class="tk-op">=</span> node.id, epoch <span class="tk-op">=</span> epoch)</span>
+<span class="line">            <span class="tk-kw">if</span> <span class="tk-kw">not</span> r.ok: <span class="tk-kw">return</span>                               <span class="tk-com">// lease lost: step down immediately</span></span>
+<span class="line">            deadline <span class="tk-op">=</span> started <span class="tk-op">+</span> TTL <span class="tk-op">-</span> DRIFT_MARGIN</span>
+<span class="line">            lastRenew <span class="tk-op">=</span> started</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Protected resource (storage, metadata store, downstream gateway) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">write</span>(scope, key, value, epoch):</span>
+<span class="line">    atomically:                                               <span class="tk-com">// single conditional write or transaction</span></span>
+<span class="line">        <span class="tk-kw">if</span> epoch <span class="tk-op">&lt;</span> store.<span class="tk-fn">maxEpoch</span>(scope): <span class="tk-kw">return</span> <span class="tk-fn">reject</span>(STALE_EPOCH)</span>
+<span class="line">        store.<span class="tk-fn">setMaxEpoch</span>(scope, <span class="tk-fn">max</span>(store.<span class="tk-fn">maxEpoch</span>(scope), epoch))</span>
+<span class="line">        store.<span class="tk-fn">put</span>(key, value)</span>
+<span class="line">    metrics.<span class="tk-fn">count</span>(<span class="tk-str">&#x27;fenced_write_total&#x27;</span>, accepted <span class="tk-op">=</span> <span class="tk-lit">true</span>)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Client ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">callLeader</span>(req):</span>
+<span class="line">    resp <span class="tk-op">=</span> <span class="tk-fn">send</span>(currentLeader, req)</span>
+<span class="line">    <span class="tk-kw">if</span> resp.status <span class="tk-op">==</span> NOT_LEADER <span class="tk-kw">or</span> resp.status <span class="tk-op">==</span> STALE_EPOCH:</span>
+<span class="line">        currentLeader <span class="tk-op">=</span> <span class="tk-fn">resolveLeaderFromQuorum</span>()             <span class="tk-com">// never cache a leader forever</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">retryOnce</span>(req)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Leases without fencing:</strong> A paused or partitioned old leader can keep writing after its lease expires. Every protected resource must reject stale epochs.</li>
+          <li><strong>Trusting wall-clock time:</strong> Clocks jump and drift. Measure local lease deadlines with a monotonic clock, count from the request start, subtract a drift margin, and let the quorum, not timestamps, order epochs.</li>
+          <li><strong>Using a single-node lock or an unfenced lock service for safety-critical leadership:</strong> A lock without a fencing token cannot protect against pauses. Use a consensus-backed store and propagate its epoch.</li>
+          <li><strong>Mis-tuned TTLs:</strong> Too short causes flapping and false failovers, too long slows recovery. Renew at about a third of the TTL and tune from observed pause and latency data.</li>
+          <li><strong>Two regions with symmetric votes and no tie-breaker:</strong> Either both sides stall, or someone forces a promotion by hand and creates two leaders. Add a witness or declare a preferred region with an explicit failover procedure.</li>
+          <li><strong>Clients that cache the leader forever:</strong> They keep talking to a deposed leader. Return the epoch in responses, redirect on rejection, and re-resolve on error.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams building coordination services <strong>define the failure model first</strong> and then layer protections so that safety never depends on timing alone:</p>
+        <ul>
+          <li><strong>Step 0 — Define what 'leader' protects:</strong> List the resources a leader writes to, the failure model (pauses, partitions, clock skew) and the required behavior in each region during a partition.</li>
+          <li><strong>Step 1 — Choose the arbiter:</strong> A managed or self-run etcd, ZooKeeper or Consul group of three or five nodes across availability zones in the primary region, plus a witness plan for the second region.</li>
+          <li><strong>Step 2 — Implement leases with epochs:</strong> A TTL of about three renewal intervals, jittered retries, and a monotonically increasing epoch returned with every grant.</li>
+          <li><strong>Step 3 — Enforce fencing everywhere:</strong> Every write path compares the epoch and rejects older ones, and leaders self-fence on a local monotonic deadline.</li>
+          <li><strong>Step 4 — Write the region-loss runbook:</strong> Decide between witness-based automatic failover and manual promotion, and rehearse it.</li>
+          <li><strong>Step 5 — Observe and break it on purpose:</strong> Dashboards for leader churn and renewal latency, and Jepsen-style tests with pauses, partitions and clock skew.</li>
+        </ul>
+        <p>Use consensus to hand out unique epochs, and use fencing to make an old leader harmless.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Split-brain is prevented by making a deposed leader <strong>powerless</strong>, not by hoping it notices in time. Grant short leases from a small, linearizable quorum in the primary region, attach a <strong>monotonic fencing epoch</strong> that every protected resource enforces, and have leaders stop themselves when their lease deadline passes. Plan explicitly for loss of the primary region with a witness or a manual promotion. If you have three regions available, a WAN-spanning consensus group is a simpler and equally safe alternative.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

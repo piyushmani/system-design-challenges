@@ -38,11 +38,11 @@
 
     <div class="stats-bar">
       <div class="stat">
-        <div class="stat-num" id="visibleCount">17</div>
+        <div class="stat-num" id="visibleCount">31</div>
         <div class="stat-label">Challenges</div>
       </div>
       <div class="stat">
-        <div class="stat-num">49</div>
+        <div class="stat-num">50</div>
         <div class="stat-label">Topics</div>
       </div>
     </div>
@@ -54,224 +54,365 @@
     </div>
 
     <div class="filter-bar">
-      <span class="filter-tag" data-tag="Architecture Decisions">Architecture Decisions</span>
-      <span class="filter-tag" data-tag="Authentication">Authentication</span>
-      <span class="filter-tag" data-tag="CAP Theorem">CAP Theorem</span>
-      <span class="filter-tag" data-tag="CI/CD">CI/CD</span>
-      <span class="filter-tag" data-tag="CQRS">CQRS</span>
+      <span class="filter-tag" data-tag="Architecture">Architecture</span>
       <span class="filter-tag" data-tag="CRDTs">CRDTs</span>
-      <span class="filter-tag" data-tag="Chaos Engineering">Chaos Engineering</span>
+      <span class="filter-tag" data-tag="Checkout">Checkout</span>
+      <span class="filter-tag" data-tag="Collaborative Systems">Collaborative Systems</span>
       <span class="filter-tag" data-tag="Concurrency">Concurrency</span>
       <span class="filter-tag" data-tag="Conflict Resolution">Conflict Resolution</span>
+      <span class="filter-tag" data-tag="Connection Management">Connection Management</span>
+      <span class="filter-tag" data-tag="Consensus">Consensus</span>
       <span class="filter-tag" data-tag="Consistency">Consistency</span>
-      <span class="filter-tag" data-tag="Consistency Models">Consistency Models</span>
-      <span class="filter-tag" data-tag="Data Consistency">Data Consistency</span>
-      <span class="filter-tag" data-tag="Data Replication">Data Replication</span>
-      <span class="filter-tag" data-tag="Database Architecture">Database Architecture</span>
-      <span class="filter-tag" data-tag="Database Locking">Database Locking</span>
+      <span class="filter-tag" data-tag="Consistent Hashing">Consistent Hashing</span>
+      <span class="filter-tag" data-tag="Cost Optimization">Cost Optimization</span>
+      <span class="filter-tag" data-tag="Data Archival">Data Archival</span>
+      <span class="filter-tag" data-tag="Data Tiering">Data Tiering</span>
       <span class="filter-tag" data-tag="Database Migration">Database Migration</span>
-      <span class="filter-tag" data-tag="Database Performance">Database Performance</span>
+      <span class="filter-tag" data-tag="Database Pooling">Database Pooling</span>
+      <span class="filter-tag" data-tag="Databases">Databases</span>
       <span class="filter-tag" data-tag="Deployment">Deployment</span>
-      <span class="filter-tag" data-tag="Disaster Recovery">Disaster Recovery</span>
       <span class="filter-tag" data-tag="Distributed Systems">Distributed Systems</span>
-      <span class="filter-tag" data-tag="E-Commerce Infrastructure">E-Commerce Infrastructure</span>
-      <span class="filter-tag" data-tag="Error Handling">Error Handling</span>
-      <span class="filter-tag" data-tag="Event Sourcing">Event Sourcing</span>
-      <span class="filter-tag" data-tag="Event Streaming">Event Streaming</span>
-      <span class="filter-tag" data-tag="Event-Driven Architecture">Event-Driven Architecture</span>
-      <span class="filter-tag" data-tag="Fault Tolerance">Fault Tolerance</span>
+      <span class="filter-tag" data-tag="Event-Driven">Event-Driven</span>
+      <span class="filter-tag" data-tag="Fanout">Fanout</span>
       <span class="filter-tag" data-tag="Feature Flags">Feature Flags</span>
-      <span class="filter-tag" data-tag="Index-Only Scans">Index-Only Scans</span>
+      <span class="filter-tag" data-tag="Idempotency">Idempotency</span>
+      <span class="filter-tag" data-tag="Infrastructure as Code">Infrastructure as Code</span>
       <span class="filter-tag" data-tag="Latency">Latency</span>
-      <span class="filter-tag" data-tag="Low Latency">Low Latency</span>
-      <span class="filter-tag" data-tag="Message Queues">Message Queues</span>
+      <span class="filter-tag" data-tag="Leader Election">Leader Election</span>
+      <span class="filter-tag" data-tag="Load Balancing">Load Balancing</span>
       <span class="filter-tag" data-tag="Microservices">Microservices</span>
-      <span class="filter-tag" data-tag="Microservices Resilience">Microservices Resilience</span>
+      <span class="filter-tag" data-tag="Microservices Migration">Microservices Migration</span>
       <span class="filter-tag" data-tag="Multi-Region">Multi-Region</span>
-      <span class="filter-tag" data-tag="Multi-Region Architecture">Multi-Region Architecture</span>
-      <span class="filter-tag" data-tag="Performance Trade-offs">Performance Trade-offs</span>
-      <span class="filter-tag" data-tag="Query Optimization">Query Optimization</span>
-      <span class="filter-tag" data-tag="Query Planning">Query Planning</span>
+      <span class="filter-tag" data-tag="Operational Transformation">Operational Transformation</span>
+      <span class="filter-tag" data-tag="Payments">Payments</span>
+      <span class="filter-tag" data-tag="Performance">Performance</span>
+      <span class="filter-tag" data-tag="Platform Engineering">Platform Engineering</span>
+      <span class="filter-tag" data-tag="Production Safety">Production Safety</span>
+      <span class="filter-tag" data-tag="Pub/Sub">Pub/Sub</span>
+      <span class="filter-tag" data-tag="Race Conditions">Race Conditions</span>
       <span class="filter-tag" data-tag="Rate Limiting">Rate Limiting</span>
-      <span class="filter-tag" data-tag="Read Optimization">Read Optimization</span>
-      <span class="filter-tag" data-tag="Read vs Write Scaling">Read vs Write Scaling</span>
+      <span class="filter-tag" data-tag="Read Performance">Read Performance</span>
+      <span class="filter-tag" data-tag="Real-time">Real-time</span>
+      <span class="filter-tag" data-tag="Real-time Processing">Real-time Processing</span>
       <span class="filter-tag" data-tag="Replication">Replication</span>
-      <span class="filter-tag" data-tag="SQL Optimization">SQL Optimization</span>
+      <span class="filter-tag" data-tag="Resilience">Resilience</span>
       <span class="filter-tag" data-tag="Scalability">Scalability</span>
       <span class="filter-tag" data-tag="Security">Security</span>
-      <span class="filter-tag" data-tag="Stream Processing">Stream Processing</span>
-      <span class="filter-tag" data-tag="Subqueries &amp; CTEs">Subqueries &amp; CTEs</span>
-      <span class="filter-tag" data-tag="System Architecture">System Architecture</span>
+      <span class="filter-tag" data-tag="Session Management">Session Management</span>
+      <span class="filter-tag" data-tag="Split-Brain">Split-Brain</span>
+      <span class="filter-tag" data-tag="Storage">Storage</span>
+      <span class="filter-tag" data-tag="Strangler Fig">Strangler Fig</span>
       <span class="filter-tag" data-tag="System Design">System Design</span>
+      <span class="filter-tag" data-tag="Thread Safety">Thread Safety</span>
     </div>
 
-    <div class="problem-grid">
+    <div class="problem-grid" id="problemGrid">
+      <a href="questions/decoupling-checkout-nates-strangler-fig-dilemma.html" class="problem-card"
+         data-title="decoupling checkout: nate&#x27;s strangler fig dilemma"
+         data-tags="strangler fig,microservices,checkout">
+        <span class="card-title">Decoupling Checkout: Nate&#x27;s Strangler Fig Dilemma</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Strangler Fig</span> <span class="tag tag--green">Microservices</span> <span class="tag tag--amber">Checkout</span>
+          <span class="card-date">03 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/noahs-hashing-challenge-keeping-sessions-online-during-node-churn.html" class="problem-card"
+         data-title="noah&#x27;s hashing challenge: keeping sessions online during node churn"
+         data-tags="consistent hashing,session management,load balancing">
+        <span class="card-title">Noah&#x27;s Hashing Challenge: Keeping Sessions Online During Node Churn</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Consistent Hashing</span> <span class="tag tag--green">Session Management</span> <span class="tag tag--amber">Load Balancing</span>
+          <span class="card-date">03 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/rileys-pushpullfanout-dilemma-balancing-scale-and-real-time-delivery.html" class="problem-card"
+         data-title="riley&#x27;s push/pull/fanout dilemma: balancing scale and real-time delivery"
+         data-tags="fanout,pub/sub,real-time processing">
+        <span class="card-title">Riley&#x27;s Push/Pull/Fanout Dilemma: Balancing Scale and Real-Time Delivery</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Fanout</span> <span class="tag tag--green">Pub/Sub</span> <span class="tag tag--amber">Real-time Processing</span>
+          <span class="card-date">03 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/aidens-leader-election-crossroads-balancing-consistency-and-speed.html" class="problem-card"
+         data-title="aiden&#x27;s leader-election crossroads: balancing consistency and speed"
+         data-tags="leader election,consistency,latency">
+        <span class="card-title">Aiden&#x27;s Leader-Election Crossroads: Balancing Consistency and Speed</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Leader Election</span> <span class="tag tag--green">Consistency</span> <span class="tag tag--amber">Latency</span>
+          <span class="card-date">03 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/sofias-iac-architecture-choice-for-a-multi-region-multi-team-platform.html" class="problem-card"
+         data-title="sofia&#x27;s iac architecture choice for a multi-region, multi-team platform"
+         data-tags="infrastructure as code,platform engineering,multi-region">
+        <span class="card-title">Sofia&#x27;s IaC Architecture Choice for a Multi-Region, Multi-Team Platform</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Infrastructure as Code</span> <span class="tag tag--green">Platform Engineering</span> <span class="tag tag--amber">Multi-Region</span>
+          <span class="card-date">03 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/mayas-storage-trade-off-low-latency-reads-vs-cost-effective-long-term-archival.html" class="problem-card"
+         data-title="maya&#x27;s storage trade-off: low-latency reads vs. cost-effective long-term archival"
+         data-tags="storage,read performance,data archival">
+        <span class="card-title">Maya&#x27;s Storage Trade-off: Low-Latency Reads vs. Cost-Effective Long-Term Archival</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Storage</span> <span class="tag tag--green">Read Performance</span> <span class="tag tag--amber">Data Archival</span>
+          <span class="card-date">03 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/arjuns-race-condition-dilemma-selecting-a-thread-safe-architecture.html" class="problem-card"
+         data-title="arjun&#x27;s race condition dilemma: selecting a thread-safe architecture"
+         data-tags="concurrency,race conditions,thread safety">
+        <span class="card-title">Arjun&#x27;s Race Condition Dilemma: Selecting a Thread-Safe Architecture</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Concurrency</span> <span class="tag tag--green">Race Conditions</span> <span class="tag tag--amber">Thread Safety</span>
+          <span class="card-date">03 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/taming-database-connection-storms-from-kubernetes-and-serverless-workloads.html" class="problem-card"
+         data-title="taming database connection storms from kubernetes and serverless workloads"
+         data-tags="database pooling,connection management,scalability">
+        <span class="card-title">Taming Database Connection Storms from Kubernetes and Serverless Workloads</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Database Pooling</span> <span class="tag tag--green">Connection Management</span> <span class="tag tag--amber">Scalability</span>
+          <span class="card-date">02 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/choosing-ot-or-crdts-for-a-global-real-time-collaborative-editor.html" class="problem-card"
+         data-title="choosing ot or crdts for a global real-time collaborative editor"
+         data-tags="crdts,operational transformation,collaborative systems">
+        <span class="card-title">Choosing OT or CRDTs for a Global Real-Time Collaborative Editor</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">CRDTs</span> <span class="tag tag--green">Operational Transformation</span> <span class="tag tag--amber">Collaborative Systems</span>
+          <span class="card-date">02 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/designing-hot-warm-and-cold-storage-tiers-for-a-200k-eventssecond-analytics-pipe.html" class="problem-card"
+         data-title="designing hot, warm and cold storage tiers for a 200k events/second analytics pipeline"
+         data-tags="data tiering,storage,cost optimization">
+        <span class="card-title">Designing Hot, Warm and Cold Storage Tiers for a 200K Events/Second Analytics Pipeline</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Data Tiering</span> <span class="tag tag--green">Storage</span> <span class="tag tag--amber">Cost Optimization</span>
+          <span class="card-date">02 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/preventing-duplicate-charges-in-a-globally-distributed-payment-api.html" class="problem-card"
+         data-title="preventing duplicate charges in a globally distributed payment api"
+         data-tags="idempotency,payments,distributed systems">
+        <span class="card-title">Preventing Duplicate Charges in a Globally Distributed Payment API</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Idempotency</span> <span class="tag tag--green">Payments</span> <span class="tag tag--amber">Distributed Systems</span>
+          <span class="card-date">02 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/safely-extracting-the-orders-domain-from-a-monolith-with-the-strangler-fig-patte.html" class="problem-card"
+         data-title="safely extracting the orders domain from a monolith with the strangler fig pattern"
+         data-tags="strangler fig,microservices migration,architecture">
+        <span class="card-title">Safely Extracting the Orders Domain from a Monolith with the Strangler Fig Pattern</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Strangler Fig</span> <span class="tag tag--green">Microservices Migration</span> <span class="tag tag--amber">Architecture</span>
+          <span class="card-date">02 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/preventing-split-brain-in-a-cross-region-leader-election-service.html" class="problem-card"
+         data-title="preventing split-brain in a cross-region leader election service"
+         data-tags="leader election,split-brain,consensus">
+        <span class="card-title">Preventing Split-Brain in a Cross-Region Leader Election Service</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Leader Election</span> <span class="tag tag--green">Split-Brain</span> <span class="tag tag--amber">Consensus</span>
+          <span class="card-date">02 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/delivering-real-time-feature-flags-without-adding-request-latency.html" class="problem-card"
+         data-title="delivering real-time feature flags without adding request latency"
+         data-tags="feature flags,real-time,production safety">
+        <span class="card-title">Delivering Real-Time Feature Flags Without Adding Request Latency</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Feature Flags</span> <span class="tag tag--green">Real-time</span> <span class="tag tag--amber">Production Safety</span>
+          <span class="card-date">02 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
       <a href="questions/when-a-region-goes-dark-choosing-the-write-strategy-for-chaos-experiments.html" class="problem-card"
          data-title="when a region goes dark: choosing the write strategy for chaos experiments"
-         data-tags="chaos engineering,disaster recovery,data consistency">
+         data-tags="consistency,resilience">
         <span class="card-title">When a region goes dark: choosing the write strategy for chaos experiments</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Chaos Engineering</span> <span class="tag tag--green">Disaster Recovery</span> <span class="tag tag--amber">Data Consistency</span>
+          <span class="tag tag--purple">Consistency</span> <span class="tag tag--green">Resilience</span>
           <span class="card-date">01 MAR 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/ethans-split-second-payment-dilemma-balancing-consistency-and-scale.html" class="problem-card"
          data-title="ethan’s split-second payment dilemma: balancing consistency and scale"
-         data-tags="microservices,scalability,consistency">
+         data-tags="consistency,microservices,scalability">
         <span class="card-title">Ethan’s split-second payment dilemma: balancing consistency and scale</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Microservices</span> <span class="tag tag--green">Scalability</span> <span class="tag tag--amber">Consistency</span>
+          <span class="tag tag--purple">Consistency</span> <span class="tag tag--green">Microservices</span> <span class="tag tag--amber">Scalability</span>
           <span class="card-date">01 MAR 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/riyas-multi-region-trade-off-choosing-between-fast-writes-and-strict-consistency.html" class="problem-card"
          data-title="riya&#x27;s multi-region trade-off: choosing between fast writes and strict consistency"
-         data-tags="replication,latency,multi-region">
+         data-tags="multi-region,performance,replication">
         <span class="card-title">Riya&#x27;s multi-region trade-off: choosing between fast writes and strict consistency</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Replication</span> <span class="tag tag--green">Latency</span> <span class="tag tag--amber">Multi-Region</span>
+          <span class="tag tag--purple">Multi-Region</span> <span class="tag tag--green">Performance</span> <span class="tag tag--amber">Replication</span>
           <span class="card-date">01 MAR 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/sofias-search-for-a-low-latency-revocable-token-strategy-across-1000-microservic.html" class="problem-card"
          data-title="sofia&#x27;s search for a low-latency, revocable token strategy across 1000+ microservices"
-         data-tags="security,authentication,low latency">
+         data-tags="performance,security">
         <span class="card-title">Sofia&#x27;s search for a low-latency, revocable token strategy across 1000+ microservices</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Security</span> <span class="tag tag--green">Authentication</span> <span class="tag tag--amber">Low Latency</span>
+          <span class="tag tag--purple">Performance</span> <span class="tag tag--green">Security</span>
           <span class="card-date">01 MAR 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/avoiding-oversells-under-high-contention-which-concurrency-pattern-wins.html" class="problem-card"
          data-title="avoiding oversells under high contention: which concurrency pattern wins?"
-         data-tags="concurrency,rate limiting,database locking">
+         data-tags="concurrency,rate limiting">
         <span class="card-title">Avoiding oversells under high contention: which concurrency pattern wins?</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Concurrency</span> <span class="tag tag--green">Rate Limiting</span> <span class="tag tag--amber">Database Locking</span>
+          <span class="tag tag--purple">Concurrency</span> <span class="tag tag--green">Rate Limiting</span>
           <span class="card-date">01 MAR 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/projecting-events-at-scale-which-pattern-should-ravi-choose.html" class="problem-card"
          data-title="projecting events at scale: which pattern should ravi choose?"
-         data-tags="event sourcing,cqrs,scalability">
+         data-tags="event-driven,scalability">
         <span class="card-title">Projecting events at scale: which pattern should Ravi choose?</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Event Sourcing</span> <span class="tag tag--green">CQRS</span> <span class="tag tag--amber">Scalability</span>
+          <span class="tag tag--purple">Event-Driven</span> <span class="tag tag--green">Scalability</span>
           <span class="card-date">01 MAR 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/mayas-rollout-how-can-you-safely-deploy-a-risky-backend-change.html" class="problem-card"
          data-title="maya&#x27;s rollout: how can you safely deploy a risky backend change?"
-         data-tags="deployment,ci/cd,database migration">
+         data-tags="database migration,deployment">
         <span class="card-title">Maya&#x27;s rollout: how can you safely deploy a risky backend change?</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Deployment</span> <span class="tag tag--green">CI/CD</span> <span class="tag tag--amber">Database Migration</span>
+          <span class="tag tag--purple">Database Migration</span> <span class="tag tag--green">Deployment</span>
           <span class="card-date">01 MAR 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/building-resilient-microservices-the-error-handling-architecture-decision.html" class="problem-card"
          data-title="building resilient microservices: the error handling architecture decision"
-         data-tags="error handling,microservices resilience,system architecture,fault tolerance">
+         data-tags="microservices,resilience,system design">
         <span class="card-title">Building Resilient Microservices: The Error Handling Architecture Decision</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Error Handling</span> <span class="tag tag--green">Microservices Resilience</span> <span class="tag tag--amber">System Architecture</span>
+          <span class="tag tag--purple">Microservices</span> <span class="tag tag--green">Resilience</span> <span class="tag tag--amber">System Design</span>
           <span class="card-date">24 FEB 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/designing-a-low-latency-event-pipeline-for-real-time-recommendations.html" class="problem-card"
          data-title="designing a low-latency event pipeline for real-time recommendations"
-         data-tags="event-driven architecture,stream processing,scalability">
+         data-tags="event-driven,scalability">
         <span class="card-title">Designing a Low-Latency Event Pipeline for Real-Time Recommendations</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Event-Driven Architecture</span> <span class="tag tag--green">Stream Processing</span> <span class="tag tag--amber">Scalability</span>
+          <span class="tag tag--purple">Event-Driven</span> <span class="tag tag--green">Scalability</span>
           <span class="card-date">24 FEB 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/designing-a-feature-flag-system-for-fast-evaluation-and-quick-propagation.html" class="problem-card"
          data-title="designing a feature flag system for fast evaluation and quick propagation"
-         data-tags="feature flags,system design,low latency">
+         data-tags="deployment,performance,system design">
         <span class="card-title">Designing a Feature Flag System for Fast Evaluation and Quick Propagation</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Feature Flags</span> <span class="tag tag--green">System Design</span> <span class="tag tag--amber">Low Latency</span>
+          <span class="tag tag--purple">Deployment</span> <span class="tag tag--green">Performance</span> <span class="tag tag--amber">System Design</span>
           <span class="card-date">24 FEB 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/choosing-between-message-queues-and-event-streams-for-real-time-analytics.html" class="problem-card"
          data-title="choosing between message queues and event streams for real-time analytics"
-         data-tags="message queues,event streaming,architecture decisions">
+         data-tags="event-driven,system design">
         <span class="card-title">Choosing Between Message Queues and Event Streams for Real-Time Analytics</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Message Queues</span> <span class="tag tag--green">Event Streaming</span> <span class="tag tag--amber">Architecture Decisions</span>
+          <span class="tag tag--purple">Event-Driven</span> <span class="tag tag--green">System Design</span>
           <span class="card-date">24 FEB 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/speeding-up-complex-sql-built-on-subqueries-and-ctes.html" class="problem-card"
          data-title="speeding up complex sql built on subqueries and ctes"
-         data-tags="sql optimization,subqueries &amp; ctes,query planning">
+         data-tags="databases">
         <span class="card-title">Speeding Up Complex SQL Built on Subqueries and CTEs</span>
         <div class="card-tags">
-          <span class="tag tag--purple">SQL Optimization</span> <span class="tag tag--green">Subqueries &amp; CTEs</span> <span class="tag tag--amber">Query Planning</span>
+          <span class="tag tag--purple">Databases</span>
           <span class="card-date">24 FEB 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/cutting-disk-io-when-index-only-scans-arent-enough.html" class="problem-card"
          data-title="cutting disk i/o when index-only scans aren&#x27;t enough"
-         data-tags="index-only scans,database performance,read optimization">
+         data-tags="databases">
         <span class="card-title">Cutting Disk I/O When Index-Only Scans Aren&#x27;t Enough</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Index-Only Scans</span> <span class="tag tag--green">Database Performance</span> <span class="tag tag--amber">Read Optimization</span>
+          <span class="tag tag--purple">Databases</span>
           <span class="card-date">24 FEB 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/balancing-read-and-write-throughput-in-a-dual-traffic-pattern-platform.html" class="problem-card"
          data-title="balancing read and write throughput in a dual-traffic-pattern platform"
-         data-tags="read vs write scaling,distributed systems,database architecture,performance trade-offs">
+         data-tags="databases,distributed systems,performance,scalability">
         <span class="card-title">Balancing Read and Write Throughput in a Dual-Traffic-Pattern Platform</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Read vs Write Scaling</span> <span class="tag tag--green">Distributed Systems</span> <span class="tag tag--amber">Database Architecture</span>
+          <span class="tag tag--purple">Databases</span> <span class="tag tag--green">Distributed Systems</span> <span class="tag tag--amber">Performance</span>
           <span class="card-date">23 FEB 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/multi-region-data-replication-for-inventory-systems-under-consistency-pressure.html" class="problem-card"
          data-title="multi-region data replication for inventory systems under consistency pressure"
-         data-tags="data replication,consistency models,multi-region architecture,e-commerce infrastructure">
+         data-tags="consistency,multi-region,replication,system design">
         <span class="card-title">Multi-Region Data Replication for Inventory Systems Under Consistency Pressure</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Data Replication</span> <span class="tag tag--green">Consistency Models</span> <span class="tag tag--amber">Multi-Region Architecture</span>
+          <span class="tag tag--purple">Consistency</span> <span class="tag tag--green">Multi-Region</span> <span class="tag tag--amber">Replication</span>
           <span class="card-date">22 FEB 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/navigating-the-cap-trade-off-in-real-time-distributed-messaging.html" class="problem-card"
          data-title="navigating the cap trade-off in real-time distributed messaging"
-         data-tags="cap theorem,distributed systems,system architecture,conflict resolution,crdts">
+         data-tags="conflict resolution,distributed systems,system design">
         <span class="card-title">Navigating the CAP Trade-Off in Real-Time Distributed Messaging</span>
         <div class="card-tags">
-          <span class="tag tag--purple">CAP Theorem</span> <span class="tag tag--green">Distributed Systems</span> <span class="tag tag--amber">System Architecture</span>
+          <span class="tag tag--purple">Conflict Resolution</span> <span class="tag tag--green">Distributed Systems</span> <span class="tag tag--amber">System Design</span>
           <span class="card-date">21 FEB 2026</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
       <a href="questions/reducing-latency-in-database-heavy-applications-under-load.html" class="problem-card"
          data-title="reducing latency in database-heavy applications under load"
-         data-tags="database performance,scalability,query optimization">
+         data-tags="databases,scalability">
         <span class="card-title">Reducing Latency in Database-Heavy Applications Under Load</span>
         <div class="card-tags">
-          <span class="tag tag--purple">Database Performance</span> <span class="tag tag--green">Scalability</span> <span class="tag tag--amber">Query Optimization</span>
+          <span class="tag tag--purple">Databases</span> <span class="tag tag--green">Scalability</span>
           <span class="card-date">20 FEB 2026</span>
         </div>
         <span class="card-arrow">→</span>
@@ -282,7 +423,8 @@
         <p>No challenges match your search. Try a different keyword.</p>
       </div>
     </div>
-
+    
+    <div class="pagination" id="pagination"></div>
     <footer class="footer">
       Made with ☕ · System Design Challenges
     </footer>

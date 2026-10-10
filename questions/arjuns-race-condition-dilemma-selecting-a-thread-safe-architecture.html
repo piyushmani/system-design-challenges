@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arjun&#x27;s Race Condition Dilemma: Selecting a Thread-Safe Architecture — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">03 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Concurrency</span>
+      <span class="tag tag--green">Race Conditions</span>
+      <span class="tag tag--amber">Thread Safety</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Arjun&#x27;s Race Condition Dilemma: Selecting a Thread-Safe Architecture</h1>
+      <p class="q-scenario"><strong>Arjun</strong> is building a <strong>high-throughput order-processing service</strong>. One order can update a user's <strong>wallet balance</strong> and <strong>inventory counts</strong>. Requests arrive via <strong>many application servers</strong>, so <strong>concurrent requests for the same user</strong> are possible. He needs an architecture that is <strong>thread-safe</strong> (no overselling, no lost updates), keeps <strong>latency low</strong>, <strong>scales to thousands of operations per second</strong>, and stays <strong>resilient to node failures</strong>. Which design strategy should he adopt?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Secure updates within each application server using in-process mutexes. To resolve any resulting conflicts, run background reconciliation jobs periodically to synchronize state across the various instances.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Enclose every update operation within a distributed lock, such as Redis RedLock, ensuring that only a single process can alter a user&#x27;s state at any given moment. The lock is then released immediately following the operation.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Use consistent hashing to partition users, directing all requests for a specific user to one dedicated worker or shard, following a single-writer-per-user or actor model. Maintain a durable command queue or persist events for each shard to facilitate recovery, and replicate the state asynchronously to support read operations.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Transmit all update requests directly to a centralized SQL database. Utilize serializable transactions to guarantee that the database itself enforces correctness and handles concurrent updates originating from all application servers.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Single-Writer-per-User (Actor/Shard) with a Durable Command Log</h3>
+        <p>A race condition is concurrent read-modify-write on shared mutable state. There are three ways to remove it: <strong>serialize with locks</strong> (options A and B), <strong>let the database arbitrate</strong> (option D), or <strong>avoid concurrency by construction</strong> by routing every operation on an entity to a single owner (option C). The third approach takes contention off the hot path: no lock round trips, no abort-and-retry loops, strict per-user ordering, and near-linear scaling by adding shards. A durable command log plus replay gives crash recovery, and idempotent command ids make client retries safe. One important detail: per-user serialization protects the <em>wallet</em>, but <strong>inventory is shared across users</strong>, so it needs its own single writer or an atomic conditional update. Here's why C stands out:</p>
+        <ul>
+          <li><strong>Correct by construction:</strong> A single sequential loop per user partition means read-modify-write on that user's wallet cannot interleave with another command for the same user. There is nothing to lock.</li>
+          <li><strong>Low latency, no lock traffic:</strong> State lives in memory (or a local store) at the owner, so a command costs a local log append instead of lock acquire, DB round trips, and lock release. Hot users queue instead of aborting.</li>
+          <li><strong>Horizontal scalability:</strong> Users are independent, so hash partitioning spreads load and capacity grows by adding shards. This is the idea of treating the entity as the unit of consistency and scale.</li>
+          <li><strong>Failure resilience:</strong> Commands are made durable before they are applied. A new owner loads a snapshot and replays the log tail to rebuild state, and replicas serve reads.</li>
+          <li><strong>Safe retries:</strong> Commands carry a request id and the owner de-duplicates, so a client or router retry after a timeout cannot double-debit.</li>
+          <li><strong>Safe ownership changes:</strong> Shard ownership carries an epoch (fencing token). A stale owner that comes back cannot append to the log or write state.</li>
+        </ul>
+        <p>Make every command idempotent, snapshot periodically so recovery is quick, bound the queue per partition with backpressure, and watch per-shard queue depth, replay time, ownership churn, and p99 command latency. Prove it with a concurrency test: <strong>1,000 parallel debit-and-decrement commands against one user and one scarce SKU must never produce a negative balance or negative stock</strong>.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔒</div>
+          <h4>A — In-Process Mutexes + Reconciliation</h4>
+          <p>A mutex only protects threads inside one process. Two servers can both read a balance of 100 and both write 70, producing a lost update, and a periodic reconciliation job cannot un-oversell an item that has already been shipped or un-charge a card. Local locks are the right tool for protecting in-memory data structures, not cross-node business state.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🗝️</div>
+          <h4>B — Distributed Lock (e.g., Redis RedLock) per Update</h4>
+          <p>Every update pays lock acquire and release round trips, and the lock service becomes a hot dependency. Safety rests on timing assumptions: if a lock holder pauses (GC, VM stall) and its TTL expires, a second client enters and both write, unless the storage layer rejects stale holders using a <strong>fencing token</strong>, which RedLock does not provide. Whether RedLock is safe has been publicly debated, but the practical guidance is that such locks suit efficiency use cases, not correctness. A crashed holder also blocks that user until the TTL expires.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🏦</div>
+          <h4>D — Centralized SQL with Serializable Transactions</h4>
+          <p>This is correct and often the simplest option: the database enforces invariants, handles multi-row atomicity (wallet plus inventory), and manages recovery. It ranks below C <em>here</em> because all traffic funnels to one primary (vertical scaling ceiling and a failover window), contended rows cause serialization failures that need retry loops (for example SQLSTATE 40001 in PostgreSQL), lock waits raise latency on hot rows, and cross-region writes pay consensus latency. Thousands of ops/s is within reach of a tuned single primary, so D is a legitimate default when scale and availability needs are moderate.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Single-Writer-per-User (Actor/Shard) with a Durable Command Log ✓</h4>
+          <p>Use consistent hashing to partition users, directing all requests for a specific user to one dedicated worker or shard, following a single-writer-per-user or actor model. Maintain a durable command qu</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Correctness Across Servers</th><th>Latency Under Contention</th><th>Horizontal Scalability</th><th>Resilience to Node Failure</th><th>Cross-Entity Invariants (Inventory)</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — In-Process Mutexes + Reconciliation</td><td>Incorrect ❌</td><td>Low, but wrong ⚠</td><td>High, but wrong ⚠</td><td>Poor (state lost per node) ❌</td><td>No ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Distributed Lock (RedLock)</td><td>Conditional, needs fencing ⚠</td><td>Medium (lock round trips) ⚠</td><td>Medium ⚠</td><td>Medium (TTL waits) ⚠</td><td>Partial ⚠</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Single Writer per User + Log ✓</td><td>Strong per entity ✅</td><td>Low ✅</td><td>High ✅</td><td>High (replay) ✅</td><td>Needs atomic stock update or SKU owner ⚠</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">D — Serializable SQL Transactions</td><td>Strong ✅</td><td>Medium–high (aborts, lock waits) ⚠</td><td>Limited (single primary) ⚠</td><td>Medium (failover window) ⚠</td><td>Strong (multi-row ACID) ✅</td><td>Low ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — In-Process Mutexes + Reconciliation</h4>
+          <p>Protecting in-memory data structures inside one process (caches, counters local to a node). Never for shared business state across servers.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Distributed Lock</h4>
+          <p>Efficiency-only exclusion (avoiding duplicate work), or combined with fencing tokens validated by the storage layer for correctness-sensitive cases.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Single Writer per User + Log</h4>
+          <p>High throughput with hot per-entity contention, strict per-entity ordering, strong availability needs, and a team able to operate shard ownership and replay.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Serializable SQL Transactions</h4>
+          <p>Moderate throughput that fits one primary (or a sharded SQL setup), multi-row invariants, and a preference for the simplest correct design. A strong default.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Command Path: Route, Log, Apply</h3>
+        <p>All commands for a user reach one owner, are made durable, and are applied sequentially. Inventory is reserved atomically at its own owner:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant A as Any App Server
+    participant S as Shard Owner for hash of userId
+    participant LG as Durable Command Log
+    participant INV as Inventory Owner for SKU
+    participant RP as Read Replica
+    C-&gt;&gt;A: Place order (requestId, userId, sku, qty)
+    A-&gt;&gt;S: Route by consistent hash of userId
+    S-&gt;&gt;LG: 1. Append command with ownership epoch
+    LG--&gt;&gt;S: Durable
+    S-&gt;&gt;S: 2. Check wallet in memory, single-threaded per user
+    S-&gt;&gt;INV: 3. Reserve stock (atomic conditional decrement, key = requestId)
+    INV--&gt;&gt;S: Reserved or out of stock
+    S-&gt;&gt;S: 4. Debit wallet and record result by requestId
+    S--&gt;&gt;C: Confirmed
+    S--&gt;&gt;RP: Replicate state asynchronously for reads">sequenceDiagram
+    participant C as Client
+    participant A as Any App Server
+    participant S as Shard Owner for hash of userId
+    participant LG as Durable Command Log
+    participant INV as Inventory Owner for SKU
+    participant RP as Read Replica
+    C-&gt;&gt;A: Place order (requestId, userId, sku, qty)
+    A-&gt;&gt;S: Route by consistent hash of userId
+    S-&gt;&gt;LG: 1. Append command with ownership epoch
+    LG--&gt;&gt;S: Durable
+    S-&gt;&gt;S: 2. Check wallet in memory, single-threaded per user
+    S-&gt;&gt;INV: 3. Reserve stock (atomic conditional decrement, key = requestId)
+    INV--&gt;&gt;S: Reserved or out of stock
+    S-&gt;&gt;S: 4. Debit wallet and record result by requestId
+    S--&gt;&gt;C: Confirmed
+    S--&gt;&gt;RP: Replicate state asynchronously for reads</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Sequential Per-User Command Processing with Idempotency and Replay</h3>
+        <p>Routing by user hash, an idempotent single-writer loop that appends to a durable log before acting, atomic inventory reservation, and deterministic replay on failover:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Router: any app server</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">submitOrder</span>(cmd):                          <span class="tk-com">// cmd = { requestId, userId, sku, qty, price }</span></span>
+<span class="line">    owner <span class="tk-op">=</span> shardMap.<span class="tk-fn">ownerOf</span>(<span class="tk-fn">hash</span>(cmd.userId))      <span class="tk-com">// consistent hashing + ownership epoch</span></span>
+<span class="line">    <span class="tk-kw">return</span> owner.<span class="tk-fn">send</span>(cmd)                          <span class="tk-com">// owner redirects if the map is stale</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Shard owner: ONE sequential loop per user partition</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onCommand</span>(cmd, ownerEpoch):</span>
+<span class="line">    <span class="tk-kw">if</span> processed.<span class="tk-fn">contains</span>(cmd.requestId):</span>
+<span class="line">        <span class="tk-kw">return</span> processed.<span class="tk-fn">get</span>(cmd.requestId)         <span class="tk-com">// idempotent: client retries are safe</span></span>
+<span class="line"></span>
+<span class="line">    log.<span class="tk-fn">append</span>(cmd, epoch <span class="tk-op">=</span> ownerEpoch)             <span class="tk-com">// replicated before we act; rejected if epoch is stale</span></span>
+<span class="line"></span>
+<span class="line">    wallet <span class="tk-op">=</span> state.<span class="tk-fn">wallet</span>(cmd.userId)               <span class="tk-com">// safe: only this loop touches it</span></span>
+<span class="line">    total  <span class="tk-op">=</span> cmd.qty <span class="tk-op">*</span> cmd.price</span>
+<span class="line">    <span class="tk-kw">if</span> wallet.balance <span class="tk-op">&lt;</span> total:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">finish</span>(cmd, REJECT_INSUFFICIENT_FUNDS)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Inventory is shared across users, so serialize it at ITS owner (or in the DB):</span></span>
+<span class="line">    <span class="tk-com">//   UPDATE inventory SET qty = qty - :n WHERE sku = :sku AND qty &gt;= :n   (atomic, conditional)</span></span>
+<span class="line">    reserved <span class="tk-op">=</span> inventory.<span class="tk-fn">reserve</span>(sku <span class="tk-op">=</span> cmd.sku, qty <span class="tk-op">=</span> cmd.qty, key <span class="tk-op">=</span> cmd.requestId)</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> reserved:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">finish</span>(cmd, REJECT_OUT_OF_STOCK)</span>
+<span class="line"></span>
+<span class="line">    wallet.balance <span class="tk-op">-</span><span class="tk-op">=</span> total                         <span class="tk-com">// applied in order, no lost update possible</span></span>
+<span class="line">    events.<span class="tk-fn">append</span>(<span class="tk-fn">OrderPlaced</span>(cmd.requestId, cmd.userId, cmd.sku, cmd.qty))</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">finish</span>(cmd, OK)                          <span class="tk-com">// records processed[requestId] = OK</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Recovery: runs when this node becomes owner of a shard</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onShardAssigned</span>(shardId, newEpoch):</span>
+<span class="line">    state <span class="tk-op">=</span> snapshots.<span class="tk-fn">loadLatest</span>(shardId)</span>
+<span class="line">    <span class="tk-kw">for</span> cmd <span class="tk-kw">in</span> log.<span class="tk-fn">readFrom</span>(shardId, state.offset):</span>
+<span class="line">        <span class="tk-fn">applyDeterministically</span>(cmd)                 <span class="tk-com">// replay; inventory.reserve is idempotent by key</span></span>
+<span class="line">    ownership.<span class="tk-fn">confirm</span>(shardId, newEpoch)            <span class="tk-com">// fencing: older epochs are rejected from now on</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Backpressure</span></span>
+<span class="line"><span class="tk-com">//  - bounded mailbox per user partition; reject or shed load above the limit</span></span>
+<span class="line"><span class="tk-com">//  - snapshot periodically so replay time stays small</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Forgetting shared resources:</strong> Sharding by user does not serialize inventory. Give stock its own atomic conditional update or SKU owner.</li>
+          <li><strong>Acknowledging before the command is durable:</strong> A crash then loses an accepted order. Append to the replicated log first.</li>
+          <li><strong>No idempotency on commands:</strong> Router or client retries double-apply. Dedupe by request id at the owner and at inventory.</li>
+          <li><strong>Two owners during rebalance:</strong> Without epoch fencing, a stale owner can write after handoff. Validate epochs at the log and store.</li>
+          <li><strong>Unbounded mailboxes:</strong> A hot user's backlog consumes memory and latency. Bound the queue and shed or reject load.</li>
+          <li><strong>Blocking I/O inside the single-writer loop:</strong> One slow dependency stalls that user's whole queue. Keep the loop short and use timeouts and reservations.</li>
+          <li><strong>Reading balances from replicas to decide a debit:</strong> Replicas are stale. Decide at the owner.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams reach for the <strong>simplest mechanism that meets the scale requirement</strong> and move toward single-writer designs only when contention or availability demands it. A typical progression looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Identify invariants:</strong> Wallet never negative, stock never negative, each order applied once. Decide which entities own which invariant.</li>
+          <li><strong>Step 1 — Start with the database:</strong> Atomic conditional updates (<code>WHERE qty >= n</code>), or row locks and transactions with retries. This is often enough.</li>
+          <li><strong>Step 2 — Add idempotency keys:</strong> Every order and every external call carries a request id.</li>
+          <li><strong>Step 3 — Remove contention:</strong> When hot rows or a single primary become the limit, move to single-writer-per-entity (users, SKUs) with a durable log.</li>
+          <li><strong>Step 4 — Coordinate across entities:</strong> Reservation or saga between wallet and inventory with compensation.</li>
+          <li><strong>Step 5 — Prove it:</strong> Concurrency tests, fault injection (kill owners mid-command), and monitoring of invariants in production.</li>
+        </ul>
+        <p>Pick the mechanism by the contention pattern, then test it under concurrency.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Prevent races by <strong>giving each entity a single writer</strong>: hash users to shards, process commands sequentially from a durable log, fence ownership with epochs, and make commands idempotent. Handle shared resources like inventory with an atomic conditional update or their own single writer. A serializable database transaction (option D) remains the simpler choice if your scale and availability needs fit one primary.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

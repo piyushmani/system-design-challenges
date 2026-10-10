@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Safely Extracting the Orders Domain from a Monolith with the Strangler Fig Pattern — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">02 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Strangler Fig</span>
+      <span class="tag tag--green">Microservices Migration</span>
+      <span class="tag tag--amber">Architecture</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Safely Extracting the Orders Domain from a Monolith with the Strangler Fig Pattern</h1>
+      <p class="q-scenario"><strong>Asha</strong>, a senior backend developer, is extracting the <strong>Orders</strong> domain from a large e-commerce monolith using the <strong>Strangler Fig Pattern</strong>. The monolith owns all order writes and the primary Orders table. <strong>Read traffic is very high and latency-sensitive</strong>, some writes (inventory reduction, payment capture) require <strong>strict correctness</strong>, and production peaks at <strong>thousands of writes per second</strong>. Her goals are to (1) <strong>minimize user-visible downtime</strong>, (2) let the new Orders service <strong>own its schema and deployments</strong>, and (3) keep <strong>latency and availability</strong> acceptable. Which migration architecture best delivers independence, safety and manageable operational complexity?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Deploy a lightweight API gateway that directs all write operations to the existing monolith&#x27;s database, while routing read queries to the new Orders microservice, which directly accesses the monolith&#x27;s database. This shared-database strategy sidesteps initial data synchronization efforts and maintains the monolith as the source of truth for writes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Provide the new Orders service with an independent database and utilize Change Data Capture (CDC) or the outbox pattern to stream write events from the monolith into a log like Kafka. The new service consumes these events to construct its own replica of the Orders data. Once validated, gradually transition write authority to the new service using an event-driven, eventually consistent approach.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Execute synchronous dual-writes from the API layer to both the new Orders service database and the monolith DB. Use a transactional coordinator or a two-phase commit protocol to enforce strong consistency across both data stores throughout the migration process.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Maintain the monolith as the exclusive writer and design the new Orders service purely as a read-only materialized view that is refreshed by scheduled batch ETL jobs every few minutes. Direct client read requests to the new service for fast responses, keeping all write operations on the monolith until a complete cutover is feasible.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Own Database via CDC/Outbox, Then Shift Write Authority</h3>
+        <p>The Strangler Fig works by <strong>growing the new system alongside the old one and shifting traffic gradually</strong>, with the ability to back out at any step. Of the four options, only B gives the new service its <strong>own database</strong> (the autonomy goal) while keeping the monolith as the safe source of truth until the replica is proven. An <strong>outbox written in the same local transaction</strong> as the order, or CDC on the monolith's log, produces a reliable event stream without dual writes or distributed transactions. Reads move first, and write authority moves later, one cohort at a time. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Real autonomy:</strong> The Orders service owns its schema, migrations and release cadence from the start. No shared tables means a monolith schema change cannot break it, and vice versa.</li>
+          <li><strong>Reversible, low-risk migration:</strong> The monolith stays authoritative while the replica fills and is validated through shadow reads and diffing. Reads are cut over gradually with feature flags, and rollback is a routing change.</li>
+          <li><strong>No distributed transaction:</strong> The outbox row commits atomically with the order in the monolith's own database, and a CDC tool such as Debezium publishes it. This avoids both the divergence of naive dual writes and the blocking behavior of two-phase commit.</li>
+          <li><strong>Reads scale independently:</strong> The new service can use a read-optimized schema and its own caches and replicas, which directly serves the very high, latency-sensitive read traffic without loading the monolith's database.</li>
+          <li><strong>Observable and rebuildable:</strong> Event-stream lag, per-event versions and mismatch counts show migration health, and replaying the log rebuilds the replica after a bug or schema change.</li>
+        </ul>
+        <p>A well-designed migration includes a <strong>routing facade</strong>, an <strong>outbox with a versioned event contract</strong>, <strong>idempotent and version-checked consumers</strong>, <strong>shadow reads with automated diffing</strong>, <strong>cohort-based cutover with ownership fencing</strong>, <strong>reverse sync for legacy consumers</strong>, and <strong>rollback drills</strong>. Track replication lag p99, read mismatch rate, write error rate per cohort and rollback time. Do not retire the monolith's tables until mismatch has stayed at zero for a full business cycle.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">⛓️</div>
+          <h4>A — Shared Database Behind a Gateway</h4>
+          <p>It skips data synchronization, but the new service cannot evolve its schema independently, so goal (2) fails. Monolith schema changes can break the service, both compete for locks and capacity on the same database, and the coupling is hidden (a distributed monolith). <strong>Caveat:</strong> as a short-lived, read-only stepping stone, for example through database views while the real data extraction is prepared, it can be a pragmatic first step. It should not be the destination.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">⚖️</div>
+          <h4>C — Synchronous Dual-Writes with 2PC</h4>
+          <p>Two-phase commit across two databases blocks participants when the coordinator fails, lowers availability and adds latency at thousands of writes per second, and many managed databases and ORMs do not support it well. Dual-writing from the API layer without 2PC is worse: a failure between writes leaves the stores permanently different. An outbox plus idempotent consumers, and sagas for business invariants, avoid both problems.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">⏱️</div>
+          <h4>D — Read-Only View via Batch ETL</h4>
+          <p>Minutes-old data means users cannot see an order they just created, and the approach never moves writes, so the new service gains no schema autonomy where it matters. It is a reasonable <em>first milestone</em> for proving the read model, and a fine permanent design for staleness-tolerant views such as reporting or search, but it is not a migration architecture on its own.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Own Database via CDC/Outbox, Then Shift Write Authority ✓</h4>
+          <p>Provide the new Orders service with an independent database and utilize Change Data Capture (CDC) or the outbox pattern to stream write events from the monolith into a log like Kafka. The new service</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Service Autonomy</th><th>Migration Risk</th><th>Read Latency</th><th>Write Correctness</th><th>Operational Complexity</th><th>Rollback Ease</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Shared Database</td><td>None ❌</td><td>Low now, high later ⚠</td><td>Good ✅</td><td>Strong ✅ (same database)</td><td>Low ✅</td><td>Easy ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Own DB via CDC/Outbox ✓</td><td>Full ✅</td><td>Medium ⚠</td><td>Excellent ✅</td><td>Strong ⚠ (needs outbox and fencing)</td><td>High ❌</td><td>Good ⚠ (needs reverse sync)</td></tr>
+            <tr><td class="tt-option">C — Dual-Writes with 2PC</td><td>Full ✅</td><td>High ❌</td><td>Good ✅</td><td>Strong ⚠ (2PC blocking)</td><td>High ❌</td><td>Hard ❌</td></tr>
+            <tr><td class="tt-option">D — Batch ETL Read View</td><td>Partial ⚠ (read side only)</td><td>Low ✅</td><td>Good ⚠ (stale)</td><td>Strong ✅ (monolith writes)</td><td>Low ✅</td><td>Easy ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Shared Database</h4>
+          <p>A short-lived, read-only stepping stone (for example via views) while preparing real data extraction, or when the team cannot yet operate an event platform.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Own DB via CDC/Outbox</h4>
+          <p>Extracting a core, high-traffic domain with strict write correctness, where independence and a safe, reversible rollout are required.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Dual-Writes with 2PC</h4>
+          <p>Rarely: both stores support XA transactions, write rates are low, and the coordinator's availability impact is acceptable. Usually avoid.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Batch ETL Read View</h4>
+          <p>Staleness-tolerant read models such as reporting or search, or as a first milestone to prove the read model before building streaming.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Strangler Architecture with Event-Fed Replica</h3>
+        <p>A gateway routes traffic, the monolith stays authoritative for writes, and CDC streams order events into the new service's own database:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    CL[&quot;Clients&quot;] --&gt; GW[&quot;API gateway and routing facade&quot;]
+    GW -- &quot;writes and legacy reads&quot; --&gt; MO[&quot;Monolith&quot;]
+    GW -- &quot;migrated reads (feature flagged)&quot; --&gt; OS[&quot;Orders service&quot;]
+    MO --&gt; MDB[(&quot;Monolith DB&lt;br/&gt;orders plus outbox table&quot;)]
+    MDB -- &quot;CDC, for example Debezium&quot; --&gt; KF[(&quot;Kafka&lt;br/&gt;order events keyed by order ID&quot;)]
+    KF --&gt; OS
+    OS --&gt; ODB[(&quot;Orders DB&lt;br/&gt;own schema&quot;)]
+    OS -. &quot;lag and mismatch metrics&quot; .-&gt; OB[&quot;Observability&quot;]">flowchart LR
+    CL[&quot;Clients&quot;] --&gt; GW[&quot;API gateway and routing facade&quot;]
+    GW -- &quot;writes and legacy reads&quot; --&gt; MO[&quot;Monolith&quot;]
+    GW -- &quot;migrated reads (feature flagged)&quot; --&gt; OS[&quot;Orders service&quot;]
+    MO --&gt; MDB[(&quot;Monolith DB&lt;br/&gt;orders plus outbox table&quot;)]
+    MDB -- &quot;CDC, for example Debezium&quot; --&gt; KF[(&quot;Kafka&lt;br/&gt;order events keyed by order ID&quot;)]
+    KF --&gt; OS
+    OS --&gt; ODB[(&quot;Orders DB&lt;br/&gt;own schema&quot;)]
+    OS -. &quot;lag and mismatch metrics&quot; .-&gt; OB[&quot;Observability&quot;]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Outbox, Idempotent Consumer and Ownership-Fenced Routing</h3>
+        <p>The monolith writes the order and its event atomically, the new service applies events idempotently in order, and the gateway routes writes by ownership with a fencing epoch:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Monolith: outbox in the same local transaction (no dual write) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">createOrder</span>(cmd):</span>
+<span class="line">    tx.<span class="tk-kw">begin</span>()</span>
+<span class="line">        orderId <span class="tk-op">=</span> db.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;orders&#x27;</span>, cmd)</span>
+<span class="line">        db.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;outbox&#x27;</span>, {</span>
+<span class="line">            eventId: <span class="tk-fn">uuid</span>(), aggregateId: orderId, version: <span class="tk-num">1</span>,</span>
+<span class="line">            type: <span class="tk-str">&#x27;OrderCreated&#x27;</span>, payload: <span class="tk-fn">toContract</span>(cmd), origin: <span class="tk-str">&#x27;monolith&#x27;</span> })</span>
+<span class="line">    tx.<span class="tk-fn">commit</span>()          <span class="tk-com">// CDC tails the outbox and publishes to Kafka with key = orderId</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Orders service: idempotent, version-checked consumer ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onOrderEvent</span>(evt):                 <span class="tk-com">// partition key = orderId, so per-order ordering holds</span></span>
+<span class="line">    <span class="tk-kw">if</span> evt.origin <span class="tk-op">==</span> <span class="tk-str">&#x27;orders-service&#x27;</span>: <span class="tk-kw">return</span>                  <span class="tk-com">// loop prevention for reverse sync</span></span>
+<span class="line">    tx.<span class="tk-kw">begin</span>()</span>
+<span class="line">        <span class="tk-kw">if</span> processed.<span class="tk-fn">exists</span>(evt.eventId):                      <span class="tk-com">// duplicate delivery</span></span>
+<span class="line">            tx.<span class="tk-fn">rollback</span>(); kafka.<span class="tk-fn">commit</span>(evt.offset); <span class="tk-kw">return</span></span>
+<span class="line">        current <span class="tk-op">=</span> orders.<span class="tk-fn">get</span>(evt.aggregateId)</span>
+<span class="line">        <span class="tk-kw">if</span> current <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> current.version <span class="tk-op">&gt;=</span> evt.version: <span class="tk-com">// stale or replayed event</span></span>
+<span class="line">            processed.<span class="tk-fn">add</span>(evt.eventId); tx.<span class="tk-fn">commit</span>(); kafka.<span class="tk-fn">commit</span>(evt.offset); <span class="tk-kw">return</span></span>
+<span class="line">        orders.<span class="tk-fn">upsert</span>(evt.aggregateId, <span class="tk-fn">apply</span>(current, evt), version <span class="tk-op">=</span> evt.version)</span>
+<span class="line">        processed.<span class="tk-fn">add</span>(evt.eventId)</span>
+<span class="line">    tx.<span class="tk-fn">commit</span>()</span>
+<span class="line">    kafka.<span class="tk-fn">commit</span>(evt.offset)                <span class="tk-com">// commit offset only after the database commit</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Gateway: route writes by ownership with fencing ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">routeWrite</span>(cohort, req):</span>
+<span class="line">    own <span class="tk-op">=</span> ownership.<span class="tk-fn">get</span>(cohort)             <span class="tk-com">// { owner: &#x27;monolith&#x27; | &#x27;orders-service&#x27; | &#x27;draining&#x27;, epoch: N }</span></span>
+<span class="line">    <span class="tk-kw">if</span> own.owner <span class="tk-op">==</span> <span class="tk-str">&#x27;draining&#x27;</span>: <span class="tk-kw">return</span> <span class="tk-fn">retryAfter</span>(<span class="tk-num">100ms</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">forward</span>(own.owner, req, fencingEpoch <span class="tk-op">=</span> own.epoch)   <span class="tk-com">// target rejects requests with an older epoch</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Cohort handoff (operator or automation) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handoff</span>(cohort, newOwner):</span>
+<span class="line">    ownership.<span class="tk-fn">set</span>(cohort, { owner: <span class="tk-str">&#x27;draining&#x27;</span>, epoch: epoch <span class="tk-op">+</span> <span class="tk-num">1</span> })</span>
+<span class="line">    <span class="tk-fn">waitUntil</span>(<span class="tk-fn">inFlightWrites</span>(cohort) <span class="tk-op">==</span> <span class="tk-num">0</span> <span class="tk-kw">and</span> <span class="tk-fn">replicationLag</span>(cohort) <span class="tk-op">==</span> <span class="tk-num">0</span>)</span>
+<span class="line">    ownership.<span class="tk-fn">set</span>(cohort, { owner: newOwner, epoch: epoch <span class="tk-op">+</span> <span class="tk-num">1</span> })</span>
+<span class="line">    <span class="tk-com">// rollback = handoff(cohort, previousOwner), possible because reverse sync stays on until decommission</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Attempting a big-bang cutover:</strong> The pattern's value is incremental risk. Move traffic by route or cohort so every step can be reversed quickly.</li>
+          <li><strong>Dual-writing from application code without an outbox:</strong> A crash between the two writes leaves the systems different with no record of it. Write the event in the same local transaction as the data.</li>
+          <li><strong>Exposing the monolith's table schema as the contract:</strong> Raw CDC couples consumers to internal columns. Publish explicit, versioned events through an outbox.</li>
+          <li><strong>Non-idempotent or unordered consumers:</strong> Redelivery and reordering are normal. Partition by order ID and ignore events whose version is not newer than what is stored.</li>
+          <li><strong>Two writers at once during handoff:</strong> Without ownership fencing and draining, concurrent writes in both systems cause lost updates. Flip one cohort at a time.</li>
+          <li><strong>No shadow comparison or reconciliation:</strong> If you never compare old and new answers, you find divergence in production. Diff automatically and track mismatch rate.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Successful extractions are <strong>incremental and verified at every step</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Map boundaries and data ownership:</strong> Identify the Orders aggregates and find every reader and writer of the Orders table using query logs and code search before promising independence.</li>
+          <li><strong>Step 1 — Insert a routing facade:</strong> Put an API gateway or proxy in front of the monolith with no behavior change, so traffic can later be redirected per route or cohort.</li>
+          <li><strong>Step 2 — Build the data pipeline:</strong> Outbox plus CDC into Kafka, a consistent backfill, the new service's read model, and shadow reads that compare old and new answers.</li>
+          <li><strong>Step 3 — Cut over reads gradually:</strong> Feature-flag reads by cohort, keep the monolith as fallback, and watch mismatch and latency.</li>
+          <li><strong>Step 4 — Move writes cohort by cohort:</strong> Ownership flag with fencing, reverse sync to the monolith, and sagas with idempotent commands for inventory and payment.</li>
+          <li><strong>Step 5 — Decommission:</strong> Stop reverse sync, remove the monolith's Orders code and tables, and archive the data once mismatch has been zero for a full business cycle.</li>
+        </ul>
+        <p>Move reads before writes, and move writes one small cohort at a time, always with a tested way back.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Give the new service <strong>its own database</strong>, feed it from the monolith through an <strong>outbox or CDC event stream</strong>, validate with shadow reads, then move reads and finally writes in small, reversible steps with <strong>explicit ownership fencing</strong>. Avoid shared databases as a destination, avoid two-phase commit, and handle read-your-writes deliberately. A batch-refreshed read-only view is fine as a first milestone but not as the end state.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

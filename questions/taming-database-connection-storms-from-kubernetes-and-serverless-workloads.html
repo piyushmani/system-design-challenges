@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Taming Database Connection Storms from Kubernetes and Serverless Workloads — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">02 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Database Pooling</span>
+      <span class="tag tag--green">Connection Management</span>
+      <span class="tag tag--amber">Scalability</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Taming Database Connection Storms from Kubernetes and Serverless Workloads</h1>
+      <p class="q-scenario"><strong>Lucas</strong>, a lead backend developer, runs a <strong>multi-tenant e-commerce</strong> system on standard <strong>Kubernetes deployments</strong> plus <strong>on-demand serverless functions</strong>. The primary <strong>PostgreSQL</strong> database has a <strong>strict connection limit</strong>, and bursts of <strong>cold-starting functions</strong> trigger <strong>connection storms</strong> that briefly take the database down. Reads mostly hit replicas, while writes go to the primary and need <strong>reasonable consistency</strong> and <strong>low latency</strong>. A few workflows depend on <strong>session-specific features</strong> such as temporary tables and advisory locks. He must choose the architecture that best balances <em>scalability, availability, latency, consistency, observability and operational cost</em>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Maintain individual local connection pools per pod or function instance, slightly increasing their sizes. Depend on autoscaling to restrict concurrent instances and implement retry mechanisms with backoff for connection failures.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Deploy a connection proxy or multiplexer (such as a pooled PgBouncer cluster or RDS Proxy) ahead of the PostgreSQL instance. Utilize transaction-mode pooling for serverless traffic and session-mode for processes requiring temp tables or locks, centralizing metrics and authentication at the proxy layer.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Develop a custom, centralized microservice for connection pooling that provides logical database sessions via an internal RPC API. Application nodes will request sessions on demand, while the pool service handles actual DB connections and queuing.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Shift write operations away from the primary DB by implementing an asynchronous, queue-based write pipeline: applications push writes to a persistent topic, and a pool of workers execute bulk writes to the database. Use replicas for reading, accepting eventual consistency for newly written data.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Pooling Proxy with Dual Pool Modes</h3>
+        <p>The scarce resource here is <strong>server-side connections</strong>, not query speed. PostgreSQL runs one backend process per connection, so a few hundred connections is a practical ceiling, while the number of clients (pods plus bursty functions) is effectively unbounded. A <strong>pooling proxy</strong> multiplexes thousands of cheap client connections onto a small, fixed set of server connections, which turns a connection storm into a short queue instead of an outage. Using <strong>transaction mode</strong> for stateless traffic and a small <strong>session-mode</strong> pool for the few workflows that need temp tables or session advisory locks covers every stated requirement without changing application semantics. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Collapses the connection count:</strong> Thousands of client connections share tens of server connections, so the primary sees a flat, bounded load no matter how many functions cold-start at once. Each PostgreSQL backend costs real memory and adds contention, so fewer, busier connections usually give higher throughput than many idle ones.</li>
+          <li><strong>Turns a storm into a queue:</strong> The proxy accepts connections cheaply and queues work for the limited server pool. With a queue-wait timeout, overload becomes a fast, retryable error for a few callers instead of a database-wide brownout for everyone.</li>
+          <li><strong>Right pool mode per workload:</strong> Transaction mode returns the server connection after every transaction, which gives the best multiplexing for stateless request handlers. Session mode pins one server connection per client for temp tables and session-level advisory locks, so those flows get a separate, small, capped pool.</li>
+          <li><strong>Why not just raise pool sizes and max_connections?</strong> Option A multiplies pool size by instance count, and autoscaling makes that product unpredictable. More backends means more memory pressure and lock contention on the primary, so throughput often falls past a point. A proxy decouples client count from server connection count.</li>
+          <li><strong>Central observability and low operational cost:</strong> One place to see client and server connection counts, waiting clients, and pool saturation, plus one place for TLS and credentials. PgBouncer is the de facto standard Postgres pooler and managed options exist (for example AWS RDS Proxy), so the team operates an off-the-shelf component instead of building one.</li>
+        </ul>
+        <p>A well-designed rollout includes <strong>pool sizes derived from database capacity</strong> (the sum of all pools stays below max_connections minus reserved slots), <strong>transaction mode by default</strong>, a <strong>small dedicated session pool</strong>, a <strong>queue-wait timeout</strong> that fails fast, <strong>jittered client retries</strong>, <strong>reserved-concurrency caps</strong> on functions, and <strong>two or more proxy instances</strong>. Watch waiting clients, maximum wait time, server connection count, and transaction latency before and after rollout. If waits stay high, the real problem is query or transaction duration, not connection count.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔌</div>
+          <h4>A — Local Per-Pod Pools with Retries</h4>
+          <p>Total connections equal pods times pool size, and that product grows with autoscaling, so slightly larger pools make the storm <strong>worse</strong>. Serverless instances cannot share a pool (each concurrent invocation holds its own), and retries with backoff but no budget can become a <em>retry storm</em> that amplifies the outage. There is also no central view of connection usage. <strong>Caveat:</strong> for a small, fixed fleet of long-lived pods with no serverless component, local pools plus a hard connection budget is the simplest option and is perfectly adequate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🛠️</div>
+          <h4>C — Custom Pooling Microservice</h4>
+          <p>This rebuilds PgBouncer with an RPC layer on top: logical sessions, queuing, fairness, auth, TLS, failover and metrics, all to be designed, tested and owned by the team. Every query pays an extra network hop, preserving PostgreSQL session semantics over RPC is hard to get right, and the service becomes a new single point of failure. It is only justified when you need tenant-aware admission control or protocol-level policy that no off-the-shelf pooler offers.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📬</div>
+          <h4>D — Async Queue-Based Write Pipeline</h4>
+          <p>Queues are excellent for <strong>load leveling</strong>, but this option converts synchronous writes into eventually consistent ones, so read-your-writes breaks when reads go to replicas. It also needs idempotent consumers, ordering, dead-letter handling and lag monitoring, and it does nothing for workflows that need a live database session. It is a good <em>complement</em> for non-critical writes such as analytics or notifications, but not the primary fix for a connection limit on a transactional path.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Pooling Proxy with Dual Pool Modes ✓</h4>
+          <p>Deploy a connection proxy or multiplexer (such as a pooled PgBouncer cluster or RDS Proxy) ahead of the PostgreSQL instance. Utilize transaction-mode pooling for serverless traffic and session-mode fo</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Connection Storm Protection</th><th>Write Latency Overhead</th><th>Session Feature Support</th><th>Operational Complexity</th><th>Central Observability</th><th>Failure Blast Radius</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Local Per-Pod Pools</td><td>Weak ❌ (grows with instances)</td><td>None ✅</td><td>Full ✅</td><td>Low ✅</td><td>Per-app only ❌</td><td>Large ❌ (storm hits DB directly)</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Pooling Proxy ✓</td><td>Strong ✅</td><td>Low (one extra hop) ✅</td><td>Full via session pool ⚠</td><td>Medium ⚠ (proxy HA)</td><td>Central ✅</td><td>Medium ⚠ (proxy must be HA)</td></tr>
+            <tr><td class="tt-option">C — Custom Pool Service</td><td>Strong ✅</td><td>Medium ⚠ (RPC hop plus queue)</td><td>Hard to get right ❌</td><td>High ❌</td><td>Custom build ⚠</td><td>Large ❌ (new SPOF)</td></tr>
+            <tr><td class="tt-option">D — Async Write Queue</td><td>Strong for writes ✅</td><td>Fast ack, slow visibility ⚠</td><td>None ❌</td><td>High ❌</td><td>Good ✅ (queue lag)</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Local Per-Pod Pools</h4>
+          <p>A small, fixed fleet of long-lived pods with no serverless component, where total connections stay far below the database limit. The simplest choice when the numbers are bounded.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Pooling Proxy</h4>
+          <p>Many or bursty clients (serverless, autoscaling) against a database with a hard connection cap, and a mix of stateless and session-stateful workloads.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Custom Pool Service</h4>
+          <p>Rare cases that need tenant-aware admission control or custom routing that no pooler provides, and a team willing to own a critical new service.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Async Write Queue</h4>
+          <p>Write-heavy, non-interactive flows (events, audit logs, notifications) where eventual consistency is acceptable and load leveling matters more than immediate visibility.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Pooling Proxy Topology</h3>
+        <p>Clients connect to the proxy tier. Stateless traffic shares a small transaction-mode pool, while session-dependent flows use a separate capped session-mode pool:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    subgraph PX[&quot;Pooling proxy tier (PgBouncer cluster or RDS Proxy)&quot;]
+        TX[&quot;Transaction-mode pool&lt;br/&gt;about 40 server connections&quot;]
+        SS[&quot;Session-mode pool&lt;br/&gt;about 10 server connections&quot;]
+    end
+    K8S[&quot;Kubernetes pods&quot;] --&gt; TX
+    FN[&quot;Serverless functions&lt;br/&gt;cold-start bursts&quot;] --&gt; TX
+    WF[&quot;Workflows needing temp tables&lt;br/&gt;or session advisory locks&quot;] --&gt; SS
+    TX --&gt; PRI[(&quot;PostgreSQL primary&lt;br/&gt;fixed connection budget&quot;)]
+    SS --&gt; PRI
+    RD[&quot;Read traffic&quot;] --&gt; REP[(&quot;Read replicas&quot;)]
+    PX -. &quot;pool stats and wait times&quot; .-&gt; OBS[&quot;Dashboards and alerts&quot;]">flowchart LR
+    subgraph PX[&quot;Pooling proxy tier (PgBouncer cluster or RDS Proxy)&quot;]
+        TX[&quot;Transaction-mode pool&lt;br/&gt;about 40 server connections&quot;]
+        SS[&quot;Session-mode pool&lt;br/&gt;about 10 server connections&quot;]
+    end
+    K8S[&quot;Kubernetes pods&quot;] --&gt; TX
+    FN[&quot;Serverless functions&lt;br/&gt;cold-start bursts&quot;] --&gt; TX
+    WF[&quot;Workflows needing temp tables&lt;br/&gt;or session advisory locks&quot;] --&gt; SS
+    TX --&gt; PRI[(&quot;PostgreSQL primary&lt;br/&gt;fixed connection budget&quot;)]
+    SS --&gt; PRI
+    RD[&quot;Read traffic&quot;] --&gt; REP[(&quot;Read replicas&quot;)]
+    PX -. &quot;pool stats and wait times&quot; .-&gt; OBS[&quot;Dashboards and alerts&quot;]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> PgBouncer Dual-Pool Configuration and Client Rules</h3>
+        <p>One PgBouncer configuration exposing a transaction-mode pool and a capped session-mode pool, followed by the client-side rules that keep the pooling safe:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">ini + pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">; <span class="tk-op">-</span><span class="tk-op">-</span><span class="tk-com">-- pgbouncer.ini ----</span></span>
+<span class="line">[databases]</span>
+<span class="line">orders_tx      <span class="tk-op">=</span> host<span class="tk-op">=</span>pg<span class="tk-op">-</span>primary.internal port<span class="tk-op">=</span><span class="tk-num">5432</span> dbname<span class="tk-op">=</span>orders pool_mode<span class="tk-op">=</span>transaction pool_size<span class="tk-op">=</span><span class="tk-num">40</span></span>
+<span class="line">orders_session <span class="tk-op">=</span> host<span class="tk-op">=</span>pg<span class="tk-op">-</span>primary.internal port<span class="tk-op">=</span><span class="tk-num">5432</span> dbname<span class="tk-op">=</span>orders pool_mode<span class="tk-op">=</span>session pool_size<span class="tk-op">=</span><span class="tk-num">10</span></span>
+<span class="line"></span>
+<span class="line">[pgbouncer]</span>
+<span class="line">listen_port <span class="tk-op">=</span> <span class="tk-num">6432</span></span>
+<span class="line">auth_type <span class="tk-op">=</span> scram<span class="tk-op">-</span>sha<span class="tk-op">-</span><span class="tk-num">256</span></span>
+<span class="line">max_client_conn <span class="tk-op">=</span> <span class="tk-num">5000</span>          ; thousands <span class="tk-kw">of</span> cheap client connections</span>
+<span class="line">max_db_connections <span class="tk-op">=</span> <span class="tk-num">55</span>         ; hard cap on server connections to the primary</span>
+<span class="line">reserve_pool_size <span class="tk-op">=</span> <span class="tk-num">5</span>           ; small burst allowance</span>
+<span class="line">reserve_pool_timeout <span class="tk-op">=</span> <span class="tk-num">3</span></span>
+<span class="line">query_wait_timeout <span class="tk-op">=</span> <span class="tk-num">5</span>          ; fail fast instead <span class="tk-kw">of</span> queueing forever</span>
+<span class="line">server_idle_timeout <span class="tk-op">=</span> <span class="tk-num">300</span></span>
+<span class="line">server_lifetime <span class="tk-op">=</span> <span class="tk-num">3600</span></span>
+<span class="line">max_prepared_statements <span class="tk-op">=</span> <span class="tk-num">200</span>   ; protocol<span class="tk-op">-</span>level prepared statements <span class="tk-kw">in</span> transaction <span class="tk-fn">mode</span> (PgBouncer <span class="tk-num">1.21</span><span class="tk-op">+</span>)</span>
+<span class="line">; Budget: sum <span class="tk-kw">of</span> <span class="tk-fn">pools</span> (<span class="tk-num">40</span> <span class="tk-op">+</span> <span class="tk-num">10</span> <span class="tk-op">+</span> <span class="tk-num">5</span>) must stay below max_connections minus superuser <span class="tk-kw">and</span> replication reserve</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- client rules (pseudocode) ----</span></span>
+<span class="line"><span class="tk-com">// Serverless handler: create the pool once per container, outside the handler</span></span>
+<span class="line">pool <span class="tk-op">=</span> <span class="tk-fn">createPool</span>(host <span class="tk-op">=</span> <span class="tk-str">&#x27;proxy.internal&#x27;</span>, db <span class="tk-op">=</span> <span class="tk-str">&#x27;orders_tx&#x27;</span>, maxClientConnections <span class="tk-op">=</span> <span class="tk-num">1</span>)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleRequest</span>(req):</span>
+<span class="line">    retries <span class="tk-op">=</span> <span class="tk-fn">RetryBudget</span>(maxAttempts <span class="tk-op">=</span> <span class="tk-num">3</span>)</span>
+<span class="line">    <span class="tk-kw">loop</span>:</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            tx.<span class="tk-kw">begin</span>()</span>
+<span class="line">            tx.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;SELECT pg_advisory_xact_lock($1)&#x27;</span>, lockKey)   <span class="tk-com">// transaction-scoped: safe in transaction mode</span></span>
+<span class="line">            ... business writes ...</span>
+<span class="line">            tx.<span class="tk-fn">commit</span>()</span>
+<span class="line">            <span class="tk-kw">return</span> ok</span>
+<span class="line">        <span class="tk-kw">catch</span> QueueWaitTimeout, ConnectionRefused:</span>
+<span class="line">            <span class="tk-kw">if</span> <span class="tk-kw">not</span> retries.<span class="tk-fn">allow</span>(): <span class="tk-kw">return</span> <span class="tk-num">503</span></span>
+<span class="line">            <span class="tk-fn">sleep</span>(<span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-fn">min</span>(<span class="tk-num">2s</span>, <span class="tk-num">100ms</span> <span class="tk-op">*</span> <span class="tk-num">2</span>^attempt)))            <span class="tk-com">// full jitter</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Workflow that truly needs session state: use the session pool, keep it short</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">runWorkflowNeedingTempTable</span>():</span>
+<span class="line">    conn <span class="tk-op">=</span> sessionPool.<span class="tk-fn">acquire</span>(timeout <span class="tk-op">=</span> <span class="tk-num">2s</span>)       <span class="tk-com">// bounded: only 10 of these exist</span></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        conn.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;CREATE TEMP TABLE staging (...)&#x27;</span>)</span>
+<span class="line">        ... work ...</span>
+<span class="line">    <span class="tk-kw">finally</span>:</span>
+<span class="line">        conn.<span class="tk-fn">release</span>()                             <span class="tk-com">// temp table dies with the session</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Sizing pools by client count:</strong> Setting pool size to match the number of app instances defeats the purpose. Size server pools from database capacity and leave headroom for admin sessions, replication and migrations.</li>
+          <li><strong>Using session-level features in transaction mode:</strong> SET, session advisory locks, temp tables and LISTEN/NOTIFY silently misbehave because the next transaction may run on a different server connection. Route them to the session pool or make them transaction-scoped.</li>
+          <li><strong>Pinning most of the traffic:</strong> In managed proxies such as RDS Proxy, statements that change session state pin the client to one connection. If most traffic is pinned, multiplexing is gone and you are back to one server connection per client.</li>
+          <li><strong>Unbounded retries:</strong> Retrying instantly and without a budget turns a brief blip into a retry storm. Use exponential backoff with full jitter, retry budgets and circuit breakers.</li>
+          <li><strong>A single proxy instance:</strong> One PgBouncer process is a single point of failure and is limited to about one core. Run several behind a load balancer and rehearse failover and restarts.</li>
+          <li><strong>Ignoring long and idle transactions:</strong> In transaction mode, a transaction left open holds a server connection the whole time. Set statement and idle-in-transaction timeouts and alert on long-running transactions.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams that cure connection storms rarely stop at one change. They <strong>measure first</strong> and then layer fixes:</p>
+        <ul>
+          <li><strong>Step 0 — Measure first:</strong> Inspect <code>pg_stat_activity</code> (connections by state, idle-in-transaction counts), connection churn, headroom against max_connections, per-service connection counts, and which code paths truly need session state.</li>
+          <li><strong>Step 1 — Put a pooler in front (the biggest win):</strong> Transaction mode by default, a small session-mode pool for the exceptions, and pool sizes whose sum stays under the database's connection budget.</li>
+          <li><strong>Step 2 — Cap the clients:</strong> Set reserved concurrency on functions and a maximum replica count on autoscalers. Create connections outside the function handler so warm invocations reuse them. The proxy absorbs whatever remains.</li>
+          <li><strong>Step 3 — Fail fast and shed load:</strong> Configure queue-wait and client timeouts, and make retries use exponential backoff with full jitter and a retry budget.</li>
+          <li><strong>Step 4 — Refactor session-dependent code:</strong> Move to <code>pg_advisory_xact_lock</code> and <code>ON COMMIT DROP</code> temp tables so more traffic can use the transaction pool.</li>
+          <li><strong>Step 5 — Offload selectively:</strong> Push more reads to replicas, and use an async queue only for writes that can tolerate eventual consistency.</li>
+        </ul>
+        <p>Size the pools from the database's capacity, not from the number of clients.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Connection storms are a <strong>multiplexing</strong> problem. Put a pooling proxy between your many clients and your few database connections, use transaction mode wherever the code is stateless, and give session-dependent flows their own small pool. Add timeouts and jittered retries so overload fails fast, and size everything from database capacity. If profiling shows long transactions rather than connection churn, fix those first.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1275,3 +1275,36 @@ body.no-scroll { overflow: hidden; }
     gap: 1.25rem;
   }
 }
+/* ── Pagination ────────────────────────────────── */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 3rem;
+  padding-bottom: 2rem;
+}
+
+.page-btn {
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 1rem;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.page-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.page-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}

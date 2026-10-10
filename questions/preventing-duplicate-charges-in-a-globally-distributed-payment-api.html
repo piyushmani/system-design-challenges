@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preventing Duplicate Charges in a Globally Distributed Payment API — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">02 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Idempotency</span>
+      <span class="tag tag--green">Payments</span>
+      <span class="tag tag--amber">Distributed Systems</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Preventing Duplicate Charges in a Globally Distributed Payment API</h1>
+      <p class="q-scenario"><strong>Maya</strong> is building a <strong>payment API</strong> used by mobile apps worldwide. Because of unstable networks and timeouts, clients <strong>frequently retry</strong> <code>POST /charge</code>. The design must <strong>prevent duplicate charges</strong>, keep <strong>latency low in every region</strong>, scale to <strong>thousands of requests per second</strong>, stay <strong>resilient during partial network partitions</strong>, and give <strong>clear observability into retries and failures</strong>. She must choose the idempotency strategy that best balances <em>availability, latency, consistency and operational overhead</em>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Centralize all idempotency checks in a single global relational database. Maintain a table with a unique constraint on the combination of customer_id and idempotency_key. For each request, open a transaction to check or insert the key, either returning the previous result or processing the charge, relying entirely on the database for strict consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Require clients to provide idempotency keys and store them in a partitioned, persistent key-value store (such as region-local DynamoDB, Redis, or Cassandra). Use atomic conditional writes (like PutIfAbsent) to register an &#x27;in-progress&#x27; state or the final outcome. For duplicate requests, return the cached result, utilizing TTLs for cleanup and region-based routing to keep latency low.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Guarantee global exactly-once processing by directing all charge requests through a consensus protocol layer (like Paxos or Raft) to establish a single authoritative sequence. Each request is added to a log and executed strictly in order, with replicas following the sequence to ensure uniqueness.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Design the API to be synchronous only up to the point of queuing: acknowledge requests immediately while placing messages into a persistent, at-least-once message broker. Asynchronous consumers then deduplicate requests by validating business state and process charges, issuing refunds or reconciling accounts if duplicates are identified post-processing, thereby keeping the user-facing API highly responsive.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Idempotency Keys with Atomic Conditional Writes</h3>
+        <p>Networks deliver requests <strong>at least once</strong>, so true end-to-end exactly-once processing is not achievable. What you can guarantee is an <strong>exactly-once effect</strong>: a client-supplied idempotency key is claimed with an <strong>atomic conditional write</strong> before any money moves, the outcome is stored, and every retry gets the stored response. Doing this in a region-local, partitioned key-value store keeps latency low and availability high, with no cross-region coordination on the hot path. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Dedup at the layer that actually owns the side effect:</strong> A client-generated key plus an atomic PutIfAbsent means exactly one attempt wins the right to charge. Every other attempt, concurrent or later, sees the existing record and cannot start a second charge.</li>
+          <li><strong>The in-progress state closes the concurrent-retry race:</strong> When a client retries while the first attempt is still running, the second request finds an IN_PROGRESS record and receives a conflict (or waits) instead of charging again. Finished records store the full response, so a replay returns the identical status and body.</li>
+          <li><strong>Low latency and high availability:</strong> A regional key-value store answers in single-digit milliseconds, scales horizontally by partition key, and keeps working in the region during a partition. No global quorum sits on the request path.</li>
+          <li><strong>Operationally cheap:</strong> TTL-based cleanup is built into stores like DynamoDB and Redis, and there is no global lock service to run. Each record naturally carries attempt count, timestamps and state, which feed metrics such as duplicate rate, in-progress conflicts and fingerprint mismatches.</li>
+          <li><strong>Industry-standard contract:</strong> Stripe's API, AWS guidance on safe retries and an IETF draft for an Idempotency-Key header all use client-supplied keys with stored results, so client SDKs and developers already understand the pattern.</li>
+        </ul>
+        <p>A well-designed API includes <strong>client-generated keys scoped per customer</strong>, <strong>request fingerprinting</strong>, an <strong>IN_PROGRESS lease with safe takeover</strong>, <strong>replay of the stored response including status code</strong>, a <strong>processor-level idempotency key</strong>, a <strong>unique constraint on the ledger</strong>, a <strong>TTL beyond the retry horizon</strong>, and <strong>home-region routing</strong>. Track duplicate-request rate, in-progress conflicts, fingerprint mismatches, reconciliation backlog and, above all, duplicate charges reaching the processor (it should be zero). Any non-zero value means a gap in the chain of guards.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🌐</div>
+          <h4>A — Single Global Relational Database</h4>
+          <p>A unique constraint is simple and strictly consistent, but every request in every region pays a cross-region round trip to one primary, and a regional outage or partition makes the charge API unavailable. Holding a transaction open while calling the payment processor is also dangerous (locks, connection exhaustion). <strong>Caveat:</strong> in a single-region system, or when each region owns its own customers' data, a relational unique constraint is an excellent choice and is still the ideal ledger-level backstop inside option B.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🏛️</div>
+          <h4>C — Global Consensus for Every Charge</h4>
+          <p>Paxos or Raft gives a linearizable log, but every charge pays cross-region commit latency, the leader limits throughput, and the system loses availability without a quorum. It also does not deliver the promised exactly-once result, because the call to an external processor is outside the consensus group, so you need idempotent effects anyway. It is heavy machinery for a deduplication problem.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📬</div>
+          <h4>D — Acknowledge First, Deduplicate and Refund Later</h4>
+          <p>Acknowledging before the charge is processed means the app cannot tell the user whether the payment succeeded or was declined, and payments need a synchronous outcome. Duplicates are charged first and refunded afterwards, which means fees, visible double debits, chargebacks, support load and regulatory exposure. Asynchronous processing is fine for receipts, ledger projections and webhooks, but not as the deduplication mechanism.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Idempotency Keys with Atomic Conditional Writes ✓</h4>
+          <p>Require clients to provide idempotency keys and store them in a partitioned, persistent key-value store (such as region-local DynamoDB, Redis, or Cassandra). Use atomic conditional writes (like PutIfA</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Duplicate-Charge Protection</th><th>Cross-Region Latency</th><th>Availability in Partition</th><th>Operational Complexity</th><th>Observability of Retries</th><th>Cost at Scale</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Global Relational DB</td><td>Strong ✅ (single database)</td><td>High ❌</td><td>Low ❌</td><td>Low ✅</td><td>Good ✅</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Regional KV + Conditional Writes ✓</td><td>Strong ⚠ (needs processor and ledger guards)</td><td>Low ✅</td><td>High ✅</td><td>Medium ⚠</td><td>Good ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">C — Global Consensus</td><td>Strong ✅</td><td>High ❌</td><td>Low ❌ (needs quorum)</td><td>High ❌</td><td>Good ✅</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">D — Async Ack + Refunds</td><td>Weak ❌ (duplicates charged then refunded)</td><td>Low ✅ (ack only)</td><td>High ✅</td><td>High ❌ (reconciliation)</td><td>Medium ⚠</td><td>High ❌ (refund fees)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Global Relational DB</h4>
+          <p>Single-region or low-volume systems with a relational ledger where simplicity and strict constraints matter more than cross-region latency.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Regional KV + Conditional Writes</h4>
+          <p>Multi-region, high-throughput APIs with unreliable clients and external side effects. The standard design for payments and order creation.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Global Consensus</h4>
+          <p>Rare cases needing a globally linearizable sequence for other reasons (for example global unique allocation) at a low request rate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Async Ack + Refunds</h4>
+          <p>Non-financial side effects such as emails or notifications, where duplicates are cheap to compensate. Not suitable for charging money.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Idempotent Charge Request Flow</h3>
+        <p>The first request claims the key and charges once. A retry finds the existing record and gets the stored response (or a conflict while the first attempt is still running):</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Mobile Client
+    participant A as Payment API (home region)
+    participant K as Regional KV Store
+    participant P as Payment Processor
+    C-&gt;&gt;A: POST /charge with Idempotency-Key
+    A-&gt;&gt;K: 1. PutIfAbsent(customer and key, IN_PROGRESS, fingerprint)
+    alt Key is new
+        A-&gt;&gt;P: 2. Charge using derived processor idempotency key
+        P--&gt;&gt;A: 3. Approved or declined
+        A-&gt;&gt;K: 4. Store final response (conditional on owner token)
+        A--&gt;&gt;C: 5. Response
+    else Key already exists
+        K--&gt;&gt;A: 2b. Existing record
+        A--&gt;&gt;C: 3b. Stored response, or 409 if still IN_PROGRESS
+    end">sequenceDiagram
+    participant C as Mobile Client
+    participant A as Payment API (home region)
+    participant K as Regional KV Store
+    participant P as Payment Processor
+    C-&gt;&gt;A: POST /charge with Idempotency-Key
+    A-&gt;&gt;K: 1. PutIfAbsent(customer and key, IN_PROGRESS, fingerprint)
+    alt Key is new
+        A-&gt;&gt;P: 2. Charge using derived processor idempotency key
+        P--&gt;&gt;A: 3. Approved or declined
+        A-&gt;&gt;K: 4. Store final response (conditional on owner token)
+        A--&gt;&gt;C: 5. Response
+    else Key already exists
+        K--&gt;&gt;A: 2b. Existing record
+        A--&gt;&gt;C: 3b. Stored response, or 409 if still IN_PROGRESS
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Claim, Charge Once, Replay on Retry</h3>
+        <p>An atomic claim with a request fingerprint and owner token, a processor call using a derived key, safe lease takeover, and a ledger constraint as the last line of defence:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleCharge</span>(req):</span>
+<span class="line">    key <span class="tk-op">=</span> req.<span class="tk-fn">header</span>(<span class="tk-str">&#x27;Idempotency-Key&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> key is missing <span class="tk-kw">or</span> malformed: <span class="tk-kw">return</span> <span class="tk-num">400</span></span>
+<span class="line">    scoped <span class="tk-op">=</span> req.customerId <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> key</span>
+<span class="line">    fingerprint <span class="tk-op">=</span> <span class="tk-fn">sha256</span>(<span class="tk-fn">canonicalize</span>(req.body))</span>
+<span class="line">    token <span class="tk-op">=</span> <span class="tk-fn">newUuid</span>()                                   <span class="tk-com">// owner token for this attempt</span></span>
+<span class="line"></span>
+<span class="line">    created <span class="tk-op">=</span> kv.<span class="tk-fn">putIfAbsent</span>(scoped,</span>
+<span class="line">        {state: <span class="tk-str">&#x27;IN_PROGRESS&#x27;</span>, fp: fingerprint, owner: token, leaseUntil: <span class="tk-fn">now</span>() <span class="tk-op">+</span> <span class="tk-num">30s</span>},</span>
+<span class="line">        ttl <span class="tk-op">=</span> <span class="tk-num">24h</span>)                                      <span class="tk-com">// must exceed the client retry horizon</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> created:</span>
+<span class="line">        rec <span class="tk-op">=</span> kv.<span class="tk-fn">get</span>(scoped)</span>
+<span class="line">        <span class="tk-kw">if</span> rec.fp <span class="tk-op">!=</span> fingerprint:                  <span class="tk-kw">return</span> <span class="tk-num">422</span>          <span class="tk-com">// same key, different payload</span></span>
+<span class="line">        <span class="tk-kw">if</span> rec.state <span class="tk-kw">in</span> (SUCCEEDED, DECLINED):     <span class="tk-kw">return</span> rec.storedResponse   <span class="tk-com">// replay status and body</span></span>
+<span class="line">        <span class="tk-kw">if</span> rec.leaseUntil <span class="tk-op">&gt;</span> <span class="tk-fn">now</span>():                 <span class="tk-kw">return</span> <span class="tk-num">409</span> <span class="tk-kw">with</span> Retry<span class="tk-op">-</span>After <span class="tk-com">// first attempt still running</span></span>
+<span class="line">        <span class="tk-com">// Lease expired: the previous attempt may have crashed after calling the processor</span></span>
+<span class="line">        won <span class="tk-op">=</span> kv.<span class="tk-fn">compareAndSet</span>(scoped, expectedVersion <span class="tk-op">=</span> rec.version,</span>
+<span class="line">                               {owner: token, leaseUntil: <span class="tk-fn">now</span>() <span class="tk-op">+</span> <span class="tk-num">30s</span>})</span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> won: <span class="tk-kw">return</span> <span class="tk-num">409</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">reconcileThenMaybeCharge</span>(scoped, req, token)   <span class="tk-com">// ask the processor first</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">executeCharge</span>(scoped, req, token)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">executeCharge</span>(scoped, req, token):</span>
+<span class="line">    processorKey <span class="tk-op">=</span> <span class="tk-fn">hash</span>(<span class="tk-str">&#x27;psp:&#x27;</span> <span class="tk-op">+</span> scoped)                <span class="tk-com">// same derived key on every attempt</span></span>
+<span class="line">    result <span class="tk-op">=</span> processor.<span class="tk-fn">charge</span>(req, idempotencyKey <span class="tk-op">=</span> processorKey, timeout <span class="tk-op">=</span> <span class="tk-num">8s</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> result is timeout:</span>
+<span class="line">        kv.<span class="tk-fn">update</span>(scoped, {state: <span class="tk-str">&#x27;UNKNOWN&#x27;</span>}, ifOwner <span class="tk-op">=</span> token)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">202</span>                                       <span class="tk-com">// reconciler resolves it; never re-charge with a new key</span></span>
+<span class="line">    finalState <span class="tk-op">=</span> result.approved ? SUCCEEDED : DECLINED</span>
+<span class="line">    ledger.<span class="tk-fn">insert</span>(chargeId <span class="tk-op">=</span> <span class="tk-fn">hash</span>(<span class="tk-str">&#x27;charge:&#x27;</span> <span class="tk-op">+</span> scoped), amount <span class="tk-op">=</span> req.amount)   <span class="tk-com">// UNIQUE(chargeId): last line of defence</span></span>
+<span class="line">    response <span class="tk-op">=</span> <span class="tk-fn">render</span>(result)</span>
+<span class="line">    kv.<span class="tk-fn">update</span>(scoped, {state: finalState, storedResponse: response}, ifOwner <span class="tk-op">=</span> token)</span>
+<span class="line">    <span class="tk-kw">return</span> response</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reconciler</span>():                                  <span class="tk-com">// runs continuously</span></span>
+<span class="line">    <span class="tk-kw">for</span> rec <span class="tk-kw">in</span> kv.<span class="tk-fn">scan</span>(state <span class="tk-op">=</span> <span class="tk-str">&#x27;UNKNOWN&#x27;</span>):</span>
+<span class="line">        status <span class="tk-op">=</span> processor.<span class="tk-fn">lookup</span>(idempotencyKey <span class="tk-op">=</span> <span class="tk-fn">hash</span>(<span class="tk-str">&#x27;psp:&#x27;</span> <span class="tk-op">+</span> rec.key))</span>
+<span class="line">        kv.<span class="tk-fn">update</span>(rec.key, {state: status.finalState, storedResponse: <span class="tk-fn">render</span>(status)})</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Server-generated keys:</strong> If the server invents the key, a retried request cannot present it. Keys must come from the client (or be derived deterministically from the business intent).</li>
+          <li><strong>Check-then-insert races:</strong> Reading the key and then writing it lets two concurrent requests both pass the check. Use a single atomic conditional write.</li>
+          <li><strong>No in-progress state:</strong> Without it, two simultaneous retries both see 'not found' and both charge. Record IN_PROGRESS first, with a lease.</li>
+          <li><strong>Not replaying the original response:</strong> Returning a generic 'already processed' error forces clients to guess the outcome. Store and return the original status code and body.</li>
+          <li><strong>Ignoring the request fingerprint:</strong> The same key with a different payload must be rejected, otherwise a bug or attack silently returns the result of a different charge.</li>
+          <li><strong>Volatile or non-replicated key storage:</strong> A cache without persistence or replication loses keys on failover or restart, which silently re-enables duplicates.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Payment teams <strong>enumerate failure modes first</strong> and then build a chain of guards so no single layer has to be perfect:</p>
+        <ul>
+          <li><strong>Step 0 — Map the failure modes:</strong> Client timeouts, lost responses, concurrent retries, regional failover, processor timeouts and crashes between steps.</li>
+          <li><strong>Step 1 — Define the key contract:</strong> An Idempotency-Key header, scoping per customer, a documented TTL, clear error codes (conflict for in-progress, unprocessable for payload mismatch), and client guidance to retry with the same key and exponential backoff.</li>
+          <li><strong>Step 2 — Atomic claim and replay:</strong> A conditional write in a regional store with a request fingerprint, an owner token and a short lease.</li>
+          <li><strong>Step 3 — Propagate the guard downward:</strong> Send a derived idempotency key to the payment processor and put a unique constraint on the ledger's charge ID.</li>
+          <li><strong>Step 4 — Reconcile unknowns:</strong> A background job resolves timed-out or stuck records by querying the processor, and webhooks act as a second source of truth.</li>
+          <li><strong>Step 5 — Multi-region and chaos testing:</strong> Home-region routing, a failover runbook, and tests that kill the process after the processor call, fire parallel duplicates, and partition regions.</li>
+        </ul>
+        <p>Treat idempotency as a chain of guards (API record, processor key, ledger constraint), not a single check.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Retries are inevitable, so make the <strong>effect</strong> idempotent: clients send a key, the server claims it with an <strong>atomic conditional write</strong>, records an in-progress state, and replays stored results for every retry. Keep the store regional for latency and availability, pin each customer to a home region, and back the API record with a processor-level key and a ledger unique constraint. If your system is single-region, a relational unique constraint may be all you need.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

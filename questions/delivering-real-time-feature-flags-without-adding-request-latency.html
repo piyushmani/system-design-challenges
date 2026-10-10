@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delivering Real-Time Feature Flags Without Adding Request Latency — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">02 MAR 2026</span>
+        <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Feature Flags</span>
+      <span class="tag tag--green">Real-time</span>
+      <span class="tag tag--amber">Production Safety</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Delivering Real-Time Feature Flags Without Adding Request Latency</h1>
+      <p class="q-scenario"><strong>Aiden</strong>, a senior backend engineer, is rolling out a <strong>critical payment workflow</strong> across a large microservice architecture. He needs to (1) <strong>start at 5% of users with instant rollback</strong>, (2) add <strong>virtually zero per-request latency</strong> (under 5 ms), (3) keep <strong>high availability across global regions</strong>, (4) guarantee <strong>consistent user bucketing</strong> (a user always sees the same flag state), and (5) provide <strong>robust event history and observability</strong> for audits. Which feature flag evaluation and distribution architecture best balances these demands?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Evaluate feature flags synchronously by querying a central relational database on every incoming request. The management plane updates the database directly, ensuring services always retrieve the most current state during request processing.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Maintain feature flags in a versioned, in-memory cache within each service instance. The control plane broadcasts flag modifications via a durable pub/sub system (like Kafka). Service instances subscribe to these events to update their local caches, falling back to brief polling of the primary store if events are missed. Flag evaluation occurs server-side using deterministic hashing for user bucketing, with metrics linked to specific flag versions.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Shift the responsibility of flag evaluation entirely to the client side: frontend applications poll the central feature flag service at regular intervals (e.g., every 10 seconds) to fetch updates made by the control plane. Implement client-side deterministic hashing to manage rollout bucketing.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Establish a persistent push connection (such as Server-Sent Events or WebSockets) directly from the control plane to every frontend client and service instance. The control plane immediately pushes all state changes, allowing clients to apply them in real-time, relying entirely on the stability of the push channels for accuracy.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Local Versioned Cache with Event-Driven Updates</h3>
+        <p>The key design move is to <strong>separate the data plane from the control plane</strong>. Evaluating a flag should be an in-memory lookup plus a hash, which costs microseconds and does not depend on any remote system being healthy. Changes flow the other way: the control plane writes a new <strong>versioned</strong> flag state and publishes it through a <strong>durable pub/sub</strong> channel, so every instance converges within seconds, and a <strong>polling fallback</strong> repairs missed events. Deterministic hashing gives sticky bucketing without shared state, and tagging every evaluation with the flag version links metrics and audit to the exact configuration that produced them. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Microsecond evaluation with no request-time dependency:</strong> A local lookup and hash is orders of magnitude below the 5 ms budget. A network round trip to a database costs at least a millisecond in-region and far more across regions, and it puts the flag store on every request's critical path.</li>
+          <li><strong>Fast, safe rollback:</strong> A rollback is just a new flag version (for example rollout 0%) published to every instance, which applies it within seconds. The polling fallback bounds the worst-case delay if an event is missed or a consumer was briefly disconnected.</li>
+          <li><strong>Sticky bucketing without shared state:</strong> A stable hash of the flag's salt and the user ID, taken modulo 10,000, always lands the same user in the same bucket on every instance and region. Raising the rollout from 5% to 25% only adds users, so nobody who already has the feature loses it.</li>
+          <li><strong>Globally available by design:</strong> Each instance holds a last-known-good snapshot, so a control-plane, database or broker outage does not affect request handling. Regional topics or mirrored brokers keep propagation local to each region.</li>
+          <li><strong>Auditable and observable:</strong> Each change is an immutable versioned record (who, what, when, diff), and every evaluation metric or log line carries the flag key and version. That makes it possible to correlate payment error rates and latency with the exact rollout state and to trigger or justify a rollback.</li>
+        </ul>
+        <p>A well-designed flag system includes <strong>immutable snapshots swapped atomically</strong>, <strong>per-flag monotonic versions with gap detection</strong>, <strong>a durable event stream plus polling fallback</strong>, <strong>deterministic hashing with a fixed per-flag salt</strong>, <strong>safe defaults and a readiness gate</strong>, <strong>a kill switch per flag</strong>, and <strong>version-tagged metrics</strong> feeding automated guardrails. Track propagation delay (publish to applied), snapshot age, evaluation error rate and payment success rate by flag state. If propagation delay exceeds your rollback SLO, fix the delivery path before the next ramp-up.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🗃️</div>
+          <h4>A — Database Lookup on Every Request</h4>
+          <p>Always-fresh data is attractive, but it puts a network round trip and a query on the critical path of every request, turns a small hot table into a database bottleneck at high traffic, and ties every service's availability to that database. Adding a short-TTL cache to fix this is really option B with slower and less predictable propagation. <strong>Caveat:</strong> for low-traffic admin tools or batch jobs where a few milliseconds do not matter, this is simple and acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📡</div>
+          <h4>C — Client-Side Polling Every 10 Seconds</h4>
+          <p>Rollback takes at least the polling interval, and clients that are asleep or slow keep the old state longer. Polling load scales with the number of clients rather than services, and shipping targeting and bucketing logic to the client exposes the rules and lets users tamper with them, which is unacceptable for a payment workflow. It can be reasonable for non-sensitive UI toggles served from a CDN.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔌</div>
+          <h4>D — Persistent Push to Every Client and Instance</h4>
+          <p>Streaming updates is a good idea for services, and many flag platforms do it. The problem is the scope and the absence of a fallback: holding millions of persistent frontend connections creates fan-out and reconnection-storm risk, silent staleness appears whenever a channel degrades, and clients are untrusted for payments. Option B uses push for services together with a polling safety net.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Local Versioned Cache with Event-Driven Updates ✓</h4>
+          <p>Maintain feature flags in a versioned, in-memory cache within each service instance. The control plane broadcasts flag modifications via a durable pub/sub system (like Kafka). Service instances subscr</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Evaluation Latency</th><th>Rollback Speed</th><th>Availability if Flag Service Fails</th><th>Bucketing Consistency</th><th>Audit and Observability</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Database per Request</td><td>High ❌ (network plus query)</td><td>Fast ✅ (next request)</td><td>Low ❌</td><td>Neutral ⚠ (needs hashing too)</td><td>Good ✅</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Local Cache + Events ✓</td><td>Microseconds ✅</td><td>Seconds ✅</td><td>High ✅ (last-known-good)</td><td>Strong ✅</td><td>Strong ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — Client Polling</td><td>Local ✅</td><td>10 seconds or more ❌</td><td>Medium ⚠</td><td>Strong ⚠ (client-side, tamperable)</td><td>Weak ❌</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Push to Every Client</td><td>Local ✅</td><td>Fast ✅ while connected</td><td>Medium ⚠ (channel-dependent)</td><td>Strong ⚠ (client-side)</td><td>Medium ⚠</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Database per Request</h4>
+          <p>Small systems, internal admin tools or low-traffic back-office jobs where a few milliseconds do not matter and simplicity wins.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Local Cache + Events</h4>
+          <p>Latency-sensitive, high-throughput backends with safety-critical rollouts that need fast rollback, global availability and an audit trail.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Client Polling</h4>
+          <p>Non-sensitive UI toggles on static or CDN-served sites where updates that take 10 seconds or more are acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Push to Every Client</h4>
+          <p>Consumer or collaborative UIs that need instant updates for non-sensitive features, with a polling or resync fallback in place.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Flag Propagation Architecture</h3>
+        <p>The control plane persists a versioned change and publishes it. Services evaluate locally from an in-memory snapshot and catch up by polling if an event is missed:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    OP[&quot;Operator or automation&quot;] --&gt; CP[&quot;Control plane API&lt;br/&gt;RBAC and approvals&quot;]
+    CP --&gt; DB[(&quot;Flag store&lt;br/&gt;versioned, append-only audit log&quot;)]
+    CP --&gt; KF[(&quot;Durable pub/sub&lt;br/&gt;Kafka topic per region&quot;)]
+    KF --&gt; S1[&quot;Service instance A&lt;br/&gt;in-memory snapshot&quot;]
+    KF --&gt; S2[&quot;Service instance B&lt;br/&gt;in-memory snapshot&quot;]
+    DB -. &quot;poll fallback and gap resync&quot; .-&gt; S1
+    DB -. &quot;poll fallback and gap resync&quot; .-&gt; S2
+    S1 --&gt; M[&quot;Metrics and logs&lt;br/&gt;tagged with flag and version&quot;]
+    S2 --&gt; M">flowchart LR
+    OP[&quot;Operator or automation&quot;] --&gt; CP[&quot;Control plane API&lt;br/&gt;RBAC and approvals&quot;]
+    CP --&gt; DB[(&quot;Flag store&lt;br/&gt;versioned, append-only audit log&quot;)]
+    CP --&gt; KF[(&quot;Durable pub/sub&lt;br/&gt;Kafka topic per region&quot;)]
+    KF --&gt; S1[&quot;Service instance A&lt;br/&gt;in-memory snapshot&quot;]
+    KF --&gt; S2[&quot;Service instance B&lt;br/&gt;in-memory snapshot&quot;]
+    DB -. &quot;poll fallback and gap resync&quot; .-&gt; S1
+    DB -. &quot;poll fallback and gap resync&quot; .-&gt; S2
+    S1 --&gt; M[&quot;Metrics and logs&lt;br/&gt;tagged with flag and version&quot;]
+    S2 --&gt; M</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Local Evaluation, Versioned Updates and Poll Fallback</h3>
+        <p>The hot path is a lock-free lookup and hash, updates are applied only if newer and in sequence, and polling repairs gaps:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Hot path: no network, no locks ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">isEnabled</span>(flagKey, userId, ctx):</span>
+<span class="line">    snap <span class="tk-op">=</span> snapshotRef.<span class="tk-fn">get</span>()                                    <span class="tk-com">// immutable snapshot, swapped atomically</span></span>
+<span class="line">    flag <span class="tk-op">=</span> snap.flags[flagKey]</span>
+<span class="line">    <span class="tk-kw">if</span> flag <span class="tk-op">==</span> <span class="tk-lit">null</span>: <span class="tk-kw">return</span> SAFE_DEFAULT[flagKey]               <span class="tk-com">// &#x27;off&#x27; for risky flags</span></span>
+<span class="line">    <span class="tk-kw">if</span> flag.killSwitch:</span>
+<span class="line">        decision <span class="tk-op">=</span> <span class="tk-lit">false</span></span>
+<span class="line">    <span class="tk-kw">else</span> <span class="tk-kw">if</span> <span class="tk-fn">matchesTargeting</span>(flag.rules, ctx):</span>
+<span class="line">        decision <span class="tk-op">=</span> <span class="tk-lit">true</span></span>
+<span class="line">    <span class="tk-kw">else</span>:</span>
+<span class="line">        bucket <span class="tk-op">=</span> <span class="tk-fn">murmur3</span>(flag.salt <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> userId) mod <span class="tk-num">10000</span>    <span class="tk-com">// stable: same user, same bucket, everywhere</span></span>
+<span class="line">        decision <span class="tk-op">=</span> bucket <span class="tk-op">&lt;</span> flag.rolloutBasisPoints             <span class="tk-com">// 500 means 5 percent</span></span>
+<span class="line">    metrics.<span class="tk-fn">count</span>(<span class="tk-str">&#x27;flag_eval&#x27;</span>, flagKey, flag.version, decision)</span>
+<span class="line">    <span class="tk-kw">return</span> decision</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Update path (durable pub/sub) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onFlagEvent</span>(evt):</span>
+<span class="line">    snap <span class="tk-op">=</span> snapshotRef.<span class="tk-fn">get</span>()</span>
+<span class="line">    have <span class="tk-op">=</span> snap.<span class="tk-fn">versionOf</span>(evt.flagKey)</span>
+<span class="line">    <span class="tk-kw">if</span> evt.version <span class="tk-op">&lt;=</span> have: <span class="tk-kw">return</span>                              <span class="tk-com">// duplicate or out of order</span></span>
+<span class="line">    <span class="tk-kw">if</span> evt.version <span class="tk-op">&gt;</span> have <span class="tk-op">+</span> <span class="tk-num">1</span>: <span class="tk-kw">return</span> <span class="tk-fn">resyncFromStore</span>()         <span class="tk-com">// gap detected: fetch full state</span></span>
+<span class="line">    snapshotRef.<span class="tk-fn">set</span>(snap.<span class="tk-kw">with</span>(evt.flag))                        <span class="tk-com">// atomic swap</span></span>
+<span class="line">    metrics.<span class="tk-fn">observe</span>(<span class="tk-str">&#x27;flag_propagation_ms&#x27;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> evt.publishedAt)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Safety net ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">pollLoop</span>():</span>
+<span class="line">    every <span class="tk-num">30s</span> <span class="tk-op">+</span> jitter:</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            changes <span class="tk-op">=</span> flagStore.<span class="tk-fn">changesSince</span>(snapshotRef.<span class="tk-fn">get</span>().globalSeq)</span>
+<span class="line">            <span class="tk-kw">for</span> c <span class="tk-kw">in</span> changes: <span class="tk-fn">onFlagEvent</span>(c)</span>
+<span class="line">        <span class="tk-kw">catch</span> error:</span>
+<span class="line">            keep last<span class="tk-op">-</span>known<span class="tk-op">-</span>good snapshot</span>
+<span class="line">            metrics.<span class="tk-fn">gauge</span>(<span class="tk-str">&#x27;flag_snapshot_age_s&#x27;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> snapshotRef.<span class="tk-fn">get</span>().loadedAt)   <span class="tk-com">// alert on staleness</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onStartup</span>():</span>
+<span class="line">    snapshotRef.<span class="tk-fn">set</span>(<span class="tk-fn">loadFromStoreOrDisk</span>())                       <span class="tk-com">// readiness gate: not ready until this succeeds</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Entry service: evaluate once, propagate the decision ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handlePayment</span>(req):</span>
+<span class="line">    useNewFlow <span class="tk-op">=</span> <span class="tk-fn">isEnabled</span>(<span class="tk-str">&#x27;new-payment-flow&#x27;</span>, req.userId, req.ctx)</span>
+<span class="line">    req.context.<span class="tk-fn">set</span>(<span class="tk-str">&#x27;flag.new-payment-flow&#x27;</span>, useNewFlow)         <span class="tk-com">// downstream services read this, never re-evaluate</span></span>
+<span class="line">    <span class="tk-kw">return</span> useNewFlow ? <span class="tk-fn">newPaymentFlow</span>(req) : <span class="tk-fn">legacyPaymentFlow</span>(req)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>A network call per flag evaluation on the hot path:</strong> It adds latency and makes the flag store a dependency of every request. Evaluate from a local snapshot.</li>
+          <li><strong>Random or non-deterministic bucketing:</strong> Users see the feature appear and disappear between requests. Use a stable hash of salt and user ID.</li>
+          <li><strong>Changing the salt or bucketing key mid-rollout:</strong> This reshuffles users, so people who had the new payment flow lose it and others gain it unpredictably. Fix the salt for the life of the rollout.</li>
+          <li><strong>No safe default or readiness gate:</strong> A cold-started instance that evaluates as 'on' (or crashes) when it has no snapshot is a production incident. Default risky flags to off and wait for the first snapshot.</li>
+          <li><strong>Evaluating the same flag repeatedly inside one workflow:</strong> A flip mid-transaction produces inconsistent payment behavior. Evaluate once at the entry and propagate the decision.</li>
+          <li><strong>No version tagging, ownership or expiry:</strong> Without versions you cannot attribute errors to a rollout step, and without owners and expiry dates flags accumulate as untested dead code.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams that roll out risky changes with flags <strong>decide how fast they must be able to roll back</strong> and then build delivery around that number:</p>
+        <ul>
+          <li><strong>Step 0 — Define requirements:</strong> The rollback SLO, criticality per flag, where evaluation happens (server, edge, client) and what the audit trail must contain.</li>
+          <li><strong>Step 1 — Choose the evaluation model:</strong> Server-side local evaluation through an SDK backed by an in-memory snapshot. Buy or build (for example a commercial or open-source platform behind the OpenFeature API) with the same architecture.</li>
+          <li><strong>Step 2 — Build the control plane:</strong> Versioned flags, role-based access, approvals for payment flags, an append-only audit log, kill switches, and propagation through a stream with polling fallback.</li>
+          <li><strong>Step 3 — Ramp progressively with guardrails:</strong> For example 1% then 5%, 25%, 50% and 100%, with automated checks on error rate, p99 latency and payment success tied to the flag version, and automatic rollback when thresholds are crossed.</li>
+          <li><strong>Step 4 — Keep decisions consistent across services:</strong> Evaluate once at the entry point, pass the decision in request context, and keep the bucketing salt fixed for the life of the rollout.</li>
+          <li><strong>Step 5 — Maintain hygiene:</strong> Flag owners and expiry dates, tests for both code paths, and chaos drills that take down the broker or control plane to confirm last-known-good behavior.</li>
+        </ul>
+        <p>Make evaluation local and boring, and make change distribution fast, versioned and auditable.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Keep <strong>flag evaluation local and in memory</strong>, distribute changes as <strong>versioned events over a durable channel with a polling safety net</strong>, and use <strong>deterministic hashing</strong> so users stay in the same bucket. Evaluate once per workflow, set safe defaults, and tag metrics and audit records with flag versions so rollback decisions are fast and defensible. Avoid per-request remote lookups and avoid trusting clients with payment rollout logic.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

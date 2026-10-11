@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya Deciding How Domains Share Low-Latency Product Data — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">06 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Domain Driven Design</span>
+      <span class="tag tag--green">Data Sharing</span>
+      <span class="tag tag--amber">Low Latency</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya Deciding How Domains Share Low-Latency Product Data</h1>
+      <p class="q-scenario"><strong>Maya</strong>, a platform architect at a fast-growing e-commerce company, is moving to a <strong>Data Mesh</strong>. The <strong>Product, Inventory, Pricing and Checkout</strong> domains each have their own team and OLTP database. Checkout needs <strong>extremely low-latency reads</strong> of price and inventory to validate carts, and can tolerate <strong>sub-second to a few seconds of staleness</strong> on those reads (the final stock reservation is made authoritatively by the owning domain). Analytics pipelines need <strong>near-real-time</strong> updates and reporting teams need a <strong>governed, discoverable</strong> source. Every domain must <strong>own its data</strong>, and the platform must stay <strong>highly available, scalable, observable and affordable</strong>. She must choose a cross-domain data sharing architecture that balances cost, fault tolerance, consistency and latency.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Fully centralized: a central data team runs a master data warehouse, domains upload nightly ETL extracts, and all operational and analytical consumers query the warehouse.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Decentralized, event-driven data products: domains publish change events under strict contracts to a central streaming platform; consumers such as Checkout maintain local materialized views or stream processors for low-latency reads, while the platform provides SLAs, access control, monitoring and a schema registry.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Synchronous API sharing: each domain exposes HTTP/gRPC APIs and consumers call them directly for real-time data, relying on each domain&#x27;s latency and availability SLAs, with optional caller-side caching.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Hybrid lakehouse with CDC: replicate domain database changes into a shared lakehouse (Iceberg or Delta) and serve both analytics and near-real-time operational queries from it using streaming engines or materialized views.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Event-Driven Data Products</h3>
+        <p>Given these requirements (domain ownership, millisecond reads for Checkout, near-real-time analytics, governed discovery), <strong>decentralized, event-driven data products</strong> are the best fit. Data Mesh asks each domain to publish its data as a product with a contract, an owner and SLAs. Events on a streaming platform let every consumer build the read model it needs: Checkout gets local reads, analytics gets a continuous feed, and governance applies in one place without centralizing ownership. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Domain ownership preserved:</strong> Each domain owns its event contract (schema, versioning, quality) as a published product. The central platform provides tooling (registry, access control, observability) but not the data semantics, which matches the Data Mesh principles of domain ownership, data as a product and federated governance.</li>
+          <li><strong>Low-latency reads without runtime coupling:</strong> Checkout reads price and inventory from its <em>own</em> materialized view (in-memory cache or local store) in single-digit milliseconds. A slow or unavailable Inventory service does not break cart validation, which removes a synchronous dependency from the critical path.</li>
+          <li><strong>One feed, many consumers:</strong> Analytics, reporting and search subscribe to the same ordered event streams. Adding a consumer puts no extra load on the domain's OLTP database and keeps the data consistent across consumers.</li>
+          <li><strong>Governed and observable by design:</strong> A schema registry with compatibility rules, data contracts, consumer-lag metrics, dead-letter queues and lineage give the platform one place to enforce SLAs and make products discoverable.</li>
+          <li><strong>Fault isolation and replay:</strong> A durable, partitioned log lets consumers fall behind, restart, or rebuild a view by replaying from an offset. Failures stay local to a consumer instead of cascading through synchronous call chains.</li>
+        </ul>
+        <p>A solid implementation uses the <strong>transactional outbox</strong> for reliable publishing, <strong>keyed partitions</strong> for per-entity ordering, <strong>idempotent consumers</strong>, a <strong>schema registry with compatibility checks</strong>, <strong>freshness and lag SLOs</strong> per data product, and a <strong>synchronous authoritative API</strong> for the few operations that cannot tolerate staleness. Land the same streams in the lakehouse for analytics instead of making the lakehouse the serving layer.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🏢</div>
+          <h4>A — Centralized Warehouse with Nightly ETL</h4>
+          <p>A nightly batch cannot meet <strong>near-real-time analytics</strong> and is far too slow for Checkout's price and inventory validation (the data is up to a day old, and a warehouse is not an OLTP read path). It also moves ownership to a central team, which becomes a bottleneck for every schema change and contradicts Data Mesh principles. <strong>Caveat:</strong> a central warehouse is still a good <em>consumer</em> of data products for governed reporting; it is just not the sharing mechanism.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔗</div>
+          <h4>C — Synchronous API Sharing</h4>
+          <p>Direct API calls give fresh data and strong semantics but create <strong>tight runtime coupling</strong>: Checkout's latency and availability become the product of its dependencies' latency and availability, and traffic spikes in Checkout propagate to Pricing and Inventory. Analytics and reporting would have to poll OLTP APIs, which does not scale. <strong>Caveat:</strong> synchronous APIs remain the right tool for authoritative operations (reserve stock, place an order) and for request-time reads that must be exactly current.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🏞️</div>
+          <h4>D — Shared Lakehouse via CDC</h4>
+          <p>CDC into a lakehouse is excellent for analytics, but as the <strong>serving layer for operational reads</strong> it falls short: table formats like Iceberg and Delta are optimized for scans and commits measured in seconds to minutes, not for point lookups in single-digit milliseconds. Raw CDC also exposes internal table schemas rather than a stable contract, and a centralized lakehouse tends to re-centralize ownership. <strong>Caveat:</strong> it works well as one of the <em>consumers</em> of option B's event streams, which is how most mesh implementations feed analytics.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Event-Driven Data Products ✓</h4>
+          <p>Decentralized, event-driven data products: domains publish change events under strict contracts to a central streaming platform; consumers such as Checkout maintain local materialized views or stream</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Operational Read Latency</th><th>Analytics Freshness</th><th>Domain Ownership</th><th>Runtime Coupling</th><th>Fault Isolation</th><th>Engineering Cost</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Centralized Warehouse</td><td>Poor (not an OLTP path) ❌</td><td>Up to a day ❌</td><td>Central team ❌</td><td>Low ✅</td><td>Batch failures delay everyone ❌</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Event-Driven Data Products ✓</td><td>Very low (local views) ✅</td><td>Seconds ✅</td><td>Domain-owned ✅</td><td>Low (async) ✅</td><td>Good (durable log, replay) ✅</td><td>Medium–High ⚠</td></tr>
+            <tr><td class="tt-option">C — Synchronous APIs</td><td>Low–Medium (network hop) ⚠</td><td>Poll or scrape ❌</td><td>Domain-owned ✅</td><td>High (call chains) ❌</td><td>Poor (cascading failures) ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">D — Lakehouse via CDC</td><td>Poor for point reads ❌</td><td>Seconds to minutes ⚠</td><td>Centralized serving ⚠</td><td>Medium ⚠</td><td>Good ✅</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Centralized Warehouse</h4>
+          <p>Governed, batch-oriented reporting where hours of latency are acceptable and a central team curates a small set of conformed dimensions. Best as a consumer of data products.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Event-Driven Data Products</h4>
+          <p>Multi-team organizations where several consumers need the same domain data at different latencies, domains must own their contracts, and request-time reads must not depend on other services being up.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Synchronous APIs</h4>
+          <p>Authoritative operations and request-time reads that must be exactly current (reserve stock, charge a payment), or small systems where one or two consumers do not justify a streaming platform.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Lakehouse via CDC</h4>
+          <p>Analytics and ML workloads, historical queries and legacy sources that cannot publish events. Not for millisecond operational reads.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Event-Driven Data Products Across Domains</h3>
+        <p>Each domain publishes events through an outbox. Consumers build the read model they need, and the lakehouse is fed from the same streams:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    subgraph Domains[Domain teams own their data]
+        P[Product DB] --&gt; PO[Outbox relay]
+        I[Inventory DB] --&gt; IO[Outbox relay]
+        R[Pricing DB] --&gt; RO[Outbox relay]
+    end
+    PO --&gt; K[Streaming platform with schema registry]
+    IO --&gt; K
+    RO --&gt; K
+    K --&gt; C[Checkout read model]
+    K --&gt; A[Stream processor to lakehouse]
+    K --&gt; S[Search and other consumers]
+    A --&gt; L[Lakehouse tables for analytics and reporting]
+    L --&gt; CAT[Data catalog and governance]
+    C --&gt; CO[Checkout service]
+    CO -.-&gt;|Authoritative reserve| I">flowchart LR
+    subgraph Domains[Domain teams own their data]
+        P[Product DB] --&gt; PO[Outbox relay]
+        I[Inventory DB] --&gt; IO[Outbox relay]
+        R[Pricing DB] --&gt; RO[Outbox relay]
+    end
+    PO --&gt; K[Streaming platform with schema registry]
+    IO --&gt; K
+    RO --&gt; K
+    K --&gt; C[Checkout read model]
+    K --&gt; A[Stream processor to lakehouse]
+    K --&gt; S[Search and other consumers]
+    A --&gt; L[Lakehouse tables for analytics and reporting]
+    L --&gt; CAT[Data catalog and governance]
+    C --&gt; CO[Checkout service]
+    CO -.-&gt;|Authoritative reserve| I</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent Read-Model Consumer with Staleness Guard</h3>
+        <p>The consumer applies events only if they are newer, the request path reads locally and falls back to the owner when the view is missing or too old, and the reservation stays authoritative:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Consumer: builds the Checkout read model from the Inventory stream</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onInventoryEvent</span>(event):                  <span class="tk-com">// partitioned by sku, so per-sku order holds</span></span>
+<span class="line">    current <span class="tk-op">=</span> viewStore.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;stock:&#x27;</span> <span class="tk-op">+</span> event.sku)</span>
+<span class="line">    <span class="tk-kw">if</span> current <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> current.version <span class="tk-op">&gt;=</span> event.version:</span>
+<span class="line">        <span class="tk-kw">return</span>                                     <span class="tk-com">// duplicate or out of order: ignore (idempotent)</span></span>
+<span class="line">    viewStore.<span class="tk-fn">set</span>(<span class="tk-str">&#x27;stock:&#x27;</span> <span class="tk-op">+</span> event.sku, {</span>
+<span class="line">        available: event.available,</span>
+<span class="line">        version: event.version,</span>
+<span class="line">        eventTime: event.occurredAt,</span>
+<span class="line">        appliedAt: <span class="tk-fn">now</span>()</span>
+<span class="line">    })</span>
+<span class="line">    <span class="tk-com">// commit the stream offset only after the write succeeds (at-least-once delivery)</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Request path: fast validation from the local view</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">validateCartLine</span>(sku, qty):</span>
+<span class="line">    stock <span class="tk-op">=</span> viewStore.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;stock:&#x27;</span> <span class="tk-op">+</span> sku)</span>
+<span class="line">    price <span class="tk-op">=</span> viewStore.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;price:&#x27;</span> <span class="tk-op">+</span> sku)</span>
+<span class="line">    <span class="tk-kw">if</span> stock <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> price <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">callOwnerApi</span>(sku, qty)              <span class="tk-com">// cold start or gap: fall back to the source</span></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> stock.eventTime <span class="tk-op">&gt;</span> MAX_STALENESS:    <span class="tk-com">// for example 5 seconds</span></span>
+<span class="line">        metrics.<span class="tk-fn">increment</span>(<span class="tk-str">&#x27;view.stale&#x27;</span>)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">callOwnerApi</span>(sku, qty)              <span class="tk-com">// too stale: read from the source</span></span>
+<span class="line">    <span class="tk-kw">return</span> stock.available <span class="tk-op">&gt;=</span> qty</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Order placement: the authoritative step stays with the owning domain</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">placeOrder</span>(cart):</span>
+<span class="line">    <span class="tk-kw">for</span> line <span class="tk-kw">in</span> cart.lines:</span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> <span class="tk-fn">validateCartLine</span>(line.sku, line.qty):</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">reject</span>(line)</span>
+<span class="line">    reservation <span class="tk-op">=</span> inventoryApi.<span class="tk-fn">reserve</span>(cart.id, cart.lines, idempotencyKey <span class="tk-op">=</span> cart.id)</span>
+<span class="line">    <span class="tk-kw">if</span> reservation.failed:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">outOfStock</span>(reservation.skus)</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">confirmOrder</span>(cart, reservation)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Publishing raw table changes as the contract:</strong> Consumers couple to internal schemas, and every refactor breaks someone. Publish domain events or a curated public model through an outbox.</li>
+          <li><strong>Dual writes without an outbox:</strong> Writing to the database and then publishing to the broker in two steps loses events when one of them fails. Write the event in the same transaction and relay it.</li>
+          <li><strong>Ignoring ordering and idempotency:</strong> Redeliveries and out-of-order events corrupt views. Key by entity ID, include a version or sequence number, and make updates idempotent (apply only if the version is newer).</li>
+          <li><strong>Using stale views for authoritative decisions:</strong> Reserving the last unit of stock from a cached view oversells. Validate quickly from the view, then reserve through the owning domain.</li>
+          <li><strong>No schema evolution rules:</strong> Without compatibility checks, a producer change breaks consumers in production. Enforce backward-compatible changes in the registry and version breaking changes.</li>
+          <li><strong>No freshness SLO or lag alerting:</strong> A silent consumer lag means Checkout shows old prices for hours. Define a maximum staleness per data product and alert on lag and on event age.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, mesh platforms combine several mechanisms and <strong>choose one per access pattern</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Classify access patterns:</strong> Separate request-time reads (milliseconds), authoritative writes (strong consistency), near-real-time analytics (seconds) and reporting (minutes to hours). Each has a different best mechanism.</li>
+          <li><strong>Step 1 — Publish domain events as products:</strong> Each domain emits events through the outbox pattern with a versioned schema, an owner, an SLA and documentation in a catalog.</li>
+          <li><strong>Step 2 — Give serving consumers local read models:</strong> Checkout and similar services materialize the fields they need into a cache or local store, with a defined maximum staleness.</li>
+          <li><strong>Step 3 — Keep an authoritative path:</strong> Use synchronous APIs or reservation workflows for operations that must be exactly right, such as stock reservation at order placement.</li>
+          <li><strong>Step 4 — Land streams in the lakehouse:</strong> Feed analytics and reporting from the same events (or from CDC for legacy sources), with governed, discoverable tables.</li>
+          <li><strong>Step 5 — Operate the platform:</strong> Monitor consumer lag, schema compatibility, data quality and cost, and enforce access policies centrally while ownership stays federated.</li>
+        </ul>
+        <p>Choose the mechanism per access pattern, not one mechanism for everything.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>In a Data Mesh, <strong>domains publish events as contracted data products</strong>, consumers build local read models for low latency, and a central platform provides governance and tooling rather than ownership. Synchronous APIs remain for authoritative operations, and the lakehouse is an analytical consumer rather than the operational serving layer.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

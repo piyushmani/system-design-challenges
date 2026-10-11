@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diego’s Bloom Filter Dilemma: Scaling fast versus staying consistent — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">14 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Bloom Filters</span>
+      <span class="tag tag--green">Consistency</span>
+      <span class="tag tag--amber">Scalability</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Diego’s Bloom Filter Dilemma: Scaling fast versus staying consistent</h1>
+      <p class="q-scenario"><strong>Diego</strong>, a backend developer, is building a user-validation service that handles about <strong>50,000 requests per second</strong> and filters out <strong>invalid user IDs</strong> before they reach the primary database. The service runs on <strong>hundreds of application instances across multiple regions</strong>, must keep <strong>p99 latency under 10 ms</strong>, tolerates a small <strong>false-positive rate (under 2%)</strong>, but <strong>cannot allow large spikes in database queries</strong>. He must pick a deployment model for probabilistic structures such as Bloom filters that stays scalable, available, and fast while keeping operational complexity and consistency under control.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A centralized Bloom-filter service (microservice or Redis): every instance calls it synchronously, and it is updated synchronously on writes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Local in-memory Bloom filters in each app instance, updated asynchronously from a CDC/Kafka stream, with versioned snapshots for fast cold starts, eventual consistency, and mathematical sizing for the target false-positive rate.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">A distributed counting Bloom filter in a strongly consistent central key-value store, updated synchronously on every account creation or deletion and queried on every request.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">No Bloom filter: check the primary database every time and cache &#x27;not found&#x27; results with a short TTL in a global cache (for example Redis).</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Local Bloom Filters via Event Stream</h3>
+        <p>A Bloom filter is only valuable if the membership check is <strong>nearly free</strong>. A local in-memory lookup takes microseconds, while any network call costs a millisecond or more and adds a failure mode. With 50k requests per second across hundreds of instances in several regions, putting the filter <strong>in-process</strong> keeps the hot path off the network, and a change stream keeps every copy current within seconds. The filter's one-sided error (false positives, but no false negatives for entries it has already seen) is exactly what a pre-database screen wants. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Latency:</strong> Checking a local bit array costs on the order of microseconds, so it adds effectively nothing to the 10 ms p99 budget, needs no network hop, and behaves identically in every region.</li>
+          <li><strong>Bounded database load:</strong> At a 1 to 2% false-positive rate, only about 1 to 2% of <em>invalid</em> IDs leak through to the database. Even a flood of random IDs at 50k per second produces at most roughly 500 to 1,000 DB lookups per second instead of 50,000.</li>
+          <li><strong>No central bottleneck or SPOF:</strong> Each instance serves from its own memory, so a Kafka or CDC outage causes staleness, not unavailability. Instances keep validating with the last known filter.</li>
+          <li><strong>Cheap in memory:</strong> At about 1% false-positive rate a Bloom filter needs roughly 9.6 bits per entry, which is about 120 MB for 100 million IDs. That fits comfortably per instance, and sizing follows directly from <code>m = -n ln p / (ln 2)^2</code>.</li>
+          <li><strong>Fast recovery:</strong> Versioned snapshots (with the stream offset they cover) let a new instance load the filter from object storage and replay only the tail of the stream instead of rebuilding from the database.</li>
+        </ul>
+        <p>A solid rollout has <strong>filters sized for projected growth</strong>, <strong>versioned snapshots with stream offsets</strong>, <strong>atomic swaps of rebuilt filters</strong>, a <strong>recent-creates safeguard against false negatives</strong>, and <strong>metrics</strong> for fill ratio, observed false-positive rate, filter-pass-to-DB rate, and update lag. If the observed DB lookup rate for invalid IDs drifts above target, rebuild with a larger size.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🏛️</div>
+          <h4>A — Centralized Bloom Service</h4>
+          <p>Every request pays a network round trip (and cross-region traffic pays far more), so the cheap check becomes the expensive part of the path and p99 now depends on the service's tail latency. At 50k requests per second the service is a throughput bottleneck and a single point of failure: if it is slow or down, you either fail requests or send all traffic to the database, which is the spike you wanted to avoid. Synchronous updates add write-path coupling. <strong>Caveat:</strong> a central filter is reasonable for small, single-region deployments, or as an offline job that builds snapshots distributed to instances.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧮</div>
+          <h4>C — Distributed Counting Bloom in a Strongly Consistent Store</h4>
+          <p>This is the heaviest option: counters multiply memory several-fold (each cell holds a counter instead of one bit), strong consistency turns every account change into a synchronous distributed write, and every request still crosses the network. It buys precision (deletes, global consistency) that the use case does not need, because a false positive just costs one DB lookup. <strong>Caveat:</strong> counting or cuckoo filters are useful when deletes are frequent, but applied locally rather than as a central synchronous store.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧊</div>
+          <h4>D — No Bloom Filter, Negative Caching Only</h4>
+          <p>Negative caching only helps when the same invalid IDs repeat. Random or scanning traffic (enumeration attacks, typos, bots) produces mostly unique IDs, so the hit rate is low and nearly every request reaches the database, which violates the 'no spikes' requirement. It also adds a call to the global cache on every request. <strong>Caveat:</strong> it is a good complement. Put a small negative cache behind the Bloom filter to absorb the few false positives and repeated lookups.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Local Bloom Filters via Event Stream ✓</h4>
+          <p>Local in-memory Bloom filters in each app instance, updated asynchronously from a CDC/Kafka stream, with versioned snapshots for fast cold starts, eventual consistency, and mathematical sizing for the</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Check Latency</th><th>Availability / SPOF Risk</th><th>Database Spike Protection</th><th>Consistency</th><th>Memory and Cost</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Centralized Bloom Service</td><td>Network hop per request ❌</td><td>Central SPOF ❌</td><td>Good ✅</td><td>Strong on the filter ✅</td><td>Low ✅</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Local Filters via Event Stream ✓</td><td>Microseconds ✅</td><td>No SPOF ✅</td><td>Good, bounded by FPR ✅</td><td>Eventual ⚠</td><td>Moderate, per instance ⚠</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — Distributed Counting Bloom</td><td>Network hop plus strong consistency ❌</td><td>Store is a SPOF ❌</td><td>Good ✅</td><td>Strong ✅</td><td>High (counters) ❌</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">D — No Bloom, Negative Cache</td><td>Cache hop, DB on misses ⚠</td><td>Depends on DB and cache ⚠</td><td>Poor for unique invalid IDs ❌</td><td>Strong ✅</td><td>Low ✅</td><td>Low ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Centralized Bloom Service</h4>
+          <p>Small deployments, a single region, or low request rates where one shared filter is simpler and the service can be co-located and highly available.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Local Filters via Event Stream</h4>
+          <p>High request rates, many instances, multi-region deployments, and a need for microsecond checks with bounded staleness. This is the standard pattern for pre-database screening.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Distributed Counting Bloom</h4>
+          <p>Rare cases needing a precise, deletable, globally consistent membership structure that can tolerate network-bound latency (for example low-QPS governance checks).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — No Bloom, Negative Cache</h4>
+          <p>Low or moderate traffic where invalid IDs are few and repeated (typos, retries), or as a complementary layer behind a Bloom filter.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Request Path with a Local Bloom Filter</h3>
+        <p>A definite 'no' never touches the database. A 'maybe' is verified through the negative cache and the database:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant A as App Instance
+    participant F as Local Bloom Filter
+    participant R as Recent Creates Set
+    participant N as Negative Cache
+    participant D as Primary DB
+    C-&gt;&gt;A: 1. Validate user ID
+    A-&gt;&gt;F: 2. Might contain?
+    alt Definitely not in filter
+        F--&gt;&gt;A: No
+        A-&gt;&gt;R: 3. In recent creates?
+        alt Not recent
+            R--&gt;&gt;A: No
+            A--&gt;&gt;C: 4a. Invalid (no DB call)
+        else Recently created
+            R--&gt;&gt;A: Yes
+            A-&gt;&gt;D: 4b. Verify in DB
+            D--&gt;&gt;A: Exists
+            A--&gt;&gt;C: Valid
+        end
+    else Maybe present
+        F--&gt;&gt;A: Maybe
+        A-&gt;&gt;N: 5. Known missing?
+        N--&gt;&gt;A: Not cached
+        A-&gt;&gt;D: 6. Read user
+        D--&gt;&gt;A: User or not found
+        A--&gt;&gt;C: 7. Valid or invalid (cache not-found briefly)
+    end">sequenceDiagram
+    participant C as Client
+    participant A as App Instance
+    participant F as Local Bloom Filter
+    participant R as Recent Creates Set
+    participant N as Negative Cache
+    participant D as Primary DB
+    C-&gt;&gt;A: 1. Validate user ID
+    A-&gt;&gt;F: 2. Might contain?
+    alt Definitely not in filter
+        F--&gt;&gt;A: No
+        A-&gt;&gt;R: 3. In recent creates?
+        alt Not recent
+            R--&gt;&gt;A: No
+            A--&gt;&gt;C: 4a. Invalid (no DB call)
+        else Recently created
+            R--&gt;&gt;A: Yes
+            A-&gt;&gt;D: 4b. Verify in DB
+            D--&gt;&gt;A: Exists
+            A--&gt;&gt;C: Valid
+        end
+    else Maybe present
+        F--&gt;&gt;A: Maybe
+        A-&gt;&gt;N: 5. Known missing?
+        N--&gt;&gt;A: Not cached
+        A-&gt;&gt;D: 6. Read user
+        D--&gt;&gt;A: User or not found
+        A--&gt;&gt;C: 7. Valid or invalid (cache not-found briefly)
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Sizing, Local Lookup, Stream Updates, and Cold Start</h3>
+        <p>Filter sizing from the target false-positive rate, a lookup that protects new users from false negatives, idempotent stream updates, and a snapshot-plus-replay bootstrap:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---------- sizing ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">sizeFilter</span>(expectedItems n, targetFpr p):</span>
+<span class="line">    m <span class="tk-op">=</span> <span class="tk-fn">ceil</span>(<span class="tk-op">-</span>n <span class="tk-op">*</span> <span class="tk-fn">ln</span>(p) <span class="tk-op">/</span> (<span class="tk-fn">ln</span>(<span class="tk-num">2</span>) ^ <span class="tk-num">2</span>))              <span class="tk-com">// bits: about 9.6 bits per item at p = 1%</span></span>
+<span class="line">    k <span class="tk-op">=</span> <span class="tk-fn">round</span>((m <span class="tk-op">/</span> n) <span class="tk-op">*</span> <span class="tk-fn">ln</span>(<span class="tk-num">2</span>))                      <span class="tk-com">// hash functions: about 7 at p = 1%</span></span>
+<span class="line">    <span class="tk-kw">return</span> (m, k)                                   <span class="tk-com">// n = 100M, p = 1% -&gt; roughly 120 MB per instance</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---------- request path ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">isValidUser</span>(userId):</span>
+<span class="line">    filter <span class="tk-op">=</span> activeFilter.<span class="tk-fn">get</span>()                     <span class="tk-com">// atomic reference, swapped on rebuild</span></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> filter.<span class="tk-fn">mightContain</span>(userId):</span>
+<span class="line">        <span class="tk-com">// A Bloom &#x27;no&#x27; is final, so protect brand-new users who may not be in this copy yet</span></span>
+<span class="line">        <span class="tk-kw">if</span> recentCreates.<span class="tk-fn">contains</span>(userId) <span class="tk-kw">or</span> userId <span class="tk-op">&gt;</span> filter.idHighWatermark:    <span class="tk-com">// watermark only if IDs are time-ordered</span></span>
+<span class="line">            <span class="tk-kw">return</span> db.<span class="tk-fn">exists</span>(userId)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-lit">false</span>                                <span class="tk-com">// definite no: zero DB calls</span></span>
+<span class="line">    <span class="tk-com">// &#x27;maybe&#x27;: could be a false positive</span></span>
+<span class="line">    <span class="tk-kw">if</span> negativeCache.<span class="tk-fn">contains</span>(userId):</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-lit">false</span></span>
+<span class="line">    exists <span class="tk-op">=</span> db.<span class="tk-fn">exists</span>(userId)</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> exists: negativeCache.<span class="tk-fn">put</span>(userId, ttl <span class="tk-op">=</span> <span class="tk-num">60s</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> exists</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---------- updates from the change stream ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onUserCreated</span>(event):                      <span class="tk-com">// at-least-once is fine: setting bits twice is harmless</span></span>
+<span class="line">    activeFilter.<span class="tk-fn">get</span>().<span class="tk-fn">add</span>(event.userId)            <span class="tk-com">// lock-free atomic OR on the bit array</span></span>
+<span class="line">    recentCreates.<span class="tk-fn">put</span>(event.userId, ttl <span class="tk-op">=</span> <span class="tk-num">2</span> <span class="tk-op">*</span> maxExpectedLag)</span>
+<span class="line">    lastAppliedOffset <span class="tk-op">=</span> event.offset</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---------- cold start and periodic rebuild ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">bootstrap</span>():</span>
+<span class="line">    snapshot  <span class="tk-op">=</span> objectStore.<span class="tk-fn">loadLatestSnapshot</span>()                    <span class="tk-com">// bits + stream offset + idHighWatermark</span></span>
+<span class="line">    newFilter <span class="tk-op">=</span> BloomFilter.<span class="tk-fn">fromBytes</span>(snapshot.bytes)</span>
+<span class="line">    <span class="tk-kw">for</span> event <span class="tk-kw">in</span> kafka.<span class="tk-fn">replay</span>(<span class="tk-kw">from</span> <span class="tk-op">=</span> snapshot.offset):              <span class="tk-com">// catch up on the tail</span></span>
+<span class="line">        newFilter.<span class="tk-fn">add</span>(event.userId)</span>
+<span class="line">    activeFilter.<span class="tk-fn">set</span>(newFilter)                                     <span class="tk-com">// atomic swap, never mutate in place during rebuild</span></span>
+<span class="line">    <span class="tk-fn">markReady</span>()                                                     <span class="tk-com">// only now accept traffic</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Metrics to export: fill ratio, observed FPR (sampled DB checks), DB lookups for filter-passed IDs, update lag</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Treating a 'no' as safe for new data:</strong> A filter that has not received the latest creates will reject valid new users. Add a recent-creates set or an ID watermark.</li>
+          <li><strong>Under-sizing the filter:</strong> The false-positive rate climbs sharply as the filter fills beyond n. Size for growth and track the fill ratio.</li>
+          <li><strong>Expecting deletes to work:</strong> Standard Bloom filters do not support removal. Use periodic rebuilds, counting filters, or cuckoo filters.</li>
+          <li><strong>Weak or correlated hash functions:</strong> Poor hashing breaks the math. Use a strong non-cryptographic hash with double hashing (for example Murmur3 or xxHash) and test the observed FPR.</li>
+          <li><strong>Non-atomic filter swaps:</strong> Rebuilding in place causes transient false negatives. Build a new filter, then swap the reference atomically.</li>
+          <li><strong>Ignoring cold start:</strong> A new instance with an empty filter rejects everything or sends everything to the DB. Hold readiness until the snapshot is loaded and the stream tail is caught up.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Probabilistic filters are usually introduced after measuring, as one layer in a defense in depth:</p>
+        <ul>
+          <li><strong>Step 0 — Measure the invalid-ID rate:</strong> If invalid lookups are rare and repeated, negative caching alone may be enough.</li>
+          <li><strong>Step 1 — Size the filter:</strong> Pick n with growth headroom and a target FPR (for example 1%) using <code>m = -n ln p / (ln 2)^2</code> and <code>k = (m/n) ln 2</code> hash functions.</li>
+          <li><strong>Step 2 — Build and distribute:</strong> A periodic job builds the filter from the source of truth, tags it with a stream offset, and stores it in object storage. Instances load it at startup.</li>
+          <li><strong>Step 3 — Keep it fresh:</strong> Apply creates from CDC or Kafka to the local filter (setting bits is lock-free and idempotent), and swap in rebuilt filters atomically.</li>
+          <li><strong>Step 4 — Guard against false negatives:</strong> A short-lived recently-created set and a timestamp-in-ID check cover the propagation window.</li>
+          <li><strong>Step 5 — Layer defenses:</strong> Add a small negative cache and rate limiting for abusive sources behind the filter, and alert on the DB lookup rate.</li>
+        </ul>
+        <p>Cheap checks first, authoritative checks last.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Put the probabilistic filter <strong>where lookups are free: in process</strong>, and let a change stream keep it fresh. Accept eventual consistency, but protect against the one dangerous error (false negatives for brand-new IDs), size the filter mathematically with headroom, and keep the database as the final authority. Central or strongly consistent filters pay a latency and availability tax for precision this use case does not need.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

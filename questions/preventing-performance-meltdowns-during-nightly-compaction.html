@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preventing Performance Meltdowns During Nightly Compaction — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">06 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Database Compaction</span>
+      <span class="tag tag--green">Performance Optimization</span>
+      <span class="tag tag--amber">Maintenance</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Preventing Performance Meltdowns During Nightly Compaction</h1>
+      <p class="q-scenario"><strong>Aisha</strong> manages the backend of a <strong>high-volume time-series data platform</strong> whose nodes use an <strong>LSM-tree storage engine</strong>. Data is append-mostly, expires through TTLs or retention rules, and most queries touch recent data. Operators currently run <strong>nightly full compactions or VACUUM</strong> jobs, which cause <strong>CPU and IO bursts</strong>, extended tail latencies and brief outages, while <strong>tombstones</strong> from deleted or expired data pile up between runs and make storage grow quickly. The platform spans <strong>many nodes and shards</strong> and the team wants <strong>minimal operational intervention</strong>. She must choose a compaction and space-reclamation strategy that keeps <em>read and write latency</em> predictable and scales with the cluster.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Run synchronous compaction in the write path: delay or block writes until the relevant SSTables are compacted and tombstones are purged.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Use a central compaction coordinator that schedules full-table compactions across all nodes during defined maintenance windows.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Run continuous, incremental, IO/CPU-adaptive background compaction independently on every shard, with time-windowed and tombstone-aware logic for older data, tiered storage for cold segments, and backpressure and monitoring to throttle ingestion if compaction falls behind.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Rely on weekly, operator-initiated full VACUUM or compaction during low-traffic periods, backed by strict retention policies and snapshot cleanup.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Decentralized Incremental Compaction</h3>
+        <p>Given this workload (time-series, append-mostly, TTL-driven deletes, many shards, strict latency targets), a <strong>decentralized, incremental background compaction model per shard</strong> is the right design. The nightly pain comes from letting compaction debt (SSTable count, tombstones, read amplification) pile up and then paying it all at once. LSM engines are built to pay that cost continuously and in small pieces. The goal is to match the pace of compaction to the pace of ingestion, with every node bounding its own IO and CPU use. Here's why it stands out:</p>
+        <ul>
+          <li><strong>No big-bang IO bursts:</strong> Small, continuous compactions use a bounded IO budget (a rate limiter or token bucket), so the cost is spread across the day instead of landing in a nightly spike. Tail latency stays flat because there is never a large batch of work competing with foreground reads and writes.</li>
+          <li><strong>Time-windowed layout fits time-series data:</strong> Grouping SSTables by time window (like Cassandra's TimeWindowCompactionStrategy) means old windows stop being rewritten once sealed, and whole expired windows can be dropped as files with almost no IO instead of being rewritten to purge tombstones.</li>
+          <li><strong>Tombstone-aware scheduling reclaims space early:</strong> Prioritizing SSTables with a high tombstone or expired-data ratio, and compacting them as soon as it is safe, keeps space amplification and tombstone scanning on the read path under control without a full rewrite.</li>
+          <li><strong>Scales linearly with shards:</strong> Each shard decides locally using its own metrics (pending compaction bytes, L0 file count, disk headroom). There is no global scheduler to become a bottleneck or single point of failure, and adding nodes adds compaction capacity.</li>
+          <li><strong>Self-protecting through backpressure:</strong> If compaction falls behind, the engine slows or stalls ingestion gradually (as RocksDB write stalls do) instead of letting read amplification run away, and monitoring shows the debt before it becomes an outage.</li>
+        </ul>
+        <p>A mature setup combines <strong>time-window or leveled compaction tuned to retention</strong>, a <strong>per-node IO and CPU budget</strong>, <strong>tombstone-ratio triggers</strong>, <strong>whole-window expiry for TTL data</strong>, <strong>backpressure</strong>, and dashboards for <strong>pending compaction bytes, SSTables per read, tombstones scanned per query and disk headroom</strong>. Alert on the trend of compaction debt, not only on disk usage.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">⛔</div>
+          <h4>A — Synchronous Write-Path Compaction</h4>
+          <p>Making writes wait for compaction ties <strong>write latency directly to compaction cost</strong>, the opposite of what the platform needs. One large compaction would stall ingestion for the whole shard, and a slow disk or a large SSTable set turns into client timeouts. LSM trees exist so that writes are cheap appends to a memtable and WAL, with heavy work deferred to the background. <strong>Caveat:</strong> a bounded form of this idea is valid, namely slowing writes when compaction debt crosses a threshold, but that is backpressure on a background process, not compaction in the write path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🎛️</div>
+          <h4>B — Central Compaction Coordinator</h4>
+          <p>A central scheduler adds a <strong>single point of failure and a scaling bottleneck</strong>, and it needs a fresh view of every shard to make good decisions. It also keeps the problem that hurts today, namely full-table compactions in a window, so the IO and CPU bursts remain. Compaction is an inherently local decision (it depends on each node's own SSTables, disk and load), so there is little for a global controller to optimize. <strong>Caveat:</strong> a lightweight global <em>policy</em> layer (for example staggering heavy work so not all replicas of a shard compact at once) is useful, but execution should stay local.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🗓️</div>
+          <h4>D — Weekly Operator-Run Full Compaction</h4>
+          <p>This is today's approach with a longer interval. Tombstones and SSTables <strong>accumulate for a week</strong>, so reads slow down as the week goes on, storage balloons, and the eventual full compaction is <em>bigger</em> and riskier than the nightly one. It also relies on manual operations, which do not scale across many nodes and shards. In size-tiered setups, a major compaction can leave one huge SSTable that rarely gets compacted again, which makes later maintenance harder. <strong>Caveat:</strong> strict retention policies and snapshot cleanup are good hygiene and belong in any design, but they are not sufficient on their own.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Decentralized Incremental Compaction ✓</h4>
+          <p>Run continuous, incremental, IO/CPU-adaptive background compaction independently on every shard, with time-windowed and tombstone-aware logic for older data, tiered storage for cold segments, and back</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Tail Latency Impact</th><th>Space Reclamation Speed</th><th>Operational Burden</th><th>Horizontal Scalability</th><th>Failure Blast Radius</th><th>Write Throughput Impact</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Synchronous Write-Path Compaction</td><td>Very high spikes ❌</td><td>Immediate ✅</td><td>Low ✅</td><td>Per shard ⚠</td><td>Whole shard stalls ❌</td><td>Severe ❌</td></tr>
+            <tr><td class="tt-option">B — Central Coordinator</td><td>High during windows ❌</td><td>Delayed to windows ⚠</td><td>Medium ⚠</td><td>Coordinator bottleneck ❌</td><td>Coordinator is a SPOF ❌</td><td>Bursty ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Decentralized Incremental ✓</td><td>Low and flat ✅</td><td>Continuous ✅</td><td>Low (automated) ✅</td><td>Linear ✅</td><td>Single shard ✅</td><td>Small steady cost ⚠</td></tr>
+            <tr><td class="tt-option">D — Weekly Manual Full Compaction</td><td>Very high bursts ❌</td><td>Delayed up to a week ❌</td><td>High (manual) ❌</td><td>Manual per node ❌</td><td>Many nodes at once ❌</td><td>Bursty ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Synchronous Write-Path Compaction</h4>
+          <p>Almost never as a general design. Narrowly justified as <em>backpressure</em> when compaction debt crosses a hard limit and continuing to accept writes would make the node unrecoverable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Central Coordinator</h4>
+          <p>Cluster-wide <em>policy</em> and visibility, for example staggering heavy work across replicas, capping concurrent compactions per rack, or pausing compaction during a maintenance event. Not for executing compaction itself.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Decentralized Incremental</h4>
+          <p>Large, multi-node LSM-tree deployments with time-series or TTL-driven data, strict latency targets and a need for low operational effort. The default for production systems.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Weekly Manual Full Compaction</h4>
+          <p>Small or dev-scale clusters, rarely written archival data, or a one-off repair after a bad bulk delete. Always rate-limited and one node at a time.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Per-Shard Compaction Loop with Backpressure</h3>
+        <p>Each shard flushes to SSTables, picks the most valuable compaction within its IO budget, drops expired windows as whole files, and throttles ingestion only when debt grows:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TD
+    W[Writes] --&gt; M[Memtable and WAL]
+    M --&gt; F[Flush to L0 SSTables]
+    F --&gt; S[Compaction scheduler per shard]
+    S --&gt; P{Pick work}
+    P --&gt;|Tombstone ratio high| T[Compact tombstone heavy files]
+    P --&gt;|Window sealed| X[Compact window once then freeze]
+    P --&gt;|Window expired| E[Drop whole files]
+    T --&gt; B[IO and CPU budget]
+    X --&gt; B
+    B --&gt; D[Reclaimed space]
+    E --&gt; D
+    S --&gt; G{Compaction debt above limit}
+    G --&gt;|Yes| BP[Throttle ingestion]
+    G --&gt;|No| FS[Full speed ingestion]
+    BP -.-&gt; W">flowchart TD
+    W[Writes] --&gt; M[Memtable and WAL]
+    M --&gt; F[Flush to L0 SSTables]
+    F --&gt; S[Compaction scheduler per shard]
+    S --&gt; P{Pick work}
+    P --&gt;|Tombstone ratio high| T[Compact tombstone heavy files]
+    P --&gt;|Window sealed| X[Compact window once then freeze]
+    P --&gt;|Window expired| E[Drop whole files]
+    T --&gt; B[IO and CPU budget]
+    X --&gt; B
+    B --&gt; D[Reclaimed space]
+    E --&gt; D
+    S --&gt; G{Compaction debt above limit}
+    G --&gt;|Yes| BP[Throttle ingestion]
+    G --&gt;|No| FS[Full speed ingestion]
+    BP -.-&gt; W</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Per-Shard Adaptive Compaction Loop</h3>
+        <p>Each shard runs this loop on its own: it respects an IO budget, drops fully expired windows as files, picks the compaction with the best reclaim per IO byte, and applies graduated backpressure instead of a hard stall:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">const</span> SOFT_DEBT <span class="tk-op">=</span> 64GB            <span class="tk-com">// start slowing ingestion</span></span>
+<span class="line"><span class="tk-kw">const</span> HARD_DEBT <span class="tk-op">=</span> 256GB           <span class="tk-com">// stall ingestion</span></span>
+<span class="line"><span class="tk-kw">const</span> MIN_TOMBSTONE_AGE <span class="tk-op">=</span> gcGraceSeconds   <span class="tk-com">// younger tombstones must be kept</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">loop</span> every <span class="tk-num">1s</span> on <span class="tk-kw">each</span> shard:</span>
+<span class="line">    budget <span class="tk-op">=</span> ioLimiter.<span class="tk-fn">available</span>()          <span class="tk-com">// bytes/s left after foreground IO is served</span></span>
+<span class="line">    <span class="tk-kw">if</span> budget <span class="tk-op">&lt;=</span> <span class="tk-num">0</span> <span class="tk-kw">or</span> cpu.<span class="tk-fn">load</span>() <span class="tk-op">&gt;</span> <span class="tk-num">0.7</span>:</span>
+<span class="line">        <span class="tk-kw">continue</span>                            <span class="tk-com">// yield to foreground traffic</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 1. Cheapest win: drop windows where every cell has expired</span></span>
+<span class="line">    <span class="tk-kw">for</span> window <span class="tk-kw">in</span> <span class="tk-fn">sealedWindows</span>(shard):</span>
+<span class="line">        <span class="tk-kw">if</span> window.maxExpiry <span class="tk-op">&lt;</span> <span class="tk-fn">now</span>():</span>
+<span class="line">            <span class="tk-fn">deleteFiles</span>(window.sstables)    <span class="tk-com">// file delete, no rewrite</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 2. Pick the compaction with the best reclaim per IO byte</span></span>
+<span class="line">    candidates <span class="tk-op">=</span> []</span>
+<span class="line">    <span class="tk-kw">for</span> window <span class="tk-kw">in</span> <span class="tk-fn">activeAndRecentWindows</span>(shard):</span>
+<span class="line">        <span class="tk-kw">for</span> group <span class="tk-kw">in</span> window.<span class="tk-fn">compactionGroups</span>():</span>
+<span class="line">            eligible <span class="tk-op">=</span> group.<span class="tk-fn">oldestTombstoneAge</span>() <span class="tk-op">&gt;=</span> MIN_TOMBSTONE_AGE <span class="tk-kw">or</span> group.<span class="tk-fn">readAmplification</span>() <span class="tk-op">&gt;</span> <span class="tk-num">8</span></span>
+<span class="line">            <span class="tk-kw">if</span> eligible:</span>
+<span class="line">                score <span class="tk-op">=</span> (group.tombstoneRatio <span class="tk-op">*</span> <span class="tk-num">2.0</span> <span class="tk-op">+</span> group.<span class="tk-fn">readAmplification</span>()) <span class="tk-op">/</span> group.bytes</span>
+<span class="line">                candidates.<span class="tk-fn">add</span>(group, score)</span>
+<span class="line"></span>
+<span class="line">    job <span class="tk-op">=</span> candidates.<span class="tk-fn">maxByScore</span>()</span>
+<span class="line">    <span class="tk-kw">if</span> job <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> job.bytes <span class="tk-op">&lt;=</span> budget:</span>
+<span class="line">        compactor.<span class="tk-fn">run</span>(job, rateLimit <span class="tk-op">=</span> budget)   <span class="tk-com">// incremental and resumable</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 3. Backpressure on compaction debt, not only on disk usage</span></span>
+<span class="line">    debt <span class="tk-op">=</span> shard.<span class="tk-fn">pendingCompactionBytes</span>()</span>
+<span class="line">    <span class="tk-kw">if</span> debt <span class="tk-op">&gt;</span> HARD_DEBT:</span>
+<span class="line">        ingest.<span class="tk-fn">stall</span>(shard)                 <span class="tk-com">// protect reads and raise an alert</span></span>
+<span class="line">    <span class="tk-kw">elif</span> debt <span class="tk-op">&gt;</span> SOFT_DEBT:</span>
+<span class="line">        ingest.<span class="tk-fn">setRate</span>(shard, factor <span class="tk-op">=</span> <span class="tk-num">1</span> <span class="tk-op">-</span> (debt <span class="tk-op">-</span> SOFT_DEBT) <span class="tk-op">/</span> (HARD_DEBT <span class="tk-op">-</span> SOFT_DEBT))</span>
+<span class="line">    <span class="tk-kw">else</span>:</span>
+<span class="line">        ingest.<span class="tk-fn">setRate</span>(shard, factor <span class="tk-op">=</span> <span class="tk-num">1.0</span>)</span>
+<span class="line"></span>
+<span class="line">    metrics.<span class="tk-fn">emit</span>(debt, sstablesPerRead, tombstonesScanned, stallTime, diskHeadroom)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Running a major compaction to fix tombstones:</strong> A full compaction rewrites everything, creates a long IO burst, and in size-tiered setups leaves one giant SSTable that rarely compacts again. Prefer targeted, tombstone-triggered compaction.</li>
+          <li><strong>Leaving compaction throughput unlimited:</strong> Without a rate limit, compaction competes with foreground IO on the same disks. Set an explicit IO budget and a bounded number of concurrent compactions.</li>
+          <li><strong>Dropping tombstones before replicas are repaired:</strong> If a tombstone is purged before every replica has seen it, deleted data can come back. Keep the grace period longer than the repair interval.</li>
+          <li><strong>Mismatched TTLs and compaction windows:</strong> If data in one window expires at different times (mixed TTLs, late out-of-order writes), whole-file expiry never triggers and tombstone-heavy files linger.</li>
+          <li><strong>No headroom for compaction itself:</strong> Compaction temporarily needs extra disk space for input and output files, and size-tiered strategies can need close to the size of the data being compacted. Running disks near full leads to stuck compactions and emergency stalls.</li>
+          <li><strong>Ignoring write stalls as a signal:</strong> Stalls are the engine telling you compaction debt is too high. Raising the stall thresholds only delays the failure. Fix the throughput budget or the ingestion rate instead.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams <strong>measure compaction debt before changing strategy</strong> and then tune continuously. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Measure first:</strong> Track pending compaction bytes, SSTables per read, tombstones scanned per query, write stalls and disk headroom. Know whether the pain comes from too many L0 files, too many tombstones, or too little IO budget.</li>
+          <li><strong>Step 1 — Fit the strategy to the data:</strong> Time-window compaction for TTL'd time-series, leveled for read-heavy updatable data, size-tiered for write-heavy data with few overwrites.</li>
+          <li><strong>Step 2 — Cap the cost:</strong> Add compaction rate limits and IO priorities so background work cannot starve foreground traffic, and limit concurrent compactions per node.</li>
+          <li><strong>Step 3 — Align retention with layout:</strong> Make TTLs and window sizes line up so whole files expire together, which turns space reclamation into a cheap file delete.</li>
+          <li><strong>Step 4 — Add backpressure and alerting:</strong> Throttle ingestion or shed load gracefully when debt grows, and alert on the growth rate of pending compaction rather than on absolute disk usage.</li>
+          <li><strong>Step 5 — Tier cold data:</strong> Offload sealed old windows to cheaper storage once the hot path is stable, and keep a manual full compaction only as a rare, rate-limited repair tool.</li>
+        </ul>
+        <p>Fix the shape of the workload first; the compaction schedule follows from it.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Pay compaction cost <strong>continuously and locally</strong> instead of in nightly bursts. Time-windowed, tombstone-aware, rate-limited background compaction on each shard keeps latency flat and space under control, and backpressure protects the system when it falls behind. Full compactions and central schedulers concentrate risk, and synchronous compaction puts that risk on the write path.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

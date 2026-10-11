@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Observability Without Sacrificing p99 Latency — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">15 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Observability</span>
+      <span class="tag tag--green">Latency</span>
+      <span class="tag tag--amber">Data Volume</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Observability Without Sacrificing p99 Latency</h1>
+      <p class="q-scenario"><strong>Marco</strong>, a senior backend engineer, runs <strong>customer-facing microservices</strong> with strict <strong>p99 latency SLOs</strong>. Traffic is <strong>high and unpredictable</strong>, and the services run in containers across <strong>multiple Kubernetes clusters</strong>. The SRE team wants <strong>comprehensive observability with minimal blind spots</strong> for incident troubleshooting. He must pick a logging, tracing and monitoring architecture that keeps request latency minimal, scales with traffic, and still yields enough data to debug production issues.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Synchronous in-path data collection: Configure every request to synchronously transmit structured logs and full trace spans to a centralized collector prior to sending the response. Rely on strong consistency (write acknowledgments) to guarantee immediate persistence of all telemetry data.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Local-only logging with scheduled batch transfers: Save structured logs and raw traces to the local disk, compile them through nightly or hourly batch jobs, and restrict real-time data transmission to a lightweight metrics push to a backend. Trace data will only be accessible post-batch processing.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Comprehensive sampling and direct transmission: Forgo sampling altogether; capture 100% of traces, logs, and metrics, and transmit each event directly from the application process to a cloud-based observability platform with negligible batching to ensure data freshness.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Hybrid asynchronous and correlation-focused model: Use OpenTelemetry-compatible libraries to instrument applications, pass correlation IDs between requests, and generate structured logs appended with trace IDs. Implement asynchronous, non-blocking exporters (or local sidecars/agents) for batching and retrying telemetry data, utilize adaptive or tail-based sampling for tracing, and adopt Prometheus-style scraping for metrics (using Pushgateway for ephemeral tasks).</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Async OpenTelemetry Pipeline with Correlation and Adaptive Sampling</h3>
+        <p>Telemetry is a <strong>side channel</strong>. It must never sit on the request's critical path, and it cannot realistically capture 100% of everything at sustainable cost. The hybrid model decouples collection from request handling, keeps <strong>logs, metrics and traces correlated</strong> through trace IDs, and controls volume with <strong>smart sampling</strong> that keeps the data SREs actually need. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Off the critical path:</strong> Spans and logs go into a bounded in-memory queue and are exported asynchronously in batches to a local agent (DaemonSet or sidecar collector). If the collector is slow or down, the application drops telemetry, never requests.</li>
+          <li><strong>Correlation across the three pillars:</strong> W3C Trace Context (<code>traceparent</code>) propagates across services, structured logs carry <code>trace_id</code> and <code>span_id</code>, and metric exemplars link a latency spike to a concrete trace. SREs can pivot metric → trace → logs in seconds.</li>
+          <li><strong>Tail-based sampling keeps what matters:</strong> The decision is made after the trace completes, so you keep 100% of errors and slow traces and a small percentage of healthy ones. Head sampling at 1% would discard most of the rare failures you are debugging.</li>
+          <li><strong>Metrics via pull:</strong> Prometheus-style scraping is cheap, decoupled from request handling, and gives a built-in liveness signal (a failed scrape). Pushgateway is reserved for ephemeral batch jobs that die before a scrape.</li>
+          <li><strong>Scales with traffic:</strong> Node agents and a gateway collector tier scale independently of the services, with retry and backoff. OpenTelemetry also keeps you vendor-neutral.</li>
+          <li><strong>Why not just sample at the head?</strong> Head sampling is cheap and simple but blind: the decision is made before you know whether the request will fail. It is a fine first layer, with tail sampling on top.</li>
+        </ul>
+        <p>Treat the telemetry pipeline as a service with its own SLOs: <strong>export overhead</strong> (CPU and memory), <strong>drop rate</strong>, <strong>pipeline lag</strong>, and <strong>sampling coverage of errors</strong>. Load-test it with a collector outage to prove the application's p99 does not move.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">⛓️</div>
+          <h4>A — Synchronous In-Path Collection</h4>
+          <p>Putting a network call to a collector before the response adds its latency to <strong>every request's p99</strong> and couples your availability to the observability backend: collector slowness becomes user-facing slowness. Telemetry does not need strong consistency or write acknowledgments to be useful. <strong>Caveat:</strong> only truly audit-critical events (financial or compliance records) justify a synchronous durable write, and those belong on a dedicated path, not general telemetry.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">💾</div>
+          <h4>B — Local-Only Logs with Batch Transfer</h4>
+          <p>Containers are <strong>ephemeral</strong>: when a pod is evicted or crashes, its local disk and the logs on it are gone, often exactly when you need them. Hourly or nightly batches also leave SREs blind during live incidents, and traces only appear after the fact. <strong>Caveat:</strong> a log-shipping agent tailing stdout and forwarding continuously is asynchronous and fine, but that is already part of option D, not batch-only.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📡</div>
+          <h4>C — 100% Capture with Direct Transmission</h4>
+          <p>Sending every event individually from the app process burns CPU, sockets and TLS handshakes inside the service, has no backpressure, and ties thread health to a vendor endpoint. At billions of events per day, <strong>100% retention is also very expensive</strong>, and most of it is repetitive healthy traffic. <strong>Caveat:</strong> temporary 100% sampling is reasonable for a low-traffic service or a short debugging window, behind an async exporter.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>D — Async OpenTelemetry Pipeline with Correlation and Adaptive Sampling ✓</h4>
+          <p>Hybrid asynchronous and correlation-focused model: Use OpenTelemetry-compatible libraries to instrument applications, pass correlation IDs between requests, and generate structured logs appended with</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Request Latency Impact</th><th>Incident Debuggability</th><th>Telemetry Cost</th><th>Resilience to Backend Outage</th><th>Data Freshness</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Synchronous In-Path</td><td>High (adds to p99) ❌</td><td>High ✅</td><td>Medium ⚠</td><td>Poor (couples availability) ❌</td><td>Real-time ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Local Logs + Batch</td><td>Minimal ✅</td><td>Poor (delayed, lost on pod death) ❌</td><td>Low ✅</td><td>Good ⚠</td><td>Stale ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">C — 100% Direct Send</td><td>Medium (CPU and sockets in app) ⚠</td><td>High ✅</td><td>Very high ❌</td><td>Poor (no backpressure) ❌</td><td>Real-time ✅</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Async + Tail Sampling ✓</td><td>Minimal ✅</td><td>High (errors and slow traces kept) ✅</td><td>Controlled ✅</td><td>Good (queues and retries) ✅</td><td>Near real-time ✅</td><td>Medium–High ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Synchronous In-Path</h4>
+          <p>Audit or compliance events that must be durable before acknowledging the request, handled on a dedicated path rather than as general telemetry.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Local Logs + Batch</h4>
+          <p>Offline or intermittently connected edge devices, or low-value batch jobs where real-time visibility is unnecessary.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — 100% Direct Send</h4>
+          <p>Low-traffic services or short, deliberate debugging windows, ideally still through an async exporter.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Async + Tail Sampling</h4>
+          <p>High-traffic, latency-sensitive production systems across many clusters, where debuggability and cost must both be controlled.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Telemetry Pipeline Off the Request Path</h3>
+        <p>Services hand telemetry to local agents asynchronously. Gateway collectors apply sampling, and Prometheus scrapes metrics independently:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    S[Service with OpenTelemetry SDK] --&gt;|async batched OTLP| AG[Node agent collector]
+    S --&gt;|JSON logs with trace_id| LG[Log shipper]
+    AG --&gt; GW[Gateway collectors with tail sampling]
+    LG --&gt; GW
+    GW --&gt; TB[Trace backend]
+    GW --&gt; LB[Log backend]
+    PR[Prometheus per cluster] -.-&gt;|scrapes metrics endpoint| S
+    PR --&gt; MB[Metrics backend with exemplars]">flowchart LR
+    S[Service with OpenTelemetry SDK] --&gt;|async batched OTLP| AG[Node agent collector]
+    S --&gt;|JSON logs with trace_id| LG[Log shipper]
+    AG --&gt; GW[Gateway collectors with tail sampling]
+    LG --&gt; GW
+    GW --&gt; TB[Trace backend]
+    GW --&gt; LB[Log backend]
+    PR[Prometheus per cluster] -.-&gt;|scrapes metrics endpoint| S
+    PR --&gt; MB[Metrics backend with exemplars]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Non-Blocking Instrumentation with Bounded Async Export</h3>
+        <p>The request path only enqueues telemetry in constant time. A background loop batches, retries and drops safely:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">exporterQueue <span class="tk-op">=</span> <span class="tk-fn">BoundedQueue</span>(capacity <span class="tk-op">=</span> <span class="tk-num">2048</span>)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleRequest</span>(req):</span>
+<span class="line">    ctx <span class="tk-op">=</span> <span class="tk-fn">extractTraceContext</span>(req.headers)          <span class="tk-com">// W3C traceparent, or start a new trace</span></span>
+<span class="line">    span <span class="tk-op">=</span> tracer.<span class="tk-fn">startSpan</span>(<span class="tk-str">&#x27;handle &#x27;</span> <span class="tk-op">+</span> req.route, parent <span class="tk-op">=</span> ctx)</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        resp <span class="tk-op">=</span> <span class="tk-fn">process</span>(req, span.context)           <span class="tk-com">// propagate context to downstream calls</span></span>
+<span class="line">        metrics.<span class="tk-fn">histogram</span>(<span class="tk-str">&#x27;http_server_duration&#x27;</span>, span.<span class="tk-fn">elapsed</span>(), labels <span class="tk-op">=</span> {route: req.route, status: resp.status})  <span class="tk-com">// low-cardinality labels only</span></span>
+<span class="line">        <span class="tk-kw">return</span> resp</span>
+<span class="line">    <span class="tk-kw">catch</span> error:</span>
+<span class="line">        span.<span class="tk-fn">recordError</span>(error)</span>
+<span class="line">        log.<span class="tk-fn">error</span>({msg: <span class="tk-str">&#x27;request failed&#x27;</span>, trace_id: span.traceId, span_id: span.spanId, route: req.route})</span>
+<span class="line">        <span class="tk-kw">throw</span> error</span>
+<span class="line">    <span class="tk-kw">finally</span>:</span>
+<span class="line">        span.<span class="tk-kw">end</span>()                                  <span class="tk-com">// triggers onSpanEnd, O(1)</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onSpanEnd</span>(span):</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> exporterQueue.<span class="tk-fn">offer</span>(span):               <span class="tk-com">// non-blocking</span></span>
+<span class="line">        droppedSpans.<span class="tk-fn">increment</span>()                    <span class="tk-com">// alert on this, but never block the request</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">exportLoop</span>():                              <span class="tk-com">// background thread</span></span>
+<span class="line">    <span class="tk-kw">while</span> <span class="tk-lit">true</span>:</span>
+<span class="line">        batch <span class="tk-op">=</span> exporterQueue.<span class="tk-fn">drain</span>(maxItems <span class="tk-op">=</span> <span class="tk-num">512</span>, maxWait <span class="tk-op">=</span> <span class="tk-num">5s</span>)</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            localAgent.<span class="tk-fn">send</span>(batch, timeout <span class="tk-op">=</span> <span class="tk-num">2s</span>)</span>
+<span class="line">        <span class="tk-kw">catch</span>:</span>
+<span class="line">            <span class="tk-fn">retryWithBackoff</span>(batch, maxAttempts <span class="tk-op">=</span> <span class="tk-num">3</span>)    <span class="tk-com">// then drop and count</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Gateway collector policy (conceptual)</span></span>
+<span class="line">policy keepAlways:   trace.hasError <span class="tk-kw">or</span> trace.duration <span class="tk-op">&gt;</span> sloThreshold</span>
+<span class="line">policy keepSampled:  otherwise keep <span class="tk-num">2</span> percent, decided after the trace completes</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Unbounded buffers in the app:</strong> A collector outage then grows memory until the pod is OOM-killed. Use bounded queues with an explicit drop policy.</li>
+          <li><strong>Head sampling only:</strong> A flat 1% sample drops 99% of the rare errors you care about. Layer tail-based rules on top.</li>
+          <li><strong>Tail sampling without trace-ID routing:</strong> If spans of one trace land on different collectors, none has the full picture and decisions are wrong. Route by trace ID.</li>
+          <li><strong>High-cardinality metric labels:</strong> User IDs or URLs with IDs as labels cause series explosion. Use route templates and put IDs in traces and logs.</li>
+          <li><strong>Logs without trace IDs:</strong> Correlation is the point. Unstructured, uncorrelated logs force SREs to grep and guess.</li>
+          <li><strong>Not monitoring the monitoring:</strong> Dropped spans, exporter queue depth and collector lag silently create the blind spots you are trying to remove.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Production observability is built in layers, and the pipeline is <strong>measured like any other service</strong>. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Define SLIs and SLOs:</strong> Decide which user journeys matter and which questions SREs must be able to answer in an incident.</li>
+          <li><strong>Step 1 — Instrument with OpenTelemetry:</strong> Auto-instrumentation where possible, context propagation across all services and queues, structured JSON logs with trace IDs.</li>
+          <li><strong>Step 2 — Agent plus gateway collectors:</strong> A node-level agent for batching and retry, a gateway tier for tail sampling, enrichment (cluster, namespace, version) and routing.</li>
+          <li><strong>Step 3 — Sampling policy:</strong> Always keep errors, slow traces and key endpoints; sample the rest at a low rate; revisit as cost and traffic change.</li>
+          <li><strong>Step 4 — RED and USE metrics with exemplars:</strong> Rate, errors and duration per service; saturation per resource; low-cardinality labels only.</li>
+          <li><strong>Step 5 — Monitor the pipeline:</strong> Alert on dropped spans, queue depth and collector memory; chaos-test collector failure.</li>
+        </ul>
+        <p>Instrument once, correlate everything, sample smartly, and never let telemetry block a user request.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Keep observability <strong>asynchronous, correlated and sampled by value</strong>. OpenTelemetry instrumentation, trace-ID-linked logs, non-blocking exporters, tail-based sampling and pull-based metrics give SREs the traces they need without moving p99. The cost is a more sophisticated collector tier that you must operate and monitor.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

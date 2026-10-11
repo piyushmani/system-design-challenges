@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya&#x27;s API Versioning Crossroads: Launching v2 Without Breaking Existing Clients — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">09 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">API Versioning</span>
+      <span class="tag tag--green">Backward Compatibility</span>
+      <span class="tag tag--amber">Migrations</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya&#x27;s API Versioning Crossroads: Launching v2 Without Breaking Existing Clients</h1>
+      <p class="q-scenario"><strong>Maya</strong> is a senior backend engineer on a payments platform handling <strong>hundreds of millions of requests daily</strong>. The public REST API <code>/v1/</code> is used by many third-party merchants. The team must ship <strong>v2 with breaking changes</strong> (new resource structures and a different <strong>authentication header</strong>) while keeping <strong>v1 fully operational for a 12-month migration window</strong>. Tail latency directly affects checkout success. They want to <strong>minimize duplicated business logic</strong>, keep operations manageable, ensure strong observability, and run a <strong>phased migration with rollback</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Deploy distinct services for each major API version and employ path-based versioning (/v1/, /v2/) alongside independent deployments and separate databases if required. Each major version operates in isolation to reduce interference; both codebases are maintained and run concurrently until the older version is deprecated.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Implement header-based versioning where a single service binary processes requests for both v1 and v2. Incorporate branching logic at the application layer to deliver different request and response structures depending on the version header, utilizing feature flags to switch behavior for specific clients.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Eschew explicit API versioning in favor of backward-compatible, additive modifications, combined with feature flags and semantic versioning for internal libraries. Notify partners of breaking changes well in advance, relying on the assumption that most consumers will upgrade without needing parallel version support.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Deploy an API gateway that routes and, if necessary, executes request and response transformations between client-facing versions and a unified set of backend services. Maintain core business logic within a single codebase, utilizing the gateway for translation and routing, while managing the migration process through per-client feature flags and contract testing.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: API Gateway Translation Layer over a Single Core</h3>
+        <p>The hardest requirements to satisfy together are <strong>no duplicated business logic</strong> and <strong>a long, reversible, per-client migration</strong>. Option D addresses both: the core payments logic exists <em>once</em> (speaking the latest contract, v2), while the gateway owns everything that is genuinely version-specific, namely routing, authentication header mapping, and request/response translation for v1. Because version is resolved at the edge, migration becomes a routing decision per merchant, which is easy to observe, ramp, and roll back. Here's why it stands out:</p>
+        <ul>
+          <li><strong>One source of truth for money logic:</strong> A bug fix or compliance change in payment processing ships once and applies to v1 and v2 clients alike. In a payments platform, divergent behavior between two codebases is itself a risk.</li>
+          <li><strong>Isolated, testable translation:</strong> v1 handling reduces to pure functions: <code>v1 request -> v2 request</code> and <code>v2 response -> v1 response</code>. They are small, deterministic, and verifiable with golden files and contract tests, and they can be deleted wholesale when v1 sunsets.</li>
+          <li><strong>Phased migration with instant rollback:</strong> Per-merchant flags (allowlists, percentages, pinned versions) route traffic. Moving a merchant to v2 or back is a configuration change, not a deploy.</li>
+          <li><strong>Observability per version and per client:</strong> The gateway sees every call, so it can report v1 usage by merchant and endpoint, error rates by version, and latency of the translation step. That data drives the deprecation plan, <code>Sunset</code> headers, and outreach.</li>
+          <li><strong>Controlled latency:</strong> Translation is in-memory work on already-parsed payloads, typically adding a small overhead. Implemented as a gateway plugin or in-process adapter, it avoids an extra network hop on the checkout path.</li>
+        </ul>
+        <p>Pair the gateway with <strong>consumer-driven contract tests</strong>, <strong>shadow replay of recorded v1 traffic</strong> against the adapter to prove equivalence, <strong>per-merchant version pinning</strong>, <strong>Sunset and deprecation headers</strong>, and a published timeline with <strong>brownout tests</strong> (short planned v1 disablements) to flush out silent dependents before final shutdown.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🪞</div>
+          <h4>A — Separate Services per Major Version</h4>
+          <p>Strong isolation, but it <strong>duplicates core business logic</strong>: every fix, compliance rule, or fraud check must be implemented and tested twice, and behavior can drift between versions. Separate databases make things worse for payments, because consistency between v1 and v2 views of the same transactions becomes a data-sync problem. It doubles operational overhead during the 12-month window. <strong>Caveat:</strong> reasonable when v2 is a ground-up rewrite with a different domain model, or when regulatory isolation is required.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🌿</div>
+          <h4>B — Header-Based Versioning with In-App Branching</h4>
+          <p>Header versioning is a legitimate choice, but <strong>scattering <code>if version == 1</code> branches through business logic</strong> couples the versions inside the core, makes behavior hard to reason about, and is painful to remove later. Versioning in a header is also less visible in logs, caches, and quick debugging than a path, unless you add <code>Vary</code> and tooling. A defect in a branch can affect all traffic. <strong>Caveat:</strong> fine for small differences if all translation lives in a clean adapter layer, which is effectively option D implemented in-process.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🙏</div>
+          <h4>C — No Versioning, Additive Changes Only</h4>
+          <p>Additive evolution is the best default for non-breaking changes, but this scenario includes <strong>breaking changes by definition</strong> (restructured resources and a different auth header), and the business requirement is that v1 keeps working for 12 months. Hoping partners will upgrade on notice is not a migration strategy for third-party merchants and risks failed payments. <strong>Caveat:</strong> prefer expand/contract and additive fields whenever a change can be made compatible, which reduces how often a new major version is needed.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>D — API Gateway Translation Layer over a Single Core ✓</h4>
+          <p>Deploy an API gateway that routes and, if necessary, executes request and response transformations between client-facing versions and a unified set of backend services. Maintain core business logic wi</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Business-Logic Duplication</th><th>Operational Overhead</th><th>Latency Overhead</th><th>Rollback / Phased Migration</th><th>Observability by Version</th><th>Meets 12-Month v1 Support</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Separate Services per Version</td><td>Full duplication ❌</td><td>High (2x everything) ❌</td><td>None ✅</td><td>Moderate (traffic shift) ⚠</td><td>Good (separate stacks) ✅</td><td>Yes ✅</td></tr>
+            <tr><td class="tt-option">B — Header Versioning + In-App Branching</td><td>None, but logic is entangled ⚠</td><td>Low ✅</td><td>None ✅</td><td>Flags only, risky ⚠</td><td>Weak unless instrumented ⚠</td><td>Yes ✅</td></tr>
+            <tr><td class="tt-option">C — No Versioning</td><td>None ✅</td><td>Low ✅</td><td>None ✅</td><td>None ❌</td><td>None ❌</td><td>No ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Gateway Translation + Single Core ✓</td><td>None ✅</td><td>Medium ⚠</td><td>Small (in-memory translation) ⚠</td><td>Per-merchant flags, instant ✅</td><td>Excellent (per version and client) ✅</td><td>Yes ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Separate Services per Version</h4>
+          <p>v2 is a complete rewrite with a different domain model, or isolation between versions is required for compliance or risk reasons.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Header Versioning + In-App Branching</h4>
+          <p>Small differences between versions, a small client base you control, and a team that confines all version logic to a single adapter layer.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — No Versioning</h4>
+          <p>Changes are purely additive and compatible, or the clients are internal and can be upgraded in lockstep.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Gateway Translation + Single Core</h4>
+          <p>Many external clients, long migration windows, mostly structural breaking changes, and a need for per-client rollout, rollback, and visibility.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Gateway Routing and Translation over a Single Core</h3>
+        <p>Both versions enter through the gateway. v1 requests are translated to the canonical v2 contract, and responses are translated back:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    M1[Merchant on v1] --&gt;|v1 path and legacy auth| GW
+    M2[Merchant on v2] --&gt;|v2 path and new auth| GW
+    subgraph GW[API Gateway]
+        direction TB
+        R[Routing and per-merchant flags]
+        AU[Auth header mapping]
+        A1[v1 adapter - request and response translation]
+        R --&gt; AU --&gt; A1
+    end
+    GW --&gt; CORE[Core payments service - v2 canonical]
+    CORE --&gt; DB[(Payments DB)]
+    FF[Feature-flag service] -.-&gt; R
+    GW -.-&gt; OBS[Per-version and per-merchant metrics]">flowchart LR
+    M1[Merchant on v1] --&gt;|v1 path and legacy auth| GW
+    M2[Merchant on v2] --&gt;|v2 path and new auth| GW
+    subgraph GW[API Gateway]
+        direction TB
+        R[Routing and per-merchant flags]
+        AU[Auth header mapping]
+        A1[v1 adapter - request and response translation]
+        R --&gt; AU --&gt; A1
+    end
+    GW --&gt; CORE[Core payments service - v2 canonical]
+    CORE --&gt; DB[(Payments DB)]
+    FF[Feature-flag service] -.-&gt; R
+    GW -.-&gt; OBS[Per-version and per-merchant metrics]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Version Resolution and v1 Adapter in the Gateway</h3>
+        <p>The gateway resolves the version per merchant, maps the legacy auth header, translates v1 to the canonical v2 call, and translates the response back while emitting per-version metrics:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handle</span>(req):</span>
+<span class="line">    merchant <span class="tk-op">=</span> <span class="tk-fn">identify</span>(req)                                   <span class="tk-com">// from API key or credential</span></span>
+<span class="line">    version <span class="tk-op">=</span> <span class="tk-fn">resolveVersion</span>(req.path, merchant.pinnedVersion, flags.<span class="tk-fn">forMerchant</span>(merchant.id))</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> version <span class="tk-op">==</span> <span class="tk-str">&#x27;v1&#x27;</span>:</span>
+<span class="line">        credential <span class="tk-op">=</span> <span class="tk-fn">mapLegacyAuth</span>(req.headers[<span class="tk-str">&#x27;X-Legacy-Auth&#x27;</span>])   <span class="tk-com">// verify, then convert to the new credential</span></span>
+<span class="line">        v2req <span class="tk-op">=</span> <span class="tk-fn">adaptRequestV1toV2</span>(req, credential)</span>
+<span class="line">        metrics.<span class="tk-fn">inc</span>(<span class="tk-str">&#x27;api_calls&#x27;</span>, version <span class="tk-op">=</span> <span class="tk-str">&#x27;v1&#x27;</span>, merchant <span class="tk-op">=</span> merchant.id, endpoint <span class="tk-op">=</span> req.route)</span>
+<span class="line">        v2resp <span class="tk-op">=</span> core.<span class="tk-fn">call</span>(v2req, timeout <span class="tk-op">=</span> <span class="tk-num">800ms</span>)</span>
+<span class="line">        v1resp <span class="tk-op">=</span> <span class="tk-fn">adaptResponseV2toV1</span>(v2resp)</span>
+<span class="line">        v1resp.headers[<span class="tk-str">&#x27;Sunset&#x27;</span>] <span class="tk-op">=</span> SUNSET_DATE_V1               <span class="tk-com">// plus a Deprecation header and link to the migration guide</span></span>
+<span class="line">        metrics.<span class="tk-fn">observe</span>(<span class="tk-str">&#x27;adapter_latency_ms&#x27;</span>, version <span class="tk-op">=</span> <span class="tk-str">&#x27;v1&#x27;</span>)</span>
+<span class="line">        <span class="tk-kw">return</span> v1resp</span>
+<span class="line"></span>
+<span class="line">    metrics.<span class="tk-fn">inc</span>(<span class="tk-str">&#x27;api_calls&#x27;</span>, version <span class="tk-op">=</span> <span class="tk-str">&#x27;v2&#x27;</span>, merchant <span class="tk-op">=</span> merchant.id, endpoint <span class="tk-op">=</span> req.route)</span>
+<span class="line">    <span class="tk-kw">return</span> core.<span class="tk-fn">call</span>(req, timeout <span class="tk-op">=</span> <span class="tk-num">800ms</span>)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Rollback: set merchant.pinnedVersion back to &#x27;v1&#x27; or flip the flag; no deployment needed</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Equivalence testing: replay recorded v1 traffic through the adapter and compare</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">shadowCompare</span>(recordedV1Request, recordedV1Response):</span>
+<span class="line">    actual <span class="tk-op">=</span> <span class="tk-fn">adaptResponseV2toV1</span>(core.<span class="tk-fn">call</span>(<span class="tk-fn">adaptRequestV1toV2</span>(recordedV1Request, testCredential)))</span>
+<span class="line">    assert <span class="tk-fn">semanticallyEqual</span>(actual, recordedV1Response, ignore <span class="tk-op">=</span> [<span class="tk-str">&#x27;timestamps&#x27;</span>, <span class="tk-str">&#x27;ids&#x27;</span>])</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Putting business rules in the gateway:</strong> Adapters should reshape data, not decide outcomes. Rules in two places recreate the duplication you were avoiding.</li>
+          <li><strong>Assuming every change is translatable:</strong> A semantic change (new state machine, different error taxonomy) cannot be faked by renaming fields. Handle it in the core and document the v1 behavior.</li>
+          <li><strong>Skipping equivalence testing:</strong> Without shadow replay and contract tests, subtle serialization or rounding differences reach merchants as failed payments.</li>
+          <li><strong>Forgetting webhooks and async payloads:</strong> Merchants consume events too, and those need version-aware formatting and per-merchant pinning.</li>
+          <li><strong>No version telemetry:</strong> Without per-merchant v1 usage data you cannot target outreach or know when it is safe to sunset.</li>
+          <li><strong>Open-ended deprecation:</strong> Without a published timeline, <code>Sunset</code> headers, and brownouts, v1 lives forever and the adapters become permanent.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Companies with long-lived public APIs (payments especially) treat compatibility as a product feature. A common pattern is <strong>one canonical core plus version translation at the boundary</strong>:</p>
+        <ul>
+          <li><strong>Step 0 — Inventory and classify breaking changes:</strong> Separate mechanical transformations (rename, nest, reshape, header swap) from semantic differences that need core support.</li>
+          <li><strong>Step 1 — Make v2 the canonical contract:</strong> Implement core logic against the new model only, so there is a single behavior to test and secure.</li>
+          <li><strong>Step 2 — Build v1 adapters:</strong> Pure request and response translators plus an auth bridge that accepts the legacy header and produces the new credential, with golden-file tests.</li>
+          <li><strong>Step 3 — Route per merchant:</strong> The gateway resolves the version from the path and the merchant's pinned version, with feature flags for ramping and rollback.</li>
+          <li><strong>Step 4 — Prove equivalence:</strong> Run consumer-driven contract tests and shadow-replay recorded v1 traffic through the adapter and compare responses.</li>
+          <li><strong>Step 5 — Drive the migration:</strong> Dashboards of v1 usage by merchant, <code>Sunset</code> headers, outreach, brownouts, and finally removal of adapters after the window closes.</li>
+        </ul>
+        <p>Design every adapter so that deleting it on sunset day is a non-event.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Version at the <strong>boundary</strong>, not in the core. Keep one implementation of business logic, translate old contracts in a thin, testable gateway layer, and let per-client routing and telemetry steer a measured, reversible migration. Use additive changes whenever possible and reserve new major versions for truly breaking changes.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

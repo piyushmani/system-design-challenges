@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Immutable order trail: Balancing scalability against consistency — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">10 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Immutability</span>
+      <span class="tag tag--green">Event Sourcing</span>
+      <span class="tag tag--amber">Scalability</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Immutable order trail: Balancing scalability against consistency</h1>
+      <p class="q-scenario"><strong>Maya</strong> is a senior backend engineer at a fast-growing e-commerce company. The order service must record <strong>every state transition</strong> (created, paid, shipped, returned, refunded) to satisfy <strong>audit and regulatory requirements</strong>, under <strong>heavy traffic with promotional spikes</strong>. Fulfillment, billing, and analytics teams each need <strong>low-latency access to the latest order status</strong>. She must choose an architecture that stores these changes <strong>securely and immutably</strong> while balancing <strong>scalability, availability, latency, consistency, observability, and operational complexity</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Append-only, immutable event store (a partitioned log such as Kafka, or a dedicated event store): emit an event per state transition, let consumers build asynchronous read models (CQRS), use snapshots and periodic compaction for long-lived aggregates, and keep all handlers idempotent.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">A single strongly consistent relational database as source of truth: in-place state updates (soft deletes for audit), synchronous replication to read replicas, and reliance on transactional guarantees and transaction logs for history.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Write every state change as an immutable blob to object storage (S3 or GCS) and synchronously update a separate NoSQL index holding current state plus blob references; object store for audit, NoSQL for low-latency reads.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">A distributed document database with MVCC for versioned documents, keeping only the latest version in the primary store and archiving older versions to cold storage, with client-side optimistic concurrency and application-specific merge logic.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Immutable Event Store with CQRS</h3>
+        <p>The requirements describe an <strong>event-sourced</strong> problem: the history of transitions <em>is</em> the product (audit, regulation, replay), while separate teams need fast reads of the <em>current</em> state. An append-only event log makes history the immutable source of truth, scales writes by partitioning on order id, and lets each consumer team build the read model it needs. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Audit by construction:</strong> Every transition is an immutable fact (who, what, when, why) appended to the log. State is derived, not overwritten, so there is no 'previous value' to lose and the audit trail cannot drift from the system's real behavior.</li>
+          <li><strong>Scales for promotional spikes:</strong> Appends are sequential writes partitioned by orderId, which preserves per-order ordering and scales horizontally. The log also acts as a buffer, so read-model consumers can lag during a spike without slowing writers.</li>
+          <li><strong>Independent read models (CQRS):</strong> Fulfillment, billing, and analytics each project the events into the shape and store they need (key-value for status lookups, a warehouse for analytics), and each can be rebuilt from scratch by replaying events.</li>
+          <li><strong>Resilience and replay:</strong> A broken projection or a new consumer never requires touching the write path; replay the events to repair or bootstrap it. Idempotent handlers (dedupe on eventId or aggregate version) make at-least-once delivery safe.</li>
+          <li><strong>Why not simply a relational audit table (Option B)?</strong> It can work at modest scale, but in-place updates with soft deletes make the audit trail an after-the-fact add-on, and every read and write still lands on one primary. With events, the audit record is the system of record.</li>
+        </ul>
+        <p>A well-run event-sourced design includes <strong>partitioning by orderId</strong>, <strong>optimistic concurrency via expected version</strong>, a <strong>schema registry with versioned events</strong>, <strong>idempotent projectors</strong>, <strong>tamper evidence</strong> (hash chaining and archival to WORM storage such as S3 Object Lock), and <strong>consumer-lag monitoring</strong>. If scale is modest and history is only needed for audit, an append-only events table in Postgres written in the same transaction as the state change (plus an outbox) is a pragmatic first step toward this design.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🏛️</div>
+          <h4>B — Relational DB with In-Place Updates</h4>
+          <p>Strongly consistent relational databases are an excellent default with simple transactional semantics, but this design records history <em>indirectly</em>. Soft deletes and in-place updates make the audit trail a side effect, and transaction logs (WAL or binlog) are operational recovery artifacts that rotate and get archived, not a queryable, tamper-evident audit record. Synchronous replication adds write latency, and the single primary stays the write and availability bottleneck during sales spikes. <strong>Caveat:</strong> an append-only <code>order_events</code> table written in the same transaction as the state row is a good approximation at moderate scale.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🪣</div>
+          <h4>C — Blob Store plus NoSQL Index</h4>
+          <p>Writes to two systems are not atomic: if the blob write succeeds and the index update fails (or the reverse), the audit trail and the current state diverge, and 'synchronous' dual writes inflate latency and failure modes. One object per event is expensive at high request volume (per-request costs, small-file problem) and querying a stream of changes is awkward. Object storage is excellent as the <em>archive</em> for an event log (with Object Lock), just not as the primary write path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📝</div>
+          <h4>D — MVCC Document DB with Archived Versions</h4>
+          <p>Keeping only the latest version in the primary store and archiving older versions makes history a second-class, hard-to-query citizen, which fails the audit and reconstruction needs. MVCC is a concurrency-control mechanism, not an audit design; old versions are garbage-collected by design. Client-side optimistic concurrency with custom merge logic pushes conflict handling into every writer, which is risky for payment-related state transitions.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>A — Immutable Event Store with CQRS ✓</h4>
+          <p>Append-only, immutable event store (a partitioned log such as Kafka, or a dedicated event store): emit an event per state transition, let consumers build asynchronous read models (CQRS), use snapshots</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Scalability</th><th>Audit Integrity</th><th>Read Latency (Current State)</th><th>Read Freshness</th><th>Historical Reconstruction</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Event Store + CQRS ✓</td><td>High (partitioned) ✅</td><td>Strong (immutable) ✅</td><td>Low via read models ✅</td><td>Eventual ⚠ (consumer lag)</td><td>Native (replay) ✅</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">B — Relational In-Place Updates</td><td>Limited by primary ⚠</td><td>Weak ⚠ (derived from logs)</td><td>Low ✅</td><td>Strong ✅</td><td>Poor ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">C — Blob Store + NoSQL Index</td><td>Medium ⚠ (two sync writes)</td><td>Good ✅ (immutable blobs)</td><td>Low ✅ (index)</td><td>Strong ⚠ (if both writes succeed)</td><td>Medium ⚠ (replay from blobs)</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — MVCC Document DB</td><td>High ✅</td><td>Weak ❌ (old versions archived)</td><td>Low ✅</td><td>Strong ✅</td><td>Poor ❌ (cold archive)</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Event Store + CQRS</h4>
+          <p>Audit, replay, and independent downstream consumers are core requirements, write volume is high or bursty, and the team can operate a log platform.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Relational In-Place Updates</h4>
+          <p>Moderate scale, a single team, strong consistency needs, and audit needs that an in-transaction append-only events table can satisfy.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Blob Store + NoSQL Index</h4>
+          <p>Long-term archival of events or large payloads (documents, files), as a complement to a primary log rather than as the write path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — MVCC Document DB</h4>
+          <p>Document-centric domains where versions are user-facing (such as content editing) and audit requirements are lightweight.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> CQRS Read Path: From Events to Read Models</h3>
+        <p>Projectors apply events in order to a read model; consuming teams query the read model, never the log:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant K as Partitioned Event Log
+    participant P as Projector
+    participant RM as Read Model Store
+    participant F as Fulfillment Service
+    K-&gt;&gt;P: 1. Deliver OrderPaid v4 in order
+    P-&gt;&gt;RM: 2. Upsert status only if version is newer
+    P-&gt;&gt;P: 3. Commit offset after the write succeeds
+    F-&gt;&gt;RM: 4. Get order status
+    RM--&gt;&gt;F: 5. Status with version and updated time">sequenceDiagram
+    participant K as Partitioned Event Log
+    participant P as Projector
+    participant RM as Read Model Store
+    participant F as Fulfillment Service
+    K-&gt;&gt;P: 1. Deliver OrderPaid v4 in order
+    P-&gt;&gt;RM: 2. Upsert status only if version is newer
+    P-&gt;&gt;P: 3. Commit offset after the write succeeds
+    F-&gt;&gt;RM: 4. Get order status
+    RM--&gt;&gt;F: 5. Status with version and updated time</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Append-Only Command Handler and Idempotent Projector</h3>
+        <p>Events are appended with an expected version and a hash chain, written together with an outbox row in one transaction; the projector ignores duplicates and old events:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Command handler: append-only with optimistic concurrency</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handlePayOrder</span>(orderId, cmd):</span>
+<span class="line">    events <span class="tk-op">=</span> eventStore.<span class="tk-fn">load</span>(orderId)</span>
+<span class="line">    order <span class="tk-op">=</span> <span class="tk-fn">replay</span>(events)                                  <span class="tk-com">// or snapshot + tail events</span></span>
+<span class="line">    <span class="tk-kw">if</span> order.status <span class="tk-op">!=</span> <span class="tk-str">&#x27;CREATED&#x27;</span>:  <span class="tk-kw">throw</span> InvalidTransition</span>
+<span class="line"></span>
+<span class="line">    prev <span class="tk-op">=</span> events.last</span>
+<span class="line">    evt <span class="tk-op">=</span> {</span>
+<span class="line">        eventId: <span class="tk-fn">uuid</span>(), orderId: orderId, version: order.version <span class="tk-op">+</span> <span class="tk-num">1</span>,</span>
+<span class="line">        type: <span class="tk-str">&#x27;OrderPaid&#x27;</span>, actor: cmd.actor, at: <span class="tk-fn">now</span>(), data: {amount: cmd.amount},</span>
+<span class="line">        prevHash: prev.hash</span>
+<span class="line">    }</span>
+<span class="line">    evt.hash <span class="tk-op">=</span> <span class="tk-fn">sha256</span>(evt.prevHash <span class="tk-op">+</span> <span class="tk-fn">canonicalJson</span>(evt))    <span class="tk-com">// tamper-evident chain</span></span>
+<span class="line"></span>
+<span class="line">    db.transaction:</span>
+<span class="line">        <span class="tk-com">// unique constraint on (orderId, version) rejects a concurrent writer</span></span>
+<span class="line">        insert into order_events <span class="tk-fn">values</span> (evt)</span>
+<span class="line">        insert into outbox <span class="tk-fn">values</span> (evt.eventId, evt)         <span class="tk-com">// same transaction, so no dual write</span></span>
+<span class="line">    <span class="tk-kw">return</span> evt.version</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Projector: idempotent, version-guarded read model</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onEvent</span>(evt):</span>
+<span class="line">    current <span class="tk-op">=</span> readModel.<span class="tk-fn">get</span>(evt.orderId)</span>
+<span class="line">    <span class="tk-kw">if</span> current <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> current.version <span class="tk-op">&gt;=</span> evt.version:</span>
+<span class="line">        <span class="tk-kw">return</span>                                              <span class="tk-com">// duplicate or old event, ignore</span></span>
+<span class="line">    readModel.<span class="tk-fn">put</span>(evt.orderId, {status: <span class="tk-fn">statusFor</span>(evt), version: evt.version, updatedAt: evt.at})</span>
+<span class="line">    <span class="tk-com">// offset is committed only after a successful write: at-least-once + idempotent = effectively once</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Compacting the audit log:</strong> Compaction deletes older events per key and silently destroys the history you were required to keep. Reserve it for derived state topics.</li>
+          <li><strong>Dual writes without an outbox:</strong> Updating the database and publishing separately will eventually lose or duplicate an event. Write the event and an outbox row in one transaction.</li>
+          <li><strong>Non-idempotent consumers:</strong> At-least-once delivery means duplicates, and a double-applied refund event is an incident. Dedupe on eventId or aggregate version.</li>
+          <li><strong>Events as CRUD diffs:</strong> Generic OrderUpdated events with whole payloads lose intent. Model business facts (OrderPaid, OrderShipped) with explicit schemas.</li>
+          <li><strong>Ignoring schema evolution:</strong> Events live forever. Use a schema registry, additive changes, and upcasters.</li>
+          <li><strong>Treating the read model as truth:</strong> Read models are disposable projections. If someone fixes one by hand it diverges; fix by replay.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams rarely jump straight to full event sourcing; they usually evolve toward it in this order:</p>
+        <ul>
+          <li><strong>Step 0 — Identify what must be immutable:</strong> Regulators care about state transitions and actors, not every internal field. Scope events to order lifecycle facts.</li>
+          <li><strong>Step 1 — Append-only event log:</strong> Persist events with eventId, orderId, version, type, actor, timestamp, and payload, enforced by a unique (orderId, version) constraint.</li>
+          <li><strong>Step 2 — Outbox and publication:</strong> Publish events to a log partitioned by orderId using the outbox pattern so no event is lost.</li>
+          <li><strong>Step 3 — Read models:</strong> Build current-status projections (a key-value store for fulfillment lookups, a warehouse for analytics) with idempotent consumers and lag monitoring.</li>
+          <li><strong>Step 4 — Snapshots and archive:</strong> Snapshot long-lived aggregates for fast rebuilds, and archive the log to WORM storage with hash chains for tamper evidence.</li>
+          <li><strong>Step 5 — Operate it:</strong> Track consumer lag, replay time, and event schema evolution, and run replay drills.</li>
+        </ul>
+        <p>Start with the smallest immutable log that meets the audit need, then add read models as consumers appear.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When the <strong>history of changes is itself a requirement</strong>, make an append-only event log the source of truth and derive current state from it. Scale reads with CQRS projections, keep the audit history out of compaction and short-retention policies, and accept eventual consistency with explicit read-your-writes where users need it.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

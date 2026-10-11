@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Should Maya fail fast or accept the order when downstream services lag? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">08 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Resiliency</span>
+      <span class="tag tag--green">Fail Fast</span>
+      <span class="tag tag--amber">Dependency Management</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Should Maya fail fast or accept the order when downstream services lag?</h1>
+      <p class="q-scenario"><strong>Maya</strong> is a senior backend developer who owns the <strong>checkout flow</strong> of a heavily used e-commerce site. Checkout makes <strong>synchronous calls</strong> to two backend systems: the <strong>Payment Gateway</strong> and <strong>Inventory Reservation</strong>. During traffic surges or partial outages those calls become <strong>slow or intermittently fail</strong>. Customers expect <strong>fast checkout</strong> and <strong>clear order status</strong>. The team must decide between <strong>failing fast</strong> (rejecting checkout when dependencies are unreachable) and <strong>degrading gracefully</strong> (accepting the order and completing downstream work asynchronously). She needs the strategy with the best trade-offs across <em>scalability, availability, latency, consistency, observability, and resilience</em>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Fail-fast synchronous architecture: Maintain a strictly synchronous checkout process. The checkout service contacts Payment and Inventory with brief timeout limits. If either request fails or times out, the checkout is instantly rejected. Implement retries with backoff and circuit breakers, ensuring orders are only accepted if both downstream systems reply successfully within the allowed time frame.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Graceful degradation featuring durable asynchronous processing: Instantly accept the order by storing an order record and placing a durable message into a processing queue. Provide a clear &#x27;pending&#x27; status back to the customer. Background workers execute the payment and inventory reservation tasks using idempotent retries, dead-letter queues, compensating transactions for any errors, and robust observability for stalled messages. Mitigate oversell risks by employing time-restricted reservations or compensation mechanisms based on backoff strategies.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Client-blocking with prolonged synchronous retries: Retain the synchronous nature of the request but increase the timeout thresholds and implement aggressive client-side retries (using long polling or loading spinners). Allow the backend to continuously retry downstream services until it succeeds or hits a maximum timeout. Inform the user only after the backend finishes its work. Incorporate comprehensive telemetry and tracing for delayed requests.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Optimistic cache-first order acceptance: Utilize a cached, eventually consistent view of inventory to quickly approve orders. Assume the payment will be successful and logically reserve the items in memory or a temporary cache. Reconcile these actions with the actual backend inventory and payment systems later; if conflicts arise during reconciliation, cancel the order and alert the customer. Depend on manual or automated reconciliation processes to resolve any discrepancies.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Durable Async Acceptance with Saga and Compensation</h3>
+        <p>Checkout is the revenue path. Rejecting orders because a dependency is slow turns a <em>partial</em> outage into a <em>total</em> checkout outage. Option B persists the customer's intent durably, tells them honestly that the order is 'pending', and completes payment and reservation with retries, idempotency, and compensation. Dependency latency becomes <strong>queue delay instead of a user-facing failure</strong>. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Availability decoupling:</strong> Accepting an order depends only on your own order store and queue, not on Payment or Inventory uptime. Checkout availability tracks the availability of components you control.</li>
+          <li><strong>Load leveling and dependency protection:</strong> The queue smooths surges, and capped worker concurrency stops a thundering herd from hammering a struggling gateway. Circuit breakers and backoff still apply inside the workers.</li>
+          <li><strong>Correctness through idempotency and sagas:</strong> Idempotency keys on payment authorization and stock reservation make retries safe. A state machine (PENDING, RESERVED, AUTHORIZED, CONFIRMED or FAILED) plus compensating actions (release stock, void authorization) handles partial failures.</li>
+          <li><strong>Transparent UX and observability:</strong> An order-status API, push or email notifications, and metrics on queue age, time-in-state, stuck orders, and DLQ depth let both customers and operators see what is happening.</li>
+          <li><strong>Contained oversell risk:</strong> Time-boxed reservation holds, or an explicit backorder policy, bound the damage, and scarce items can still use a synchronous fast path.</li>
+        </ul>
+        <p>Use a <strong>hybrid</strong>: validate cheap, deterministic things synchronously, accept the order durably, and run payment and inventory in a saga with idempotency keys, jittered retries, circuit breakers, and bulkheads. Alert on <strong>order time-in-PENDING</strong>, <strong>oldest queue message age</strong>, and <strong>compensation rate</strong>, and define the threshold at which the system switches to fail-fast.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🛑</div>
+          <h4>A — Fail-Fast Synchronous Checkout</h4>
+          <p>Simple and strongly consistent: the customer learns the outcome immediately and nothing is oversold. Timeouts, retries with backoff, and circuit breakers are good building blocks, and they belong <em>inside</em> option B's workers. As the whole strategy, though, every downstream blip becomes a lost sale, and customer retries add load to the struggling system. A timeout does not mean failure either: a payment that timed out may still have succeeded, so you need idempotency anyway. Best when stock is scarce, a wrong 'yes' costs more than a lost order, and dependencies are fast and reliable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">⏱️</div>
+          <h4>C — Prolonged Synchronous Retries</h4>
+          <p>This is the worst of both worlds. It holds threads, connections, and transactions open while dependencies are struggling, which raises concurrency (Little's law) and invites retry storms and cascading failure. Users stare at spinners and abandon, and mismatched timeouts across proxies, load balancers, and clients create ambiguous outcomes such as 'charged but no confirmation'. Aggressively retrying a failing dependency is a classic way to make an outage worse.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🎰</div>
+          <h4>D — Optimistic Cache-First Acceptance</h4>
+          <p>Approving orders against a stale cache and <em>assuming</em> payment will succeed invites oversell, orders without verified payment, fraud exposure, and heavy manual reconciliation. Cancelling after the customer was promised the item damages trust more than a short 'pending' status would. It is only defensible for low-value, abundant goods (such as some digital products), and even then payment authorization should be real.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Durable Async Acceptance with Saga and Compensation ✓</h4>
+          <p>Graceful degradation featuring durable asynchronous processing: Instantly accept the order by storing an order record and placing a durable message into a processing queue. Provide a clear &#x27;pending&#x27; s</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Checkout Availability</th><th>Perceived Latency</th><th>Consistency / Oversell Risk</th><th>Failure Amplification</th><th>Operational Complexity</th><th>Observability Fit</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Fail-Fast Synchronous</td><td>Low ❌ (tied to dependencies)</td><td>Fast when healthy ✅, errors when not ❌</td><td>Strong ✅</td><td>Medium ⚠ (retry storms without breakers)</td><td>Low effort ✅</td><td>Good ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Durable Async + Saga ✓</td><td>High ✅</td><td>Fast acknowledgment ✅ (final result delayed ⚠)</td><td>Eventual ⚠ (compensation)</td><td>Low ✅ (queue buffers)</td><td>High effort ❌</td><td>Good ✅ (needs saga tracing)</td></tr>
+            <tr><td class="tt-option">C — Prolonged Sync Retries</td><td>Low ❌</td><td>Poor ❌</td><td>Strong ✅</td><td>High ❌ (retry storms)</td><td>Medium ⚠</td><td>Moderate ⚠</td></tr>
+            <tr><td class="tt-option">D — Optimistic Cache-First</td><td>High ✅</td><td>Fast ✅</td><td>Weak ❌</td><td>Low ✅</td><td>High effort ❌ (reconciliation)</td><td>Poor ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Fail-Fast Synchronous</h4>
+          <p>Scarce or limited-edition stock, high fraud risk, or regulated flows where a wrong 'yes' is costlier than a lost sale, and dependencies are fast and reliable. Also the right behavior inside saga workers.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Durable Async + Saga</h4>
+          <p>High-volume consumer checkout where revenue continuity matters, dependencies can be slow or flaky, and a short 'pending' status is acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Prolonged Sync Retries</h4>
+          <p>Rarely appropriate. Possibly low-volume internal tools where a human operator is willing to wait and the load cannot cascade.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Optimistic Cache-First</h4>
+          <p>Low-value, effectively unlimited digital goods with real payment authorization and robust reconciliation, where occasional cancellations are cheap.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Durable Order Acceptance and Saga Processing</h3>
+        <p>The customer gets a fast 'pending' response; payment and inventory complete in the background:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U as Customer
+    participant A as Checkout API
+    participant D as Order DB (orders + outbox)
+    participant Q as Queue
+    participant W as Saga Worker
+    participant I as Inventory
+    participant P as Payment Gateway
+    U-&gt;&gt;A: Place order (idempotency key)
+    A-&gt;&gt;D: Insert order PENDING + outbox row (one transaction)
+    A--&gt;&gt;U: 202 Accepted, status PENDING
+    D-&gt;&gt;Q: Outbox relay publishes OrderPlaced
+    Q-&gt;&gt;W: Deliver OrderPlaced
+    W-&gt;&gt;I: Reserve stock (idempotent, TTL hold)
+    I--&gt;&gt;W: Reserved
+    W-&gt;&gt;P: Authorize payment (idempotency key)
+    P--&gt;&gt;W: Authorized
+    W-&gt;&gt;D: Order CONFIRMED
+    W--&gt;&gt;U: Push or email confirmation">sequenceDiagram
+    participant U as Customer
+    participant A as Checkout API
+    participant D as Order DB (orders + outbox)
+    participant Q as Queue
+    participant W as Saga Worker
+    participant I as Inventory
+    participant P as Payment Gateway
+    U-&gt;&gt;A: Place order (idempotency key)
+    A-&gt;&gt;D: Insert order PENDING + outbox row (one transaction)
+    A--&gt;&gt;U: 202 Accepted, status PENDING
+    D-&gt;&gt;Q: Outbox relay publishes OrderPlaced
+    Q-&gt;&gt;W: Deliver OrderPlaced
+    W-&gt;&gt;I: Reserve stock (idempotent, TTL hold)
+    I--&gt;&gt;W: Reserved
+    W-&gt;&gt;P: Authorize payment (idempotency key)
+    P--&gt;&gt;W: Authorized
+    W-&gt;&gt;D: Order CONFIRMED
+    W--&gt;&gt;U: Push or email confirmation</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Durable Acceptance and Idempotent Saga Worker</h3>
+        <p>A cheap synchronous acceptance path with admission control, and a worker that is safe under duplicate delivery and partial failure:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">placeOrder</span>(cart, idempotencyKey):               <span class="tk-com">// synchronous path, cheap work only</span></span>
+<span class="line">    <span class="tk-fn">validate</span>(cart)                                        <span class="tk-com">// price, stock hint, fraud pre-check</span></span>
+<span class="line">    <span class="tk-kw">if</span> orders.<span class="tk-fn">pendingAgeP95</span>() <span class="tk-op">&gt;</span> ADMISSION_LIMIT:          <span class="tk-com">// admission control: do not over-promise</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">503</span> <span class="tk-str">&#x27;busy, please retry&#x27;</span></span>
+<span class="line">    tx.<span class="tk-kw">begin</span>()</span>
+<span class="line">        order <span class="tk-op">=</span> orders.<span class="tk-fn">insert</span>(status <span class="tk-op">=</span> <span class="tk-str">&#x27;PENDING&#x27;</span>, idemKey <span class="tk-op">=</span> idempotencyKey)   <span class="tk-com">// unique key makes client retries safe</span></span>
+<span class="line">        outbox.<span class="tk-fn">insert</span>(<span class="tk-fn">OrderPlaced</span>(order.id))</span>
+<span class="line">    tx.<span class="tk-fn">commit</span>()</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-num">202</span> {orderId: order.id, status: <span class="tk-str">&#x27;PENDING&#x27;</span>}</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onOrderPlaced</span>(event):                            <span class="tk-com">// queue consumer, at-least-once delivery</span></span>
+<span class="line">    order <span class="tk-op">=</span> orders.<span class="tk-fn">get</span>(event.orderId)</span>
+<span class="line">    <span class="tk-kw">if</span> order.status <span class="tk-op">!=</span> <span class="tk-str">&#x27;PENDING&#x27;</span>: <span class="tk-kw">return</span>                  <span class="tk-com">// duplicate delivery, already handled</span></span>
+<span class="line">    hold <span class="tk-op">=</span> <span class="tk-lit">null</span>; auth <span class="tk-op">=</span> <span class="tk-lit">null</span></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        hold <span class="tk-op">=</span> inventory.<span class="tk-fn">reserve</span>(order.items, key <span class="tk-op">=</span> <span class="tk-str">&#x27;res-&#x27;</span> <span class="tk-op">+</span> order.id, ttl <span class="tk-op">=</span> 15min)</span>
+<span class="line">        auth <span class="tk-op">=</span> payments.<span class="tk-fn">authorize</span>(order.total, key <span class="tk-op">=</span> <span class="tk-str">&#x27;pay-&#x27;</span> <span class="tk-op">+</span> order.id)   <span class="tk-com">// timeout + circuit breaker inside</span></span>
+<span class="line">        orders.<span class="tk-fn">transition</span>(order.id, <span class="tk-str">&#x27;PENDING&#x27;</span>, <span class="tk-str">&#x27;CONFIRMED&#x27;</span>, hold, auth)</span>
+<span class="line">        <span class="tk-fn">notify</span>(order, <span class="tk-str">&#x27;confirmed&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">catch</span> TransientError:</span>
+<span class="line">        <span class="tk-fn">retryLater</span>(event, backoff <span class="tk-op">=</span> exponential <span class="tk-op">+</span> jitter, maxAttempts <span class="tk-op">=</span> <span class="tk-num">6</span>)   <span class="tk-com">// then DLQ</span></span>
+<span class="line">    <span class="tk-kw">catch</span> PermanentError <span class="tk-kw">as</span> e:                            <span class="tk-com">// declined card, out of stock</span></span>
+<span class="line">        <span class="tk-fn">compensate</span>(order, hold, auth)</span>
+<span class="line">        orders.<span class="tk-fn">transition</span>(order.id, <span class="tk-str">&#x27;PENDING&#x27;</span>, <span class="tk-str">&#x27;FAILED&#x27;</span>, e.reason)</span>
+<span class="line">        <span class="tk-fn">notify</span>(order, <span class="tk-str">&#x27;failed&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">compensate</span>(order, hold, auth):</span>
+<span class="line">    <span class="tk-kw">if</span> hold <span class="tk-op">!=</span> <span class="tk-lit">null</span>: inventory.<span class="tk-fn">release</span>(hold.id, key <span class="tk-op">=</span> <span class="tk-str">&#x27;rel-&#x27;</span> <span class="tk-op">+</span> order.id)</span>
+<span class="line">    <span class="tk-kw">if</span> auth <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> <span class="tk-fn">authMayHaveSucceeded</span>(order): payments.<span class="tk-fn">void</span>(order.id, key <span class="tk-op">=</span> <span class="tk-str">&#x27;void-&#x27;</span> <span class="tk-op">+</span> order.id)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Dual write without an outbox:</strong> Saving the order and publishing a message separately loses or duplicates events during crashes.</li>
+          <li><strong>Non-idempotent payment or reservation calls:</strong> Retries then double-charge or double-reserve. Use idempotency keys on every external side effect.</li>
+          <li><strong>Unbounded pending state:</strong> No admission control or reservation TTL means promises you cannot keep and stock that is never released.</li>
+          <li><strong>Compensation as an afterthought:</strong> Payment succeeds but inventory fails (or the reverse) and the order is left dangling. Build and test void, refund, and release paths.</li>
+          <li><strong>Opaque 'pending':</strong> No timeouts, status endpoint, or notifications, so customers retry and create duplicate orders.</li>
+          <li><strong>Retries without jitter or breakers:</strong> Synchronized retries amplify the very outage you are riding out. Treat the DLQ as an operational queue, not a graveyard.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams combine these ideas instead of choosing one extreme, and they decide <strong>per step</strong> what must be synchronous. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Classify steps by failure cost:</strong> Which checks must be synchronous (cart validation, basic fraud screening) and which can complete later (payment capture, fulfillment).</li>
+          <li><strong>Step 1 — Harden every dependency call:</strong> Timeouts, jittered retries, circuit breakers, and bulkheads. These are the building blocks for any option.</li>
+          <li><strong>Step 2 — Accept durably:</strong> Insert the order and an outbox row in one transaction and return a 'pending' response with an order ID.</li>
+          <li><strong>Step 3 — Run the saga:</strong> Idempotent reservation and authorization, compensation on permanent failure, DLQ for exhausted retries, and a reconciliation job as a safety net.</li>
+          <li><strong>Step 4 — Add admission control:</strong> Cap pending depth and age, apply per-SKU policies (synchronous for scarce items), and fall back to fail-fast or a waiting room when limits are exceeded.</li>
+          <li><strong>Step 5 — Communicate and measure:</strong> Status page, push or email on confirmation or failure, and dashboards for time-to-confirm and compensation rate.</li>
+        </ul>
+        <p>Be honest with customers about 'pending', and be strict internally about how long pending may last.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Failing fast protects consistency but sacrifices revenue during partial outages; blocking retries sacrifices everything; optimistic acceptance sacrifices correctness. <strong>Durable asynchronous acceptance with idempotent, compensating workers</strong> keeps checkout available and honest, as long as you cap the pending backlog and invest in observability and reconciliation.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

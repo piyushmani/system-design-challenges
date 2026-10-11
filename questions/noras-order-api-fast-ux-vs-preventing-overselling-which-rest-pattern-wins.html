@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nora&#x27;s Order API: Fast UX vs. Preventing Overselling; Which REST Pattern Wins? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">09 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">REST API</span>
+      <span class="tag tag--green">Order Management</span>
+      <span class="tag tag--amber">Concurrency</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Nora&#x27;s Order API: Fast UX vs. Preventing Overselling; Which REST Pattern Wins?</h1>
+      <p class="q-scenario"><strong>Nora</strong> is designing the public REST endpoint for <strong>order placement</strong> in a global e-commerce backend. Requirements: a perceived checkout response under <strong>200 ms</strong>, <strong>50,000 order requests per second</strong> at peak, <strong>no overselling</strong> (cancellations must be extremely rare), <strong>high availability across regions</strong>, and strong observability. Some eventual consistency is acceptable for downstream records, but customers need an <strong>immediate, reliable confirmation that their item is secured</strong>. She must choose the API and backend workflow that best balances latency, availability, and correctness.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Utilize a synchronous strong-consistency pathway: the API handler executes a transactional write directly to a single primary SQL database utilizing serializable isolation, reducing inventory within the same transaction. The request is blocked until the database commit is successful, at which point it returns the final order confirmation to the client.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Adopt a purely asynchronous accept-and-process model: the API validates the incoming request, immediately returns a 202 Accepted status after placing a job in a durable queue, and instructs the client to poll a /status endpoint (or subscribe to a push notification) for final confirmation once background workers have processed the order and adjusted the inventory.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Execute a fast atomic reservation in a distributed cache coupled with an asynchronous persistent commit: the API performs an atomic reservation using a rapid distributed cache (e.g., a Redis Lua script or Redis Streams decrement) to guarantee stock reservation, returning success swiftly. A background worker then processes a reliable queue to save the order in the database and handle any failures; reconciliation jobs and metrics guarantee both durability and visibility.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Implement a write-ahead client-store paired with batch inventory adjustments: the API appends the order to a region-specific append-only store and immediately signals success. Inventory adjustments occur subsequently via periodic batch processes that resolve any conflicts; instances of overselling are managed through cancellation and compensation workflows following the batch runs.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Atomic Cache Reservation + Asynchronous Durable Commit</h3>
+        <p>The requirement that separates good from bad here is subtle: customers need an <strong>immediate guarantee that stock is secured</strong>, yet the system must absorb <strong>50k requests per second</strong> within <strong>200 ms</strong>. The part that must be synchronous is only the <em>reservation</em> (the scarce-resource decision). Persisting the full order, payment, and downstream records can be asynchronous. An <strong>atomic check-and-decrement in a fast in-memory store</strong> makes that decision in about a millisecond without ever going below zero, and a reliable queue plus idempotent workers moves the order into the database afterwards. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Correctness at the point that matters:</strong> A Redis Lua script (or equivalent atomic operation) checks stock and decrements in one indivisible step, executed serially per key. Two buyers can never both take the last unit, so overselling is prevented by construction, not by later cleanup.</li>
+          <li><strong>Latency and throughput:</strong> The synchronous path is a single in-memory round trip, typically low single-digit milliseconds, well inside the 200 ms budget. Stock is sharded by SKU (and region), so 50k requests per second spreads across many shards.</li>
+          <li><strong>Immediate, meaningful confirmation:</strong> The customer gets an order id with status <code>RESERVED</code>, which is a real promise backed by decremented stock. Final confirmation (payment, fulfillment) follows asynchronously.</li>
+          <li><strong>Spike absorption and decoupling:</strong> The queue or stream smooths bursts so the database sees a steady write rate, and an outage of the database or downstream services delays persistence without rejecting customers.</li>
+          <li><strong>Visibility and self-healing:</strong> Idempotency keys, a dead-letter queue, and a reconciliation job comparing cache counters with the database ledger make failures visible and repairable. Metrics on reservation rate, stream lag, release rate, and drift give operators early warning.</li>
+        </ul>
+        <p>A robust implementation has <strong>an atomic reserve-and-enqueue script</strong>, <strong>idempotency keys on the API</strong>, <strong>an idempotent persistence worker</strong> (unique constraint on order id), <strong>time-boxed holds with automatic release</strong>, <strong>a dead-letter path</strong>, and <strong>continuous reconciliation</strong> between the cache and the database ledger.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🧱</div>
+          <h4>A — Synchronous Serializable Write to One Primary</h4>
+          <p>This is the most obviously correct design and the least scalable. Popular SKUs become <strong>hot rows</strong> where serializable transactions conflict and retry, one primary caps write throughput far below 50k per second at peak, and users in distant regions pay cross-region round trips, which threatens the 200 ms target. The primary is also a single point of failure for availability. <strong>Caveat:</strong> for modest volumes, or when correctness outweighs latency (for example a small, regional ticketing system), this is the simplest right answer.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📬</div>
+          <h4>B — Pure Accept-and-Process (202 + Polling)</h4>
+          <p>It is excellent at absorbing load, but it <strong>does not secure the item at accept time</strong>. The customer learns later whether stock existed, which means rejections or cancellations after the user believed the order was placed, directly contradicting the 'immediate and reliable confirmation' requirement. Polling or push adds UX complexity as well. <strong>Caveat:</strong> a good fit when stock is effectively unlimited or backorders are acceptable. Combined with a synchronous reservation step, it becomes option C.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧾</div>
+          <h4>D — Append-Only Store + Batch Inventory Adjustment</h4>
+          <p>It is fast and available, but it accepts overselling by design: inventory is only reconciled in periodic batches, so under heavy demand many orders are confirmed against stock that does not exist. The compensation and cancellation workflows that follow harm customer trust and create support cost, which the requirements explicitly say must be rare. <strong>Caveat:</strong> acceptable where the cost of oversell is small or stock is replenishable (digital goods, made-to-order items).</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Atomic Cache Reservation + Asynchronous Durable Commit ✓</h4>
+          <p>Execute a fast atomic reservation in a distributed cache coupled with an asynchronous persistent commit: the API performs an atomic reservation using a rapid distributed cache (e.g., a Redis Lua scrip</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Checkout Latency</th><th>Peak Throughput (50k/s)</th><th>Oversell Protection</th><th>Immediate Confirmation</th><th>Regional Availability</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Serializable Write to Primary</td><td>Poor for distant regions ❌</td><td>Limited by hot rows and one primary ❌</td><td>Strongest ✅</td><td>Yes ✅</td><td>Single primary ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — 202 Accepted + Polling</td><td>Excellent ✅</td><td>Excellent ✅</td><td>Deferred (late rejection) ❌</td><td>No ❌</td><td>Good ✅</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Atomic Cache Reservation + Async Commit ✓</td><td>Excellent ✅</td><td>Excellent (sharded) ✅</td><td>Strong, needs durability care ⚠</td><td>Yes (reserved) ✅</td><td>Good with regional quotas ✅</td><td>Medium–High ⚠</td></tr>
+            <tr><td class="tt-option">D — Append-Only + Batch Adjust</td><td>Excellent ✅</td><td>Excellent ✅</td><td>None by design ❌</td><td>Yes, but unreliable ❌</td><td>Excellent ✅</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Serializable Write to Primary</h4>
+          <p>Moderate traffic, a single region or close users, and correctness matters more than latency. The simplest option when scale does not demand more.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — 202 Accepted + Polling</h4>
+          <p>Long-running or non-contended work where the client does not need an immediate decision, or stock is effectively unlimited.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Atomic Cache Reservation + Async Commit</h4>
+          <p>Scarce, contended inventory at high request rates where customers need an immediate guarantee. Requires careful durability, expiry, and reconciliation design.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Append-Only + Batch Adjust</h4>
+          <p>Oversell is cheap or impossible to matter (digital goods, backorders, made-to-order), and throughput and availability dominate.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Reserve Synchronously, Persist Asynchronously</h3>
+        <p>The API only waits for the atomic reservation. Persistence, payment, and release of failed holds happen in the background:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant A as API Handler
+    participant R as Redis stock and stream
+    participant W as Persist Worker
+    participant D as Orders DB
+    participant P as Payment Service
+    C-&gt;&gt;A: POST /orders with Idempotency-Key
+    A-&gt;&gt;R: 1. Lua script: check stock, DECRBY, XADD, SET idem
+    alt Stock available
+        R--&gt;&gt;A: 2a. RESERVED
+        A--&gt;&gt;C: 3. 201 Reserved with orderId
+    else Sold out
+        R--&gt;&gt;A: 2b. SOLD_OUT
+        A--&gt;&gt;C: 409 Out of stock
+    end
+    W-&gt;&gt;R: 4. XREADGROUP
+    W-&gt;&gt;D: 5. INSERT order and ledger entry (idempotent)
+    W-&gt;&gt;P: 6. Authorize payment
+    alt Payment fails or hold expires
+        W-&gt;&gt;R: 7. Release stock once (INCRBY guarded by ledger)
+    end">sequenceDiagram
+    participant C as Client
+    participant A as API Handler
+    participant R as Redis stock and stream
+    participant W as Persist Worker
+    participant D as Orders DB
+    participant P as Payment Service
+    C-&gt;&gt;A: POST /orders with Idempotency-Key
+    A-&gt;&gt;R: 1. Lua script: check stock, DECRBY, XADD, SET idem
+    alt Stock available
+        R--&gt;&gt;A: 2a. RESERVED
+        A--&gt;&gt;C: 3. 201 Reserved with orderId
+    else Sold out
+        R--&gt;&gt;A: 2b. SOLD_OUT
+        A--&gt;&gt;C: 409 Out of stock
+    end
+    W-&gt;&gt;R: 4. XREADGROUP
+    W-&gt;&gt;D: 5. INSERT order and ledger entry (idempotent)
+    W-&gt;&gt;P: 6. Authorize payment
+    alt Payment fails or hold expires
+        W-&gt;&gt;R: 7. Release stock once (INCRBY guarded by ledger)
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Atomic Reservation, Idempotent Persistence, and Reconciliation</h3>
+        <p>The reserve script decrements stock and appends the order intent in one atomic step. A consumer group persists orders idempotently, and a reconciler compares the cache with the database ledger:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Runs inside Redis as one atomic script. Keys share a hash tag, e.g. {sku123}, so they live in one slot.</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">RESERVE</span>(stockKey, streamKey, idemKey, sku, qty, orderId, holdSeconds):</span>
+<span class="line">    existing <span class="tk-op">=</span> <span class="tk-fn">GET</span>(idemKey)</span>
+<span class="line">    <span class="tk-kw">if</span> existing <span class="tk-op">!=</span> <span class="tk-lit">null</span>: <span class="tk-kw">return</span> [<span class="tk-str">&#x27;DUPLICATE&#x27;</span>, existing]            <span class="tk-com">// client retry gets the same answer</span></span>
+<span class="line">    stock <span class="tk-op">=</span> <span class="tk-fn">tonumber</span>(<span class="tk-fn">GET</span>(stockKey))</span>
+<span class="line">    <span class="tk-kw">if</span> stock <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> stock <span class="tk-op">&lt;</span> qty: <span class="tk-kw">return</span> [<span class="tk-str">&#x27;SOLD_OUT&#x27;</span>]</span>
+<span class="line">    <span class="tk-fn">DECRBY</span>(stockKey, qty)                                          <span class="tk-com">// can never go below zero</span></span>
+<span class="line">    <span class="tk-fn">XADD</span>(streamKey, <span class="tk-str">&#x27;*&#x27;</span>, <span class="tk-str">&#x27;orderId&#x27;</span>, orderId, <span class="tk-str">&#x27;sku&#x27;</span>, sku, <span class="tk-str">&#x27;qty&#x27;</span>, qty, <span class="tk-str">&#x27;holdSeconds&#x27;</span>, holdSeconds)</span>
+<span class="line">    <span class="tk-fn">SET</span>(idemKey, orderId, <span class="tk-str">&#x27;EX&#x27;</span>, <span class="tk-num">86400</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> [<span class="tk-str">&#x27;RESERVED&#x27;</span>, orderId]</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">placeOrder</span>(req):                                          <span class="tk-com">// API handler</span></span>
+<span class="line">    <span class="tk-fn">validate</span>(req); <span class="tk-fn">authenticate</span>(req)</span>
+<span class="line">    orderId <span class="tk-op">=</span> <span class="tk-fn">newOrderId</span>()</span>
+<span class="line">    result <span class="tk-op">=</span> redis.<span class="tk-fn">eval</span>(RESERVE, <span class="tk-fn">stockKey</span>(req.region, req.sku), <span class="tk-fn">orderStream</span>(req.sku),</span>
+<span class="line">                        <span class="tk-str">&#x27;idem:&#x27;</span> <span class="tk-op">+</span> req.idempotencyKey, req.sku, req.qty, orderId, <span class="tk-num">900</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> result[<span class="tk-num">0</span>] <span class="tk-op">==</span> <span class="tk-str">&#x27;SOLD_OUT&#x27;</span>: <span class="tk-kw">return</span> <span class="tk-fn">http</span>(<span class="tk-num">409</span>, <span class="tk-str">&#x27;out of stock&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">http</span>(<span class="tk-num">201</span>, { orderId: result[<span class="tk-num">1</span>], status: <span class="tk-str">&#x27;RESERVED&#x27;</span>, statusUrl: <span class="tk-str">&#x27;/orders/&#x27;</span> <span class="tk-op">+</span> result[<span class="tk-num">1</span>] })</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Background worker (consumer group): persist reliably and idempotently</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">persistWorker</span>():</span>
+<span class="line">    <span class="tk-kw">for</span> msg <span class="tk-kw">in</span> redis.<span class="tk-fn">XREADGROUP</span>(<span class="tk-str">&#x27;persisters&#x27;</span>, consumerId, streamKey, block <span class="tk-op">=</span> <span class="tk-num">1s</span>):</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            db.<span class="tk-fn">insertIfAbsent</span>(<span class="tk-str">&#x27;orders&#x27;</span>, msg.orderId, msg.fields)         <span class="tk-com">// UNIQUE(order_id) makes retries safe</span></span>
+<span class="line">            db.<span class="tk-fn">insertIfAbsent</span>(<span class="tk-str">&#x27;stock_ledger&#x27;</span>, msg.orderId, <span class="tk-op">-</span>msg.qty)     <span class="tk-com">// durable source of truth</span></span>
+<span class="line">            redis.<span class="tk-fn">XACK</span>(streamKey, <span class="tk-str">&#x27;persisters&#x27;</span>, msg.id)</span>
+<span class="line">            events.<span class="tk-fn">publish</span>(<span class="tk-str">&#x27;OrderReserved&#x27;</span>, msg.orderId)</span>
+<span class="line">        <span class="tk-kw">catch</span> TransientError:</span>
+<span class="line">            leave message pending; retry <span class="tk-kw">with</span> backoff</span>
+<span class="line">        <span class="tk-kw">catch</span> PermanentError:</span>
+<span class="line">            <span class="tk-fn">deadLetter</span>(msg); <span class="tk-fn">releaseStock</span>(msg)                           <span class="tk-com">// INCRBY guarded by a release-ledger entry</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Reconciler, runs every minute per SKU group</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reconcile</span>(sku):</span>
+<span class="line">    expected <span class="tk-op">=</span> db.<span class="tk-fn">stockOnHand</span>(sku) <span class="tk-op">-</span> db.<span class="tk-fn">openHolds</span>(sku)</span>
+<span class="line">    actual <span class="tk-op">=</span> redis.<span class="tk-fn">GET</span>(<span class="tk-fn">stockKey</span>(sku))</span>
+<span class="line">    <span class="tk-kw">if</span> actual <span class="tk-op">!=</span> expected:</span>
+<span class="line">        <span class="tk-fn">alert</span>(<span class="tk-str">&#x27;stock drift&#x27;</span>, sku, actual <span class="tk-op">-</span> expected)</span>
+<span class="line">        <span class="tk-fn">repairFromLedger</span>(sku)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Check-then-decrement as two calls:</strong> A read followed by a write races under concurrency. Use one atomic script or conditional operation.</li>
+          <li><strong>Decrementing stock and enqueueing the order separately:</strong> A crash between the two loses an order or leaks stock. Do both in one atomic step, or use a transactional outbox.</li>
+          <li><strong>No idempotency key:</strong> Client retries after a timeout create duplicate orders and double reservations. Return the original result for a repeated key.</li>
+          <li><strong>Holds that never expire or release twice:</strong> Leaked holds make items look sold out, and double releases make stock appear. Use TTLs and a release ledger that makes release idempotent.</li>
+          <li><strong>Treating the cache as the source of truth:</strong> Redis failover can lose data. Keep a durable ledger in the database and reconcile continuously.</li>
+          <li><strong>One global counter for a global catalog:</strong> Cross-region synchronization brings back the latency you tried to avoid. Partition stock by region and rebalance.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Large retailers treat inventory as a <strong>contended, partitioned resource</strong> and separate the cheap decision (reserve) from the expensive work (commit). A typical design evolves like this:</p>
+        <ul>
+          <li><strong>Step 0 — Classify SKUs:</strong> Most SKUs have plenty of stock and low contention. A small set of hot, scarce SKUs needs the strictest handling, so spend complexity there.</li>
+          <li><strong>Step 1 — Reserve atomically:</strong> Atomic check-and-decrement with an idempotency key, sharded by SKU and region, with the order intent written in the same operation.</li>
+          <li><strong>Step 2 — Persist reliably:</strong> A consumer group writes the order and a stock-ledger entry to the database idempotently, then acknowledges. Failures retry, then dead-letter.</li>
+          <li><strong>Step 3 — Hold, then finalize or release:</strong> Payment authorization runs after reservation. On success the hold becomes a sale, on failure or timeout the stock is released exactly once.</li>
+          <li><strong>Step 4 — Allocate across regions:</strong> Give each region a stock quota and rebalance asynchronously, so reservations stay local and available during regional failures.</li>
+          <li><strong>Step 5 — Reconcile and observe:</strong> Compare cache counters with the ledger continuously, alert on drift, and track reservation latency, stream lag, and release rates.</li>
+        </ul>
+        <p>The database remains the source of truth for money and history, while the fast store owns only the short-lived reservation decision.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Make only the <strong>scarce-resource decision</strong> synchronous and atomic, and push everything else behind a durable queue. An atomic cache reservation gives fast, honest confirmations and prevents overselling, while idempotent workers, expiring holds, and reconciliation cover durability. Be explicit about the durability limits of your reservation store and choose a stronger one for the scarcest inventory.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

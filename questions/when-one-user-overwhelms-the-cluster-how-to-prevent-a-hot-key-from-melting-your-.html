@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>When One User Overwhelms the Cluster: How to prevent a hot key from melting your database? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">14 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Hot Keys</span>
+      <span class="tag tag--green">Database Protection</span>
+      <span class="tag tag--amber">Rate Limiting</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">When One User Overwhelms the Cluster: How to prevent a hot key from melting your database?</h1>
+      <p class="q-scenario"><strong>Ethan</strong> is a backend developer at a social media platform whose NoSQL database is partitioned by <code>user_id</code> (timelines, reaction tallies, and counters). A <strong>high-profile celebrity</strong> just joined and now drives <strong>thousands of writes per second into a single partition</strong>, exhausting its network, disk I/O, and CPU. The celebrity's own account suffers severe latency, and the shard occasionally crashes, hurting <strong>other users hosted on the same infrastructure</strong>. Most of the hot data is <strong>additive or append-style</strong> (counters, tallies, timeline entries). Ethan must mitigate the hot key while preserving availability and scalability, balancing fault tolerance, observability, low write latency, and high throughput for an intensely updated logical key.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Key salting: spread writes for the hot logical key across N sub-keys on different shards using a random or deterministic suffix, aggregate on read through a cache or service, and detect hot keys dynamically to adjust N.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Move the hot user to a dedicated, vertically scaled single-tenant shard with its own leader and replicas, keeping the single-key structure and strong consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Keep the single logical key but serialize writes through a consensus-based sequencer or global lock for strict ordering.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Rate-limit and apply backpressure at the API gateway for that user, queue excess writes durably, and degrade the experience when limits are exceeded.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Key Salting (Write Sharding)</h3>
+        <p>A hot key is a <strong>parallelism problem</strong>. One logical key maps to one partition, so scaling the rest of the cluster does not help: the bottleneck is a single node's capacity. The fix is to split the key into several physical keys so the load spreads across many partitions. Writes to additive data (counters, tallies, timeline appends) do not need to land in one place, so they can be split on write and merged on read. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Write capacity scales with N:</strong> With N salted sub-keys (for example <code>user:42#0</code> to <code>user:42#15</code>), 10k writes per second become roughly 10k/N per sub-key, and hash partitioning places those sub-keys on different shards.</li>
+          <li><strong>Protects the neighbors:</strong> The celebrity's load no longer saturates one shard, which removes the blast radius that was crashing other users' data.</li>
+          <li><strong>Low write latency:</strong> A write goes to one randomly chosen sub-key with no coordination or cross-shard transaction, so latency stays flat as traffic grows, unlike locks or sequencers.</li>
+          <li><strong>Fits the data shape:</strong> Counters, reaction tallies, and set-like or time-ordered feeds are mergeable (sum, union, merge by timestamp). This is the same idea as sharded counters and CRDT G-Counters.</li>
+          <li><strong>Adaptive and observable:</strong> Only keys detected as hot (heavy-hitter detection or partition throttling metrics) are salted, and N can be raised dynamically, so ordinary users keep fast single-key reads.</li>
+        </ul>
+        <p>A robust version uses a <strong>hot-key registry</strong> (key to salt factor), <strong>client-side write coalescing</strong> (batch +1 increments for a few hundred milliseconds), a <strong>read cache with a short TTL</strong>, and <strong>periodic compaction of sub-keys</strong>. Watch per-partition throttling, p99 write latency, and sub-key skew. If load is still uneven, raise N and keep the isolation and rate-limit options below as defense in depth.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🏝️</div>
+          <h4>B — Dedicated Vertically Scaled Shard</h4>
+          <p>Isolation fixes the <em>blast radius</em> (other users are safe) but not the <strong>bottleneck</strong>: the key still lives on a single leader, bounded by the biggest machine you can buy, and the next viral account needs the same manual treatment. Failover of one huge node is also slow. <strong>Caveat:</strong> as a complement it is valuable. Moving the top few accounts to isolated capacity is a cheap safety net while salting is rolled out.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔒</div>
+          <h4>C — Global Lock / Consensus Sequencer</h4>
+          <p>Serializing every write through a lock or a consensus round <strong>adds coordination latency to each write and caps throughput at the sequencer's rate</strong>. It concentrates the very contention you are trying to remove and creates a new single point of failure. The problem here was never conflicting writes; it was too many writes for one partition. <strong>Caveat:</strong> it is only justified for data that needs strict global ordering (ledger entries), which counters and tallies do not.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🚦</div>
+          <h4>D — Rate Limiting + Queue</h4>
+          <p>This protects the database but does not serve the demand. Throttling a celebrity's legitimate traffic degrades the product for the user who matters most, and the queue still drains into the same hot partition, so backlog and staleness grow during spikes. <strong>Caveat:</strong> as a <em>last line of defense</em> (per-tenant quotas, load shedding for abusive traffic) it is essential and cheap, so keep it alongside salting.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>A — Key Salting (Write Sharding) ✓</h4>
+          <p>Key salting: spread writes for the hot logical key across N sub-keys on different shards using a random or deterministic suffix, aggregate on read through a cache or service, and detect hot keys dynam</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Throughput on the Hot Key</th><th>Write Latency</th><th>Blast Radius on Other Users</th><th>Consistency</th><th>Implementation Complexity</th><th>Handles the Next Viral User</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Key Salting ✓</td><td>Scales with N ✅</td><td>Low ✅</td><td>Contained ✅</td><td>Eventual ⚠</td><td>Medium ⚠</td><td>Yes, automatically ✅</td></tr>
+            <tr><td class="tt-option">B — Dedicated Shard</td><td>Capped by one node ❌</td><td>Low until saturation ⚠</td><td>Contained ✅</td><td>Strong ✅</td><td>Medium ⚠</td><td>No, manual per user ❌</td></tr>
+            <tr><td class="tt-option">C — Global Lock / Sequencer</td><td>Capped by the sequencer ❌</td><td>High ❌</td><td>Not contained ❌</td><td>Strict ✅</td><td>High ❌</td><td>No ❌</td></tr>
+            <tr><td class="tt-option">D — Rate Limit + Queue</td><td>Capped, excess delayed ❌</td><td>Low if accepted, high if queued ⚠</td><td>Contained ✅</td><td>Eventual for queued writes ⚠</td><td>Low ✅</td><td>Partly ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Key Salting</h4>
+          <p>Write-hot keys holding commutative or appendable data (counters, tallies, feeds) where eventual consistency is fine and the load exceeds what one partition can absorb.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Dedicated Shard</h4>
+          <p>A few known whales needing contractual isolation or strong consistency, or as a stopgap while a sharding fix is rolled out.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Global Lock / Sequencer</h4>
+          <p>Rare, low-volume, strictly ordered updates (ledgers, unique-resource allocation), never a high-rate hot counter.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Rate Limit + Queue</h4>
+          <p>Protecting shared infrastructure from abusive or unexpected spikes, as a safety net on top of a scaling fix.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Fan-out Read with Cache</h3>
+        <p>Reads merge the sub-keys of a hot key, and a short-lived cache protects the shards from read amplification:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant S as Read Service
+    participant K as Cache
+    participant R as Hot Key Registry
+    participant D as Shards
+    C-&gt;&gt;S: 1. GET likes for user 42
+    S-&gt;&gt;K: 2. Lookup merged value
+    alt Cache hit
+        K--&gt;&gt;S: 3a. Cached total
+    else Cache miss
+        S-&gt;&gt;R: 3b. Salt factor for user 42
+        R--&gt;&gt;S: N = 16
+        S-&gt;&gt;D: 4. Parallel reads of 16 sub-keys
+        D--&gt;&gt;S: 5. Partial values
+        S-&gt;&gt;S: 6. Merge (sum or timestamp merge)
+        S-&gt;&gt;K: 7. SET merged value with 1-2 s TTL
+    end
+    S--&gt;&gt;C: Response">sequenceDiagram
+    participant C as Client
+    participant S as Read Service
+    participant K as Cache
+    participant R as Hot Key Registry
+    participant D as Shards
+    C-&gt;&gt;S: 1. GET likes for user 42
+    S-&gt;&gt;K: 2. Lookup merged value
+    alt Cache hit
+        K--&gt;&gt;S: 3a. Cached total
+    else Cache miss
+        S-&gt;&gt;R: 3b. Salt factor for user 42
+        R--&gt;&gt;S: N = 16
+        S-&gt;&gt;D: 4. Parallel reads of 16 sub-keys
+        D--&gt;&gt;S: 5. Partial values
+        S-&gt;&gt;S: 6. Merge (sum or timestamp merge)
+        S-&gt;&gt;K: 7. SET merged value with 1-2 s TTL
+    end
+    S--&gt;&gt;C: Response</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Hot-Key Registry, Salted Writes, and Merged Reads</h3>
+        <p>Coalesced writes spread over N sub-keys, a cached fan-out read, and a control loop that raises N when a key stays hot:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">DEFAULT_SALTS <span class="tk-op">=</span> <span class="tk-num">1</span>                                  <span class="tk-com">// normal keys are never salted</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">saltFactor</span>(key):</span>
+<span class="line">    <span class="tk-kw">return</span> registry.<span class="tk-fn">get</span>(key) ?? DEFAULT_SALTS      <span class="tk-com">// cached locally, refreshed every few seconds</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---------- write path ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">incrementCounter</span>(userId, delta):</span>
+<span class="line">    key <span class="tk-op">=</span> <span class="tk-str">&quot;counter:&quot;</span> <span class="tk-op">+</span> userId</span>
+<span class="line">    coalescer.<span class="tk-fn">add</span>(key, delta)                      <span class="tk-com">// buffer increments for ~200 ms (1000 x +1 becomes one +1000)</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">flush</span>(key, totalDelta):                   <span class="tk-com">// invoked by the coalescer</span></span>
+<span class="line">    n <span class="tk-op">=</span> <span class="tk-fn">saltFactor</span>(key)</span>
+<span class="line">    subKey <span class="tk-op">=</span> (n <span class="tk-op">==</span> <span class="tk-num">1</span>) ? key : key <span class="tk-op">+</span> <span class="tk-str">&quot;:s&quot;</span> <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, n <span class="tk-op">-</span> <span class="tk-num">1</span>)    <span class="tk-com">// uniform random spreads load evenly</span></span>
+<span class="line">    store.<span class="tk-fn">atomicAdd</span>(subKey, totalDelta)            <span class="tk-com">// single-partition write, no cross-shard coordination</span></span>
+<span class="line">    metrics.<span class="tk-fn">recordWrite</span>(key, totalDelta)           <span class="tk-com">// feeds heavy-hitter detection</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---------- read path ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">readCounter</span>(userId):</span>
+<span class="line">    key <span class="tk-op">=</span> <span class="tk-str">&quot;counter:&quot;</span> <span class="tk-op">+</span> userId</span>
+<span class="line">    cached <span class="tk-op">=</span> cache.<span class="tk-fn">get</span>(key)</span>
+<span class="line">    <span class="tk-kw">if</span> cached <span class="tk-op">!=</span> <span class="tk-lit">null</span>: <span class="tk-kw">return</span> cached</span>
+<span class="line">    n <span class="tk-op">=</span> <span class="tk-fn">saltFactor</span>(key)</span>
+<span class="line">    keys <span class="tk-op">=</span> (n <span class="tk-op">==</span> <span class="tk-num">1</span>) ? [key] : [key <span class="tk-op">+</span> <span class="tk-str">&quot;:s&quot;</span> <span class="tk-op">+</span> i <span class="tk-kw">for</span> i <span class="tk-kw">in</span> <span class="tk-num">0</span>..n<span class="tk-op">-</span><span class="tk-num">1</span>]</span>
+<span class="line">    total <span class="tk-op">=</span> <span class="tk-fn">sum</span>(store.<span class="tk-fn">multiGet</span>(keys), <span class="tk-kw">default</span> <span class="tk-op">=</span> <span class="tk-num">0</span>) <span class="tk-com">// parallel reads, merge by addition</span></span>
+<span class="line">    cache.<span class="tk-fn">set</span>(key, total, ttl <span class="tk-op">=</span> <span class="tk-num">2s</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> total</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---------- control loop ----------</span></span>
+<span class="line">every <span class="tk-num">10</span> seconds:</span>
+<span class="line">    <span class="tk-kw">for</span> key, writesPerSec <span class="tk-kw">in</span> detector.<span class="tk-fn">topKeys</span>(limit <span class="tk-op">=</span> <span class="tk-num">100</span>):</span>
+<span class="line">        current <span class="tk-op">=</span> <span class="tk-fn">saltFactor</span>(key)</span>
+<span class="line">        wanted  <span class="tk-op">=</span> <span class="tk-fn">clamp</span>(<span class="tk-fn">ceil</span>(writesPerSec <span class="tk-op">/</span> TARGET_WRITES_PER_SUBKEY), <span class="tk-num">1</span>, MAX_SALTS)   <span class="tk-com">// e.g. 500 writes/s per sub-key</span></span>
+<span class="line">        <span class="tk-kw">if</span> wanted <span class="tk-op">&gt;</span> current:</span>
+<span class="line">            registry.<span class="tk-fn">set</span>(key, wanted)              <span class="tk-com">// N only grows, so readers always cover every sub-key ever written</span></span>
+<span class="line">    <span class="tk-com">// Lower N only after sub-keys have been compacted back into the aggregate key</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Salting every key:</strong> Salting all keys multiplies read cost for no benefit. Salt only keys flagged hot in a registry.</li>
+          <li><strong>Poor salt distribution:</strong> A low-cardinality salt, or one derived from a skewed attribute, recreates the hotspot. Use uniform randomness and verify that sub-keys land on different partitions.</li>
+          <li><strong>Forgetting old sub-keys when N changes:</strong> If readers only check the new range, data silently disappears. Version the salt configuration and read all active salts until migrated.</li>
+          <li><strong>Unbounded read fan-out:</strong> Reading 256 sub-keys per timeline request recreates latency problems. Keep N modest and compact in the background.</li>
+          <li><strong>Salting data that needs ordering or uniqueness:</strong> Unique constraints and read-modify-write logic do not survive splitting. Salt only commutative aggregates and appends.</li>
+          <li><strong>Ignoring the read hot spot:</strong> The celebrity's profile is also read millions of times. Add caching, or the read path becomes the next bottleneck.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Large platforms handle hot keys in <strong>layers</strong>, starting with detection:</p>
+        <ul>
+          <li><strong>Step 0 — Detect:</strong> Collect per-partition and per-key metrics (throttle events, top-K heavy hitters) to learn whether the hot key is write-hot, read-hot, or both.</li>
+          <li><strong>Step 1 — Coalesce writes:</strong> Batch increments in the app or a stream processor (1,000 x +1 becomes one +1000). For counters this often cuts write volume by 10x to 100x before any sharding.</li>
+          <li><strong>Step 2 — Salt the hot keys:</strong> Split the logical key into N sub-keys through a registry, and keep ordinary keys unsalted.</li>
+          <li><strong>Step 3 — Cache reads:</strong> Serve the celebrity's counts and timelines from a CDN or in-memory cache with short TTLs. Reads of hot keys are usually even hotter than writes.</li>
+          <li><strong>Step 4 — Isolate and shed load:</strong> Move the top accounts to dedicated capacity and apply per-tenant quotas so no single tenant can saturate shared infrastructure.</li>
+          <li><strong>Step 5 — Compact:</strong> Fold sub-keys back into an aggregate in the background to keep read fan-out low.</li>
+        </ul>
+        <p>Spread the write load first, then protect everyone else with isolation and limits.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>A hot key is a single-partition bottleneck, so the cure is to <strong>split the key, not to protect or serialize it</strong>. Salt the logical key across several physical shards for mergeable data, merge on read behind a cache, and apply isolation and rate limits as defense in depth. You accept eventual consistency and read fan-out in return for write throughput that scales with N.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

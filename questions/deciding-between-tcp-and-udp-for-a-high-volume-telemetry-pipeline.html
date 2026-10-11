@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deciding between TCP and UDP for a high-volume telemetry pipeline — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">08 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Networking</span>
+      <span class="tag tag--green">TCP vs UDP</span>
+      <span class="tag tag--amber">Telemetry</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Deciding between TCP and UDP for a high-volume telemetry pipeline</h1>
+      <p class="q-scenario"><strong>Aiden</strong>, a principal backend engineer, is building a <strong>worldwide telemetry system</strong> for <strong>millions of low-power IoT devices</strong>. Each sensor sends frequent small packets (temperature, location, heartbeats) plus rare <strong>critical alerts</strong> (low battery, safety faults). The constraints: <strong>limited device CPU, battery and network capacity</strong> (WAN cost matters), <strong>low per-packet latency</strong>, an ingestion layer that <strong>scales to millions of endpoints</strong>, and alerts that must be <strong>delivered dependably and surfaced promptly</strong>. He must choose a transport and ingestion architecture that balances <em>scalability, availability, latency, observability, and fault tolerance</em>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Utilize TCP (TLS) for all device communications (via gRPC/HTTP2 streams or persistent TCP connections). Devices transmit every packet reliably over the TCP connection, and centralized servers handle the streams directly. Depend on TCP for message ordering, guaranteed delivery, and backpressure mechanisms.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Employ UDP from the devices while building application-level mechanisms for reliability and ordering (using sequence numbers, ACKs/NACKs, and retransmission windows). This allows devices to remain connectionless while ensuring dependable delivery for crucial packets.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Rely solely on UDP with best-effort delivery: devices use a fire-and-forget approach for telemetry without any retransmissions or guarantees. Tolerate occasional data loss and use statistical aggregation to compensate for missing information. Handle critical alerts in the exact same manner.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Adopt a hybrid model: devices transmit high-volume, non-critical telemetry via UDP to local edge aggregators. These aggregators handle buffering, deduplication, and sequencing before forwarding reliable data streams to central storage using TCP-based solutions (such as Kafka or gRPC). Critical alerts utilize a dedicated, guaranteed TCP route (or an immediate push to the aggregator&#x27;s reliable queue) ensuring rapid persistence and alerting.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Hybrid: UDP to Edge Aggregators + Reliable Backhaul</h3>
+        <p>The two traffic classes have <em>opposite</em> needs: telemetry is high-volume, loss-tolerant, and latency-sensitive, while alerts are rare and must never be silently lost. Forcing one transport to serve both either wastes battery and core capacity (all-TCP) or risks safety-critical data (all best-effort UDP). Option D <strong>matches the delivery guarantee to the message class</strong> and puts reliability where it is cheap. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Cheap for devices:</strong> UDP, ideally with a thin protocol such as CoAP, MQTT-SN, or LwM2M, avoids TCP/TLS handshakes, per-connection state, and keep-alive traffic that drain batteries and radios. A device can wake, send one datagram, and sleep.</li>
+          <li><strong>Scales by pushing state to the edge:</strong> Millions of long-lived TCP connections mean millions of sockets, NAT and firewall timeouts, and reconnect storms at the core. Datagrams to regional aggregators need no per-device connection at the center, and aggregators scale horizontally behind anycast, DNS, or a load balancer.</li>
+          <li><strong>Reliability where it matters:</strong> Aggregators add sequencing, deduplication, buffering, and batching, then forward over backpressure-aware TCP channels (Kafka, gRPC) with idempotent producers. The WAN carries a few large compressed batches instead of millions of tiny packets, which also reduces cost.</li>
+          <li><strong>Alerts get a guaranteed path:</strong> Confirmable messages (an application-level ACK with bounded retransmission, as CoAP CON provides) or an on-demand TCP/TLS session, persisted to a replicated queue before the ACK is sent.</li>
+          <li><strong>Observability is built in:</strong> Per-device sequence numbers expose loss and duplication rates, missing heartbeats are detected at the aggregator, and every hop emits metrics (ingest rate, buffer depth, forward lag).</li>
+        </ul>
+        <p>Define a <strong>loss budget per message class</strong>: telemetry may lose a small, measured percentage, while alerts require acknowledged persistence with a delivery SLO. Alarm on <strong>sequence-gap rate</strong>, <strong>aggregator buffer age</strong>, and <strong>alert ACK latency</strong>.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔒</div>
+          <h4>A — TCP (TLS) for Everything</h4>
+          <p>Reliable and easy to reason about, and a good fit for mains-powered gateways. For millions of low-power devices, though, every connection costs memory (kernel buffers and TLS state) at the core, keep-alives and reconnects drain batteries, TLS handshakes cost CPU and energy, and NAT idle timeouts silently kill connections. Head-of-line blocking also delays fresh readings behind retransmitted stale ones, which is reliability that telemetry does not need.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🛠️</div>
+          <h4>B — UDP with Custom Reliability</h4>
+          <p>Re-implementing ordering, ACKs, and retransmission on constrained firmware is bug-prone, hard to patch in the field, and duplicates work already done by TCP, QUIC, and CoAP. Worse, it applies the cost to <strong>all</strong> traffic instead of only alerts, and without congestion control it can harm the network. Use a standard confirmable mechanism, selectively.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🎲</div>
+          <h4>C — Pure Best-Effort UDP, Including Alerts</h4>
+          <p>Reasonable for telemetry, unacceptable for safety faults and low-battery alerts. There is no delivery guarantee and no visibility into loss, and statistical aggregation cannot reconstruct a single missing alert. Silent loss of a critical alert is both a safety and a liability problem.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>D — Hybrid: UDP to Edge Aggregators + Reliable Backhaul ✓</h4>
+          <p>Adopt a hybrid model: devices transmit high-volume, non-critical telemetry via UDP to local edge aggregators. These aggregators handle buffering, deduplication, and sequencing before forwarding reliab</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Device Energy / CPU Cost</th><th>Per-Packet Latency</th><th>Scalability to Millions</th><th>Alert Reliability</th><th>Operational Complexity</th><th>WAN Cost</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — TCP (TLS) for All</td><td>High ❌</td><td>Moderate ⚠ (HOL blocking)</td><td>Hard ❌ (connection state)</td><td>Excellent ✅</td><td>Low ✅</td><td>Higher ❌ (headers, keep-alives)</td></tr>
+            <tr><td class="tt-option">B — UDP + Custom Reliability</td><td>Medium ⚠</td><td>Good ✅</td><td>Good ✅</td><td>Good ⚠ (if implemented correctly)</td><td>High ❌ (own protocol)</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — Pure Best-Effort UDP</td><td>Very low ✅</td><td>Excellent ✅</td><td>Excellent ✅</td><td>None ❌</td><td>Low ✅</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Hybrid UDP + Edge + TCP ✓</td><td>Very low ✅ (telemetry)</td><td>Excellent ✅</td><td>Excellent ✅ (edge tier)</td><td>Strong ✅ (acked alerts)</td><td>Medium–High ⚠</td><td>Low ✅ (batched backhaul)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — TCP (TLS) for All</h4>
+          <p>Mains-powered gateways, moderate fleet sizes, and streaming or bulk transfers (firmware, logs) where ordering and guaranteed delivery matter more than per-device energy.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — UDP + Custom Reliability</h4>
+          <p>Rarely. Prefer an existing standard (CoAP confirmable, QUIC) unless you have a specialized network and the team to maintain a protocol.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Pure Best-Effort UDP</h4>
+          <p>Pure analytics streams where occasional loss is irrelevant, such as dense ambient sampling with no safety or billing consequences.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Hybrid UDP + Edge + TCP</h4>
+          <p>Large fleets of constrained devices with mixed criticality: high-volume telemetry plus rare alerts that must be delivered and monitored.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Hybrid Ingestion Topology</h3>
+        <p>Telemetry takes the cheap UDP path to the edge; the backhaul and alert paths are reliable:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    D1[IoT devices] --&gt;|UDP with DTLS telemetry| AG[Edge aggregator&lt;br/&gt;sequence check, dedup, buffer]
+    D1 --&gt;|Critical alert&lt;br/&gt;confirmable or TCP| AG
+    AG --&gt;|Batched over TCP&lt;br/&gt;Kafka or gRPC| K[Regional ingestion cluster]
+    AG --&gt;|Persist then ACK| AQ[Replicated alert queue]
+    K --&gt; S[Time-series storage]
+    AQ --&gt; AL[Alerting service]
+    S --&gt; M[Dashboards and loss metrics]">flowchart LR
+    D1[IoT devices] --&gt;|UDP with DTLS telemetry| AG[Edge aggregator&lt;br/&gt;sequence check, dedup, buffer]
+    D1 --&gt;|Critical alert&lt;br/&gt;confirmable or TCP| AG
+    AG --&gt;|Batched over TCP&lt;br/&gt;Kafka or gRPC| K[Regional ingestion cluster]
+    AG --&gt;|Persist then ACK| AQ[Replicated alert queue]
+    K --&gt; S[Time-series storage]
+    AQ --&gt; AL[Alerting service]
+    S --&gt; M[Dashboards and loss metrics]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Edge Aggregator: Dedup, Sequence Tracking, Reliable Alerts</h3>
+        <p>The aggregator measures loss, deduplicates retries, persists alerts before acknowledging, and forwards telemetry in batches:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onDatagram</span>(packet):                          <span class="tk-com">// runs on the edge aggregator (DTLS already terminated)</span></span>
+<span class="line">    msg <span class="tk-op">=</span> <span class="tk-fn">parse</span>(packet)                               <span class="tk-com">// deviceId, seq, deviceTs, type, payload</span></span>
+<span class="line">    state <span class="tk-op">=</span> deviceState.<span class="tk-fn">getOrCreate</span>(msg.deviceId)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">seenRecently</span>(msg.deviceId, msg.seq):           <span class="tk-com">// retransmission or duplicate</span></span>
+<span class="line">        metrics.<span class="tk-fn">inc</span>(<span class="tk-str">&#x27;duplicate&#x27;</span>)</span>
+<span class="line">        <span class="tk-kw">if</span> msg.type <span class="tk-op">==</span> ALERT: <span class="tk-fn">sendAck</span>(msg)            <span class="tk-com">// re-ACK so the device stops retrying</span></span>
+<span class="line">        <span class="tk-kw">return</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> msg.seq <span class="tk-op">&gt;</span> state.highestSeq <span class="tk-op">+</span> <span class="tk-num">1</span>:</span>
+<span class="line">        metrics.<span class="tk-fn">add</span>(<span class="tk-str">&#x27;seq_gap&#x27;</span>, msg.seq <span class="tk-op">-</span> state.highestSeq <span class="tk-op">-</span> <span class="tk-num">1</span>)   <span class="tk-com">// measurable loss per device</span></span>
+<span class="line">    state.highestSeq <span class="tk-op">=</span> <span class="tk-fn">max</span>(state.highestSeq, msg.seq)</span>
+<span class="line">    state.lastSeen <span class="tk-op">=</span> <span class="tk-fn">now</span>()</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> msg.type <span class="tk-op">==</span> ALERT:</span>
+<span class="line">        alertQueue.<span class="tk-fn">appendDurably</span>(msg)                 <span class="tk-com">// replicated before we ACK</span></span>
+<span class="line">        <span class="tk-fn">sendAck</span>(msg)</span>
+<span class="line">    <span class="tk-kw">else</span>:</span>
+<span class="line">        buffer.<span class="tk-fn">add</span>(msg)                               <span class="tk-com">// bounded, disk-backed ring buffer</span></span>
+<span class="line"></span>
+<span class="line">every <span class="tk-num">200</span> ms <span class="tk-kw">or</span> <span class="tk-num">5000</span> messages:</span>
+<span class="line">    batch <span class="tk-op">=</span> buffer.<span class="tk-fn">drain</span>()</span>
+<span class="line">    producer.<span class="tk-fn">send</span>(<span class="tk-str">&#x27;telemetry&#x27;</span>, <span class="tk-fn">compress</span>(batch))       <span class="tk-com">// idempotent producer, acks = all</span></span>
+<span class="line"></span>
+<span class="line">every <span class="tk-num">30</span> s:</span>
+<span class="line">    <span class="tk-kw">for</span> device <span class="tk-kw">in</span> deviceState where <span class="tk-fn">now</span>() <span class="tk-op">-</span> device.lastSeen <span class="tk-op">&gt;</span> HEARTBEAT_TIMEOUT:</span>
+<span class="line">        <span class="tk-fn">emit</span>(HeartbeatMissed, device.id)              <span class="tk-com">// liveness detection at the edge</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Acknowledging alerts before they are durable:</strong> The ACK must follow replicated persistence, not mere receipt in memory.</li>
+          <li><strong>No sequence numbers or device timestamps:</strong> Without them you cannot tell loss from silence, deduplicate retries, or order events after backfill.</li>
+          <li><strong>Unauthenticated UDP endpoints:</strong> They invite spoofing and reflection or amplification abuse. Authenticate with DTLS or OSCORE and rate-limit.</li>
+          <li><strong>Synchronized retries after an outage:</strong> Thousands of devices reconnecting together can cause a second outage. Use jittered exponential backoff.</li>
+          <li><strong>Alerts sharing a queue with bulk telemetry:</strong> A telemetry surge can delay alerts. Isolate and prioritize the alert path.</li>
+          <li><strong>Trusting server arrival time:</strong> Aggregator delays and batching distort timelines. Carry device time or a monotonic counter in the payload.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, architects <strong>classify messages first</strong> and then choose transports per class. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Classify traffic:</strong> Telemetry, heartbeat, alert, and command/config, each with a loss budget and latency target.</li>
+          <li><strong>Step 1 — Pick protocols per class:</strong> CoAP or MQTT-SN over UDP with DTLS for telemetry; confirmable messages or TCP/TLS for alerts; consider QUIC for capable devices.</li>
+          <li><strong>Step 2 — Deploy regional aggregators:</strong> At least two per region behind anycast or DNS, with durable disk-backed buffers.</li>
+          <li><strong>Step 3 — Backhaul reliably:</strong> Batch, compress, and send to Kafka or gRPC with idempotent producers and acknowledgments from the in-sync replicas.</li>
+          <li><strong>Step 4 — Instrument loss and liveness:</strong> Sequence gaps, heartbeat absence, buffer lag, and alert ACK latency on dashboards and alerts.</li>
+          <li><strong>Step 5 — Plan for failure:</strong> TCP fallback when UDP is blocked, jittered exponential backoff to avoid reconnect storms, and over-the-air update capability for protocol fixes.</li>
+        </ul>
+        <p>Spend reliability budget on alerts, not on every temperature reading.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Do not pick one transport for traffic with two different contracts. Use <strong>lightweight UDP for high-volume, loss-tolerant telemetry</strong> to keep devices cheap and the core stateless, add an <strong>edge tier for sequencing, dedup, and buffering</strong>, and give <strong>critical alerts an acknowledged, persisted path</strong>. Secure the UDP path with DTLS or OSCORE.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

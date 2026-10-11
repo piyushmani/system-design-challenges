@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi-Tenancy Architecture: Shared Schema, DB-per-Tenant, or a Middle Ground? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">09 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Multi-tenancy</span>
+      <span class="tag tag--green">Database Schema</span>
+      <span class="tag tag--amber">SaaS Architecture</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Multi-Tenancy Architecture: Shared Schema, DB-per-Tenant, or a Middle Ground?</h1>
+      <p class="q-scenario"><strong>Liam</strong>, a backend architect, is building a <strong>SaaS analytics platform</strong>. He expects <strong>10,000+ small tenants</strong> with low storage and compute needs, plus <strong>a few enterprise tenants</strong> that demand <strong>strict isolation, custom backup/restore, and dedicated scaling</strong> for heavy jobs. The team wants <strong>low onboarding friction</strong>, <strong>consistent latency</strong> to meet enterprise SLAs, strong <strong>per-tenant observability</strong>, and <strong>manageable operational cost</strong>. He must pick a multi-tenancy model that balances scalability, availability, latency, consistency, and fault tolerance without excessive operational complexity.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Utilize a single shared schema within one database cluster: include a tenant_id on every row, apply row-level security (RLS), partition frequently accessed tables by tenant_id, and enhance performance using indexes and tenant-aware caching. A single logical schema simplifies both queries and migrations.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Adopt a database-per-tenant model universally: provision an exclusive database instance (or containerized DB) for every tenant, automate the provisioning and routing processes, and handle scaling, backups, and restores on a per-tenant basis. Rely on a central directory service to correlate tenants with their respective instances.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Implement a hybrid tiering system: initiate the majority of tenants in a shared schema cluster for cost-effective and straightforward onboarding, but automatically upgrade large or enterprise tenants to isolated DB instances (DB-per-tenant) once they surpass resource or compliance limits. Provide tooling to facilitate migration, routing, per-tenant metrics, and tenant categorization.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Employ a sharded shared-schema approach: retain the identical shared table schema but distribute tenants across numerous database clusters by hashing the tenant_id (resulting in multiple shared-schema clusters). Introduce a routing layer to select the appropriate shard and enable re-sharding for effective load balancing.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Hybrid Tiering (Pooled Tier + Siloed Enterprise Tier)</h3>
+        <p>The tenant population is <strong>bimodal</strong>: thousands of tiny tenants where cost per tenant is everything, and a handful of enterprises where isolation, restore granularity, and predictable performance are contractual. No single uniform model fits both ends. A <strong>hybrid (bridge) model</strong> keeps the cheap, frictionless pooled tier for the long tail and gives enterprises dedicated databases, while a tenant directory and one logical schema keep the application code identical across tiers. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Cost efficiency where it matters:</strong> Ten thousand small tenants share a few clusters, so onboarding is one row in a directory plus seed data, not a provisioning workflow, and idle tenants cost almost nothing.</li>
+          <li><strong>Real isolation where it is required:</strong> Enterprises get their own database or cluster: independent scaling during heavy jobs, per-tenant point-in-time restore, custom backup retention, and a failure domain that does not include other customers.</li>
+          <li><strong>Consistent latency for SLA customers:</strong> Removing enterprises from the pool removes noisy-neighbor risk for them. The pool uses per-tenant quotas and rate limits so a busy small tenant cannot degrade others.</li>
+          <li><strong>One codebase, one logical schema:</strong> Both tiers share the same schema and migrations, differing only in where a tenant's data lives. A routing layer that resolves <code>tenant -> cluster</code> is the only tier-aware component.</li>
+          <li><strong>Observability and fault containment:</strong> Tagging every request and query with <code>tenant_id</code> and <code>tier</code> gives per-tenant metrics. Blast radius is limited: a pool incident does not touch silos, and a silo incident affects exactly one customer.</li>
+        </ul>
+        <p>Start with <strong>tenant_id on every table, RLS, and a tenant directory from day one</strong>, even when every tenant maps to one cluster. Define explicit <strong>promotion criteria</strong> (size, SLA, compliance), automate the promotion workflow, and shard the pool into <strong>cells</strong> when a single pool cluster is no longer enough.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🏢</div>
+          <h4>A — Single Shared Schema, One Cluster</h4>
+          <p>The cheapest and simplest model, and a perfectly good <em>pool tier</em>. As the whole answer it fails the enterprise requirements: one cluster is one blast radius, a single heavy tenant can degrade everyone (noisy neighbor), restoring one tenant means extracting rows from a shared backup, and dedicated scaling is impossible. A single cluster also has a vertical scaling ceiling. <strong>Caveat:</strong> for a product with only small tenants and no isolation contracts, this is the right place to start.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🗄️</div>
+          <h4>B — Database-per-Tenant for Everyone</h4>
+          <p>It gives excellent isolation and simple per-tenant backup/restore, but at 10,000+ tenants it is <strong>operationally and financially heavy</strong>: thousands of databases to provision, patch, migrate, monitor, and back up, connection-pool pressure, catalog and memory overhead, and idle capacity paid for tiny tenants. Onboarding becomes a provisioning workflow instead of an insert. <strong>Caveat:</strong> reasonable when every tenant is large, regulated, or paying enough to justify dedicated infrastructure.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧩</div>
+          <h4>D — Sharded Shared Schema</h4>
+          <p>Hashing tenants across several shared clusters scales the pool horizontally and shrinks the blast radius per cluster, but every tenant is still in a shared database. Enterprises still lack isolation, custom restore, and dedicated scaling, and hash-based placement makes it awkward to move one tenant out or rebalance a heavy one. Re-sharding adds its own operational risk. <strong>Caveat:</strong> this is a <em>scaling technique for the pool tier</em>, and it combines well with option C once the pool outgrows one cluster.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Hybrid Tiering (Pooled Tier + Siloed Enterprise Tier) ✓</h4>
+          <p>Implement a hybrid tiering system: initiate the majority of tenants in a shared schema cluster for cost-effective and straightforward onboarding, but automatically upgrade large or enterprise tenants</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Cost per Small Tenant</th><th>Enterprise Isolation</th><th>Onboarding Friction</th><th>Noisy-Neighbor Risk</th><th>Per-Tenant Backup / Restore</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Single Shared Schema</td><td>Lowest ✅</td><td>Logical only (RLS) ❌</td><td>Very low ✅</td><td>High ❌</td><td>Hard (row extraction) ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — DB-per-Tenant for All</td><td>High ❌</td><td>Excellent ✅</td><td>High (provisioning) ❌</td><td>None ✅</td><td>Easy ✅</td><td>Very high (thousands of DBs) ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Hybrid Tiering ✓</td><td>Low for the pool ✅</td><td>Excellent for silo tenants ✅</td><td>Very low for the pool ✅</td><td>Contained (quotas, silos) ⚠</td><td>Easy for silos, hard in the pool ⚠</td><td>Medium–High ⚠</td></tr>
+            <tr><td class="tt-option">D — Sharded Shared Schema</td><td>Low ✅</td><td>Logical only ❌</td><td>Low ✅</td><td>Medium (per shard) ⚠</td><td>Hard ❌</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Single Shared Schema</h4>
+          <p>Early-stage product, many similar small tenants, no isolation or per-tenant restore requirements, and a team that needs to move fast.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — DB-per-Tenant for All</h4>
+          <p>A modest number of large, regulated tenants where every customer pays for dedicated infrastructure, or strict data-residency rules apply to all of them.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Hybrid Tiering</h4>
+          <p>Tenant sizes and requirements vary widely: a large long tail plus a few customers with isolation, SLA, or compliance needs. Requires investment in routing and migration tooling.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Sharded Shared Schema</h4>
+          <p>A very large pool of similar tenants that outgrows one cluster, with no strong per-tenant isolation needs. Often used as the scaling mechanism inside the pooled tier.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Tenant Routing Across Pool and Silo Tiers</h3>
+        <p>Every request is resolved through a cached tenant directory. Small tenants land in pool cells, enterprises in dedicated databases, and a promotion workflow moves a tenant between tiers:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    C[Client request with tenant token] --&gt; G[API gateway]
+    G --&gt; T[Tenant router]
+    T &lt;--&gt; DIR[(Tenant directory - cached)]
+    T --&gt;|tier pool| P1[Pool cell 1 - shared schema and RLS]
+    T --&gt;|tier pool| P2[Pool cell 2 - shared schema and RLS]
+    T --&gt;|tier silo| S1[Enterprise A - dedicated DB]
+    T --&gt;|tier silo| S2[Enterprise B - dedicated DB]
+    PR[Promotion workflow] -.-&gt;|logical replication then cutover| S1
+    OBS[Per-tenant metrics tagged with tenant_id and tier] -.-&gt; T">flowchart LR
+    C[Client request with tenant token] --&gt; G[API gateway]
+    G --&gt; T[Tenant router]
+    T &lt;--&gt; DIR[(Tenant directory - cached)]
+    T --&gt;|tier pool| P1[Pool cell 1 - shared schema and RLS]
+    T --&gt;|tier pool| P2[Pool cell 2 - shared schema and RLS]
+    T --&gt;|tier silo| S1[Enterprise A - dedicated DB]
+    T --&gt;|tier silo| S2[Enterprise B - dedicated DB]
+    PR[Promotion workflow] -.-&gt;|logical replication then cutover| S1
+    OBS[Per-tenant metrics tagged with tenant_id and tier] -.-&gt; T</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Tenant Routing and Pool-to-Silo Promotion</h3>
+        <p>The router resolves placement from a cached directory and applies RLS context and quotas. The promotion workflow replicates one tenant's rows, cuts over briefly, verifies, and keeps a rollback path:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">route</span>(request):</span>
+<span class="line">    tenantId <span class="tk-op">=</span> <span class="tk-fn">authenticate</span>(request).tenantId</span>
+<span class="line">    entry <span class="tk-op">=</span> directoryCache.<span class="tk-fn">get</span>(tenantId)              <span class="tk-com">// TTL about 30 s, falls back to the directory DB</span></span>
+<span class="line">    <span class="tk-kw">if</span> entry <span class="tk-op">==</span> <span class="tk-lit">null</span>: <span class="tk-kw">raise</span> TenantNotFound</span>
+<span class="line">    <span class="tk-kw">if</span> entry.status <span class="tk-op">==</span> <span class="tk-str">&#x27;MIGRATING&#x27;</span> <span class="tk-kw">and</span> request.isWrite:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">retryAfter</span>(<span class="tk-num">2s</span>)                         <span class="tk-com">// brief freeze only during cutover</span></span>
+<span class="line">    conn <span class="tk-op">=</span> connectionPools.<span class="tk-fn">get</span>(entry.cluster)         <span class="tk-com">// pool cell or dedicated database</span></span>
+<span class="line">    <span class="tk-kw">if</span> entry.tier <span class="tk-op">==</span> <span class="tk-str">&#x27;POOL&#x27;</span>:</span>
+<span class="line">        conn.<span class="tk-fn">setLocalVar</span>(<span class="tk-str">&#x27;app.tenant_id&#x27;</span>, tenantId)   <span class="tk-com">// parameterized, e.g. set_config inside the transaction</span></span>
+<span class="line">        <span class="tk-com">// RLS policy: tenant_id = current_setting(&#x27;app.tenant_id&#x27;)</span></span>
+<span class="line">    <span class="tk-fn">enforceQuota</span>(tenantId, entry.limits)              <span class="tk-com">// per-tenant rate and query-cost limits</span></span>
+<span class="line">    metrics.<span class="tk-fn">inc</span>(<span class="tk-str">&#x27;tenant_requests&#x27;</span>, tenant <span class="tk-op">=</span> tenantId, tier <span class="tk-op">=</span> entry.tier)</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">handle</span>(request, conn)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">promoteToSilo</span>(tenantId):</span>
+<span class="line">    target <span class="tk-op">=</span> <span class="tk-fn">provisionDedicatedDb</span>(tenantId)           <span class="tk-com">// same schema version as the pool</span></span>
+<span class="line">    <span class="tk-fn">startLogicalReplication</span>(source <span class="tk-op">=</span> pool, filter <span class="tk-op">=</span> tenantId, to <span class="tk-op">=</span> target)</span>
+<span class="line">    <span class="tk-fn">waitUntil</span>(replicationLag <span class="tk-op">&lt;</span> <span class="tk-num">1s</span>)</span>
+<span class="line">    directory.<span class="tk-fn">setStatus</span>(tenantId, <span class="tk-str">&#x27;MIGRATING&#x27;</span>)        <span class="tk-com">// short write freeze</span></span>
+<span class="line">    <span class="tk-fn">waitUntil</span>(replicationLag <span class="tk-op">==</span> <span class="tk-num">0</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> <span class="tk-fn">verifyChecksums</span>(tenantId, pool, target):   <span class="tk-com">// row counts and per-table hashes</span></span>
+<span class="line">        directory.<span class="tk-fn">setStatus</span>(tenantId, <span class="tk-str">&#x27;ACTIVE&#x27;</span>); <span class="tk-fn">abort</span>(<span class="tk-str">&#x27;verification failed&#x27;</span>)</span>
+<span class="line">    directory.<span class="tk-fn">update</span>(tenantId, tier <span class="tk-op">=</span> <span class="tk-str">&#x27;SILO&#x27;</span>, cluster <span class="tk-op">=</span> target, status <span class="tk-op">=</span> <span class="tk-str">&#x27;ACTIVE&#x27;</span>)</span>
+<span class="line">    <span class="tk-fn">scheduleCleanup</span>(pool, tenantId, after <span class="tk-op">=</span> 7d)       <span class="tk-com">// keep a rollback copy first</span></span>
+<span class="line">    <span class="tk-com">// Rollback: point the directory back at the pool and replicate any new writes in reverse</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>No tenant_id discipline in the pool:</strong> One query without a tenant filter leaks data. Enforce RLS (or a mandatory data-access layer), and add automated tests that try to cross tenants.</li>
+          <li><strong>Hard-coding tenant placement:</strong> If the app assumes one database, promotion becomes a rewrite. Resolve placement through a directory from day one.</li>
+          <li><strong>Untested promotion path:</strong> A tenant move that has never been rehearsed fails during an enterprise escalation. Practice it regularly on production-like data, including rollback.</li>
+          <li><strong>Schema drift between tiers:</strong> Silos that lag on migrations cause subtle bugs. Track schema version per database and block deploys that would break compatibility.</li>
+          <li><strong>Ignoring noisy neighbors inside the pool:</strong> Without per-tenant quotas, a runaway report degrades thousands of tenants. Add rate limits, query timeouts, and resource governors.</li>
+          <li><strong>Directory as a single point of failure:</strong> A slow or unavailable directory stops every request. Cache aggressively, replicate it, and define behavior when it is unreachable.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Mature SaaS platforms rarely pick one pure model. They design for <strong>placement flexibility</strong> from the start. A typical evolution looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define tiers:</strong> Write down promotion criteria (storage, QPS, compliance, contract SLA) so the decision is policy, not a debate per customer.</li>
+          <li><strong>Step 1 — Build the pooled tier correctly:</strong> <code>tenant_id</code> on every table, RLS, composite indexes that lead with <code>tenant_id</code>, per-tenant quotas and rate limits, and tenant-aware cache keys.</li>
+          <li><strong>Step 2 — Add the tenant directory early:</strong> A cached <code>tenant -> tier, cluster, status</code> mapping, used by every request, even while everything maps to one cluster.</li>
+          <li><strong>Step 3 — Per-tenant observability:</strong> Tag metrics, logs, and traces with tenant and tier, and track per-tenant cost and resource usage to spot promotion candidates.</li>
+          <li><strong>Step 4 — Build migration tooling:</strong> Online pool-to-silo move with logical replication, verification, brief cutover, and rollback, plus a fleet manager that applies schema migrations to every database.</li>
+          <li><strong>Step 5 — Cell the pool:</strong> When one pool cluster saturates, add pool cells and place new tenants into the least-loaded cell. The directory makes this invisible to the application.</li>
+        </ul>
+        <p>Treat tenant placement as data in the directory, never as code paths scattered through the application.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When tenants differ by orders of magnitude in size and requirements, <strong>use a pooled tier for the long tail and siloed databases for the few that need isolation</strong>, glued together by one logical schema and a tenant directory. Invest early in routing, per-tenant metrics, and online migration tooling, because that is where hybrid models succeed or fail.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

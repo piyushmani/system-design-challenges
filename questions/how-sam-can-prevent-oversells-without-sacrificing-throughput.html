@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How Sam can prevent oversells without sacrificing throughput — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">13 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Inventory Management</span>
+      <span class="tag tag--green">Throughput</span>
+      <span class="tag tag--amber">Concurrency</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">How Sam can prevent oversells without sacrificing throughput</h1>
+      <p class="q-scenario"><strong>Sam</strong>, a backend engineer on a retail checkout application, runs several <strong>stateless servers</strong> that update a shared relational database's inventory table and rely on <code>SELECT ... FOR UPDATE</code> to avoid overselling. As traffic grows, <strong>row-lock contention</strong> on a small set of hot SKUs causes long tail latencies and regular <strong>transaction timeouts</strong> during <strong>flash sales</strong>. Sam needs a new design that <strong>never oversells</strong>, keeps <strong>throughput high</strong> and <strong>reads fast</strong>, and balances scalability, availability, latency, consistency, observability, and fault tolerance. He needs to choose the best <em>architectural</em> direction.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep the relational database as the single source of truth and apply pessimistic row-level locking (SELECT ... FOR UPDATE) for every inventory change. Scale the database vertically, add connection pooling, and set strict timeouts to shorten lock hold times.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Add a Redis-based distributed lock (Redlock) around inventory changes. Each checkout instance acquires a lock for the SKU, updates the database inventory, then releases the lock, leaving the rest of the architecture unchanged.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Move to optimistic concurrency control by adding a version or timestamp column and using compare-and-swap (UPDATE ... WHERE version = x). On conflict, retry with exponential backoff in the application, optionally adding a small in-memory queue per instance to absorb spikes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Build a sharded, single-writer inventory service. Distribute SKUs across nodes and route every update to the owning shard, which applies changes sequentially through a local queue or a partitioned durable log (such as a Kafka partition), so each SKU is updated by one thread at a time. Serve reads from asynchronously replicated stores and caches, and make commands idempotent with built-in reconciliation for failures.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Sharded Single-Writer Inventory Service</h3>
+        <p>Overselling is a <strong>per-SKU invariant</strong> (stock must never drop below zero), and the current design enforces it by making many servers <strong>queue on a database row lock</strong> while a transaction stays open across several network round trips. A <strong>sharded single-writer inventory service</strong> keeps the same correctness guarantee by serializing updates per SKU, but it does so in one thread next to the data instead of through lock waits. That takes lock-hold time off the critical path and lets throughput scale by adding shards. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Serialization without lock waits:</strong> In the current design, per-SKU throughput is capped at roughly 1 / (lock hold time), and the hold time includes app-to-database round trips. A single writer checks <code>available >= qty</code> and decrements in memory, so the cap becomes CPU speed, which is typically orders of magnitude higher.</li>
+          <li><strong>Throughput scales horizontally:</strong> SKUs hash to shards, so adding shards adds capacity. Writers can also batch several commands into one log append (group commit), which raises throughput further without weakening ordering.</li>
+          <li><strong>Correctness stays local and simple:</strong> One writer per SKU means no race to reason about. The never-oversell rule is a single comparison executed in sequence, not a protocol spread across servers.</li>
+          <li><strong>Reads are decoupled from the write path:</strong> Product pages and search read from asynchronously replicated stores and caches. They may be a little stale, which is fine for display, because the authoritative check happens at reservation time.</li>
+          <li><strong>Fault tolerance through a durable log and idempotent commands:</strong> State is rebuilt by replaying the log from the last snapshot. Every command carries an idempotency key, so retries after a timeout or a failover are safe and a client never double-reserves.</li>
+          <li><strong>Observability is natural:</strong> Per-shard queue depth, consumer lag, reject rate, and command latency show exactly where pressure is building, and a continuous invariant check (available stock never negative) catches bugs early.</li>
+        </ul>
+        <p>A production-grade version uses <strong>reservations with a TTL</strong> (stock is held, then confirmed or released), <strong>idempotency keys</strong> on every command, <strong>epoch-based fencing</strong> on writer failover, and <strong>periodic reconciliation</strong> against the system of record. Track the reject rate, per-shard lag, and the number of times available stock would have gone negative (which should always be zero).</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔒</div>
+          <h4>A — Pessimistic Locking + Vertical Scaling</h4>
+          <p>This is the design that is already failing. The lock is held for the whole transaction, and every extra millisecond of network or application time multiplies queueing on a hot row. <strong>Bigger hardware does not help</strong>, because contention on one row is serialization, not a resource shortage. Connection pooling and short timeouts reduce the damage but convert queueing into timeouts, so users still see failures. <strong>Caveat:</strong> for modest traffic with no hot rows, this is the simplest correct design, and it remains a fine fallback.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🗝️</div>
+          <h4>B — Redis Distributed Lock (Redlock)</h4>
+          <p>This moves the queue from the database to Redis and <strong>adds a network hop</strong>, yet the database row is still updated under contention. It also weakens safety: a lock can expire during a GC pause or network delay while its holder keeps going, and without <strong>fencing tokens</strong> two writers can proceed at once (Martin Kleppmann's well-known critique of Redlock). Distributed locks are reasonable for efficiency (avoiding duplicate work) but risky as the only guard for a correctness rule such as never overselling.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔁</div>
+          <h4>C — Optimistic Concurrency (CAS + Retries)</h4>
+          <p>Optimistic control shines when conflicts are rare. On a flash-sale hot row, <strong>many writers collide on every attempt</strong>: one compare-and-swap wins per round and the rest retry, so wasted work grows with concurrency and backoff stretches tail latency. A per-instance in-memory queue does not coordinate across instances, so it cannot stop cross-instance collisions. <strong>Caveat:</strong> for ordinary, low-contention SKUs, OCC is cheap and correct, and a single atomic conditional <code>UPDATE ... WHERE available >= qty</code> is even simpler.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>D — Sharded Single-Writer Inventory Service ✓</h4>
+          <p>Build a sharded, single-writer inventory service. Distribute SKUs across nodes and route every update to the owning shard, which applies changes sequentially through a local queue or a partitioned dur</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Prevents Oversell</th><th>Hot-SKU Throughput</th><th>Tail Latency Under Load</th><th>Horizontal Scalability</th><th>Operational Complexity</th><th>Failure Safety</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Pessimistic Locking + Vertical Scaling</td><td>Yes ✅</td><td>Low ❌</td><td>Poor ❌</td><td>No ❌ (vertical only)</td><td>Low ✅</td><td>Good ✅ (single DB)</td></tr>
+            <tr><td class="tt-option">B — Redis Redlock</td><td>Weak ❌ (lock can expire)</td><td>Low ❌</td><td>Poor ❌ (extra hop)</td><td>No ❌</td><td>Medium ⚠</td><td>Weak ❌</td></tr>
+            <tr><td class="tt-option">C — Optimistic CAS + Retries</td><td>Yes ✅</td><td>Low under contention ❌</td><td>Poor on hot rows ❌</td><td>Partial ⚠</td><td>Low ✅</td><td>Good ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Sharded Single-Writer Service ✓</td><td>Yes ✅</td><td>High ✅</td><td>Good ✅</td><td>Yes ✅</td><td>High ❌</td><td>Good ✅ (log + idempotency)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Pessimistic Locking + Vertical Scaling</h4>
+          <p>Moderate traffic, evenly spread across many rows, where a single database can comfortably handle the load. The simplest correct approach, especially when transactions are short.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Redis Redlock</h4>
+          <p>Coordinating work for efficiency (avoiding duplicate jobs or thundering herds) where an occasional double execution is harmless. Not a sole guard for hard invariants.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Optimistic CAS + Retries</h4>
+          <p>Low-contention updates (many different rows, rare conflicts), or a single atomic conditional update on a moderately busy row. Poor fit for flash-sale hot keys.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Sharded Single-Writer Service</h4>
+          <p>Extreme write contention on a small set of keys, strict never-oversell requirement, and a team able to run a stateful, partitioned service with a durable log.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Sharded Single-Writer Inventory Architecture</h3>
+        <p>Commands are routed by SKU to a single owning writer, each backed by a durable log. Reads use asynchronously updated caches and replicas:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    C[Checkout servers] --&gt; R[Router - hash of SKU]
+    R --&gt; W1[Shard 1 writer]
+    R --&gt; W2[Shard 2 writer]
+    R --&gt; W3[Shard N writer]
+    W1 --&gt; L1[Log partition 1]
+    W2 --&gt; L2[Log partition 2]
+    W3 --&gt; L3[Log partition N]
+    L1 -. async .-&gt; RC[Read caches and replicas]
+    L2 -. async .-&gt; RC
+    L3 -. async .-&gt; RC
+    C -. product page reads .-&gt; RC">flowchart LR
+    C[Checkout servers] --&gt; R[Router - hash of SKU]
+    R --&gt; W1[Shard 1 writer]
+    R --&gt; W2[Shard 2 writer]
+    R --&gt; W3[Shard N writer]
+    W1 --&gt; L1[Log partition 1]
+    W2 --&gt; L2[Log partition 2]
+    W3 --&gt; L3[Log partition N]
+    L1 -. async .-&gt; RC[Read caches and replicas]
+    L2 -. async .-&gt; RC
+    L3 -. async .-&gt; RC
+    C -. product page reads .-&gt; RC</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Single-Writer Reservation Handler</h3>
+        <p>Runs on the one thread that owns a SKU's partition. It is idempotent, durable before acknowledging, and rebuilds its state from the log:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleReserve</span>(cmd):</span>
+<span class="line">    <span class="tk-com">// single writer thread: no locks needed for this SKU</span></span>
+<span class="line">    <span class="tk-kw">if</span> dedupe.<span class="tk-fn">contains</span>(cmd.id):</span>
+<span class="line">        <span class="tk-kw">return</span> dedupe.<span class="tk-fn">get</span>(cmd.id)                       <span class="tk-com">// retry-safe</span></span>
+<span class="line"></span>
+<span class="line">    stock <span class="tk-op">=</span> state[cmd.sku]</span>
+<span class="line">    <span class="tk-kw">if</span> stock.available <span class="tk-op">&lt;</span> cmd.qty:</span>
+<span class="line">        result <span class="tk-op">=</span> <span class="tk-fn">Rejected</span>(SOLD_OUT)</span>
+<span class="line">    <span class="tk-kw">else</span>:</span>
+<span class="line">        event <span class="tk-op">=</span> <span class="tk-fn">Reserved</span>(cmd.id, cmd.sku, cmd.qty, expiresAt <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">+</span> 10min)</span>
+<span class="line">        log.<span class="tk-fn">appendAndWaitForQuorum</span>(event)               <span class="tk-com">// durable BEFORE we ack</span></span>
+<span class="line">        stock.available <span class="tk-op">-</span><span class="tk-op">=</span> cmd.qty                      <span class="tk-com">// in-memory apply</span></span>
+<span class="line">        result <span class="tk-op">=</span> <span class="tk-fn">Reserved</span>(cmd.id, event.expiresAt)</span>
+<span class="line"></span>
+<span class="line">    dedupe.<span class="tk-fn">put</span>(cmd.id, result, ttl <span class="tk-op">=</span> <span class="tk-num">24h</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> result</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">releaseExpired</span>(sku):</span>
+<span class="line">    <span class="tk-kw">for</span> r <span class="tk-kw">in</span> reservations[sku] where r.expiresAt <span class="tk-op">&lt;</span> <span class="tk-fn">now</span>() <span class="tk-kw">and</span> <span class="tk-kw">not</span> r.confirmed:</span>
+<span class="line">        log.<span class="tk-fn">appendAndWaitForQuorum</span>(<span class="tk-fn">Released</span>(r.id))</span>
+<span class="line">        state[sku].available <span class="tk-op">+</span><span class="tk-op">=</span> r.qty</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onStart</span>(partition):</span>
+<span class="line">    state <span class="tk-op">=</span> <span class="tk-fn">loadSnapshot</span>(partition)</span>
+<span class="line">    <span class="tk-kw">for</span> event <span class="tk-kw">in</span> log.<span class="tk-fn">readFrom</span>(snapshot.offset):         <span class="tk-com">// deterministic replay</span></span>
+<span class="line">        <span class="tk-fn">apply</span>(event)</span>
+<span class="line">    <span class="tk-com">// fencing: accept commands only while holding the current leader epoch</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Acknowledging before the command is durable:</strong> If the writer replies success and then crashes before the log append reaches a quorum, the reservation is lost and the same stock can be sold twice. Ack only after a committed append.</li>
+          <li><strong>Skipping idempotency keys:</strong> Clients retry on timeouts. Without a command id and a dedupe window, a retry decrements stock twice or double-reserves.</li>
+          <li><strong>No fencing on failover:</strong> A paused or partitioned old leader can wake up and accept commands alongside the new one. Use epochs or fencing tokens so only the current owner can append.</li>
+          <li><strong>Letting caches make the decision:</strong> Using a cached stock value to authorize a purchase reintroduces overselling. Caches are for display only.</li>
+          <li><strong>Ignoring the single hot SKU:</strong> Sharding spreads SKUs, not one SKU's traffic. Plan stock bucketing or admission control for blockbuster items.</li>
+          <li><strong>Reservations that never expire:</strong> Abandoned carts quietly hold stock forever. Give every reservation a TTL and run a release sweep.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams escalate in stages and <strong>measure before each step</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Measure:</strong> Look at lock-wait time, lock hold time, and per-SKU request distribution. Confirm that a handful of hot SKUs, not the whole table, cause the contention.</li>
+          <li><strong>Step 1 — Shrink the critical section:</strong> Replace <code>SELECT ... FOR UPDATE</code> followed by <code>UPDATE</code> with one atomic statement such as <code>UPDATE inventory SET available = available - :n WHERE sku = :sku AND available >= :n</code>, check the affected row count, and keep the transaction free of other work. This often removes most lock-hold time cheaply.</li>
+          <li><strong>Step 2 — Reserve, then confirm:</strong> Decrement stock via short-lived reservations with a TTL, and confirm or release them when payment completes. This keeps long-running checkout steps out of the stock transaction.</li>
+          <li><strong>Step 3 — Single-writer inventory service:</strong> When one database row still cannot keep up, move hot SKUs behind sharded single writers with a durable log (the recommended answer).</li>
+          <li><strong>Step 4 — Separate the read path:</strong> Serve product pages from caches or replicas fed from the log, and show approximate availability ('only a few left').</li>
+          <li><strong>Step 5 — Handle extreme hot items:</strong> Split stock into buckets, add an admission queue or waiting room, and rate-limit at the edge during the sale.</li>
+        </ul>
+        <p>Escalate only as far as the measurements justify, because each step adds operational cost.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Overselling is prevented by <strong>serializing updates per SKU</strong>, but the serialization should happen in a <strong>single writer next to the data</strong>, not in lock waits spread across stateless servers. Shard SKUs, make commands idempotent, acknowledge only after a durable append, and let caches serve reads but never make the sell decision.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

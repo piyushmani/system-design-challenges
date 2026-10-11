@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ravi’s DI dilemma: should he mock, stub, contract test, or virtualize? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">13 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Dependency Injection</span>
+      <span class="tag tag--green">Testing</span>
+      <span class="tag tag--amber">Mocking</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Ravi’s DI dilemma: should he mock, stub, contract test, or virtualize?</h1>
+      <p class="q-scenario"><strong>Ravi</strong>, a backend engineer, is building a <strong>high-throughput order processing service</strong> inside a larger microservices ecosystem. It depends on a <strong>payment gateway</strong>, an <strong>inventory microservice</strong>, and a <strong>distributed SQL database</strong>. His team wants a dependency-injection and testing strategy that keeps <strong>CI fast and dependable</strong>, avoids <strong>spurious integration failures</strong>, and still lets them evaluate <strong>data consistency, partial failures, and latency effects</strong> before production. He must balance execution speed, environmental realism (database behavior, network delays), observability, and the ability to <strong>deploy services independently</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Use DI to swap in lightweight interface mocks and in-memory fakes (such as an in-memory SQL stub and a mocked inventory client) for unit tests. Run comprehensive integration tests in a separate staging environment against real databases and downstream services, so CI unit tests stay extremely fast.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Use DI together with Testcontainers to start production-equivalent containerized versions of dependent microservices and a real SQL database in CI. Run a full integration suite on every pull request against real binaries so environment-specific problems are caught early.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Use consumer-driven contract testing (such as Pact) together with DI: generate verified provider stubs for fast CI runs, and run lean integration tests against real providers in a separate pipeline stage. Make contract verification a required CI gate, and keep end-to-end chaos and performance tests in an isolated pipeline.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Deploy a centralized service-virtualization proxy that DI injects to mimic downstream dependencies, including configurable partial failures, latency, and consistency scenarios. Use it in CI to test latency handling and fault tolerance deterministically.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Consumer-Driven Contracts with DI and Staged Integration</h3>
+        <p>Ravi's requirements pull in different directions: PR builds must be <strong>fast and independent of other teams' environments</strong>, yet the stubs they use must stay <strong>faithful to the real services</strong>, and teams must be able to <strong>release independently</strong>. <strong>Consumer-driven contract testing</strong> resolves that tension. The consumer's tests generate a contract from how it actually uses a provider, the provider verifies that contract in its own pipeline, and dependency injection lets the order service run against contract-backed stubs in CI. Realism and fault testing then live in later, separate stages. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Fast, hermetic PR builds:</strong> With DI, CI wires in contract-generated stubs. No network, no shared environment, and no dependency on another team's deployment being healthy, so failures point at the change under review.</li>
+          <li><strong>Stubs cannot silently drift:</strong> Because providers verify the same contracts against their real code, a stub that disagrees with reality fails a provider build instead of surfacing in production.</li>
+          <li><strong>Independent deployability:</strong> A broker-based check (such as Pact's can-i-deploy) tells a team whether a version is compatible with what is currently deployed, without a coordinated end-to-end environment.</li>
+          <li><strong>Realism where it matters:</strong> Lean integration tests against real providers in a separate stage catch what contracts cannot, such as configuration, auth, and network wiring, without slowing every pull request.</li>
+          <li><strong>Failure and performance testing have a proper home:</strong> Chaos, latency, and partial-failure scenarios run in an isolated pipeline where longer runtimes and non-determinism are acceptable.</li>
+          <li><strong>Observability of dependencies:</strong> The contract broker shows which consumers depend on which provider fields, which makes the impact of a change visible before it ships.</li>
+        </ul>
+        <p>A strong pipeline uses <strong>DI with ports and adapters</strong>, <strong>fast unit tests with fakes</strong>, <strong>component tests with Testcontainers for owned infrastructure</strong>, <strong>consumer contracts with provider verification</strong>, a <strong>can-i-deploy gate</strong>, and <strong>isolated chaos and performance runs</strong>. Track CI duration, flaky-test rate, contract verification failures, and escaped integration defects.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🎭</div>
+          <h4>A — Mocks and Fakes with Staging Integration</h4>
+          <p>Unit tests are fast, but hand-written mocks <strong>drift from the real services</strong> because nothing verifies them, and the real check happens late, in a shared staging environment that is often slow, flaky, and a release bottleneck. Contract breaks surface after merge rather than before. <strong>Caveat:</strong> DI with fakes is still the right tool for unit-testing domain logic, and it is part of the recommended strategy.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🐳</div>
+          <h4>B — Testcontainers for Everything on Every PR</h4>
+          <p>Real binaries give high realism, but running <strong>other teams' microservices</strong> in every PR needs their images, versions, and configuration, making CI slow, resource-heavy, and flaky, and it ties your pipeline to their release cadence. It also leaves open the question of <em>which</em> version of a dependency to test against, which undermines independent deployment. <strong>Caveat:</strong> Testcontainers is excellent for dependencies you own, such as the database, broker, or cache.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧪</div>
+          <h4>D — Central Service-Virtualization Proxy</h4>
+          <p>Virtualization is strong for simulating latency, errors, and partial failures deterministically. But a <strong>shared central proxy</strong> is itself shared CI infrastructure that can fail or become a bottleneck, and its behaviors are unverified against real providers, so a wrong assumption is baked in and never checked. It does not tell you whether a provider changed. <strong>Caveat:</strong> tools such as WireMock or Toxiproxy are very useful inside the isolated fault-injection stage of option C.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Consumer-Driven Contracts with DI and Staged Integration ✓</h4>
+          <p>Use consumer-driven contract testing (such as Pact) together with DI: generate verified provider stubs for fast CI runs, and run lean integration tests against real providers in a separate pipeline st</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>PR Build Speed</th><th>Realism (DB, Network, Failures)</th><th>Catches Contract Drift</th><th>Independent Deployability</th><th>Flakiness Risk</th><th>Maintenance Cost</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Mocks/Fakes + Staging</td><td>Fastest ✅</td><td>Low until staging ⚠</td><td>No ❌</td><td>No ❌</td><td>Staging is flaky ⚠</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Testcontainers for Everything</td><td>Slow ❌</td><td>High ✅</td><td>Partial, version-dependent ⚠</td><td>No ❌</td><td>High ❌</td><td>High ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Consumer-Driven Contracts + Staged Integration ✓</td><td>Fast ✅</td><td>Medium to high, staged ⚠</td><td>Yes ✅</td><td>Yes ✅</td><td>Low ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Central Service Virtualization</td><td>Fast ✅</td><td>Medium, simulated ⚠</td><td>No, stubs unverified ❌</td><td>Partial ⚠</td><td>Medium, shared infra ⚠</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Mocks/Fakes + Staging</h4>
+          <p>A small system with few dependencies and a stable, well-maintained staging environment, or for unit-testing pure domain logic.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Testcontainers for Everything</h4>
+          <p>A monolith or small team where all dependencies are owned and light enough to run in CI, or for dependencies such as databases and brokers that the team owns.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Consumer-Driven Contracts + Staged Integration</h4>
+          <p>A microservices ecosystem with multiple teams that want fast CI, independent releases, and early detection of breaking interface changes.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Central Service Virtualization</h4>
+          <p>Simulating hard-to-reproduce behaviors (latency, errors, rate limits) in performance and chaos testing, or when real providers are unavailable or costly.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Layered Test Pipeline with Contract Gate</h3>
+        <p>Fast, hermetic checks gate the pull request. Realism and fault testing run in later stages, and contracts connect consumers and providers:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    PR[Pull request] --&gt; U[Unit tests with DI fakes]
+    U --&gt; CT[Consumer contract tests]
+    CT --&gt; BR[Contract broker]
+    BR --&gt; PV[Provider verification in provider CI]
+    U --&gt; CMP[Component tests with Testcontainers for owned DB]
+    CT --&gt; GATE[can-i-deploy gate]
+    PV --&gt; GATE
+    CMP --&gt; GATE
+    GATE --&gt; INT[Pre-prod integration against real providers]
+    INT --&gt; DEP[Deploy]
+    DEP -. nightly or on demand .-&gt; CH[Isolated chaos and performance tests]">flowchart LR
+    PR[Pull request] --&gt; U[Unit tests with DI fakes]
+    U --&gt; CT[Consumer contract tests]
+    CT --&gt; BR[Contract broker]
+    BR --&gt; PV[Provider verification in provider CI]
+    U --&gt; CMP[Component tests with Testcontainers for owned DB]
+    CT --&gt; GATE[can-i-deploy gate]
+    PV --&gt; GATE
+    CMP --&gt; GATE
+    GATE --&gt; INT[Pre-prod integration against real providers]
+    INT --&gt; DEP[Deploy]
+    DEP -. nightly or on demand .-&gt; CH[Isolated chaos and performance tests]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Ports, DI Wiring per Test Layer, and a Contract Test</h3>
+        <p>The domain service depends only on ports. Production, unit, and contract tests wire different adapters, and a fault-injection test runs in the isolated stage:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Ports owned by the order service</span></span>
+<span class="line">interface PaymentPort:   <span class="tk-fn">authorize</span>(orderId, amount, idemKey) <span class="tk-op">-&gt;</span> AuthResult</span>
+<span class="line">interface InventoryPort: <span class="tk-fn">reserve</span>(sku, qty, idemKey) <span class="tk-op">-&gt;</span> ReserveResult</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">class</span> <span class="tk-fn">OrderService</span>(payments: PaymentPort, inventory: InventoryPort, repo: OrderRepository, clock: Clock):</span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">place</span>(order): ...                        <span class="tk-com">// only knows the ports</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Production wiring</span></span>
+<span class="line">container.<span class="tk-fn">bind</span>(PaymentPort,   <span class="tk-fn">HttpPaymentClient</span>(url <span class="tk-op">=</span> config.paymentsUrl, timeout <span class="tk-op">=</span> <span class="tk-num">800ms</span>, retries <span class="tk-op">=</span> <span class="tk-num">2</span>))</span>
+<span class="line">container.<span class="tk-fn">bind</span>(InventoryPort, <span class="tk-fn">HttpInventoryClient</span>(url <span class="tk-op">=</span> config.inventoryUrl, timeout <span class="tk-op">=</span> <span class="tk-num">300ms</span>))</span>
+<span class="line">container.<span class="tk-fn">bind</span>(OrderRepository, <span class="tk-fn">SqlOrderRepository</span>(pool))</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Unit-test wiring: in-memory fakes, no network, runs in milliseconds</span></span>
+<span class="line">test.<span class="tk-fn">bind</span>(PaymentPort,   <span class="tk-fn">FakePayment</span>(behavior <span class="tk-op">=</span> APPROVE))</span>
+<span class="line">test.<span class="tk-fn">bind</span>(InventoryPort, <span class="tk-fn">FakeInventory</span>(stock <span class="tk-op">=</span> { <span class="tk-str">&#x27;SKU-1&#x27;</span>: <span class="tk-num">5</span> }))</span>
+<span class="line">test.<span class="tk-fn">bind</span>(OrderRepository, <span class="tk-fn">InMemoryOrderRepository</span>())</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Consumer contract test: generates the contract that the provider will verify</span></span>
+<span class="line">contractTest <span class="tk-str">&#x27;reserve stock&#x27;</span>:</span>
+<span class="line">    pact.<span class="tk-fn">given</span>(<span class="tk-str">&#x27;SKU-1 has 5 units&#x27;</span>).<span class="tk-fn">upon</span>(<span class="tk-fn">reserve</span>(<span class="tk-str">&#x27;SKU-1&#x27;</span>, <span class="tk-num">2</span>)).<span class="tk-fn">willRespondWith</span>(<span class="tk-num">200</span>, { status: <span class="tk-str">&#x27;HELD&#x27;</span> })</span>
+<span class="line">    client <span class="tk-op">=</span> <span class="tk-fn">HttpInventoryClient</span>(url <span class="tk-op">=</span> pact.mockServerUrl)</span>
+<span class="line">    assert client.<span class="tk-fn">reserve</span>(<span class="tk-str">&#x27;SKU-1&#x27;</span>, <span class="tk-num">2</span>) <span class="tk-op">==</span> Held</span>
+<span class="line">    <span class="tk-com">// pact file is published to the broker, then verified in the provider pipeline</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Component test: real database through Testcontainers (owned dependency)</span></span>
+<span class="line">componentTest <span class="tk-str">&#x27;concurrent orders do not oversell&#x27;</span>:</span>
+<span class="line">    db <span class="tk-op">=</span> <span class="tk-fn">startContainer</span>(<span class="tk-str">&#x27;distributed-sql&#x27;</span>)</span>
+<span class="line">    run <span class="tk-num">50</span> concurrent <span class="tk-fn">place</span>(order) calls against the real repository</span>
+<span class="line">    assert stock never negative <span class="tk-kw">and</span> serialization retries succeed</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Isolated stage: fault injection</span></span>
+<span class="line">chaosTest <span class="tk-str">&#x27;payment gateway slow&#x27;</span>:</span>
+<span class="line">    proxy.<span class="tk-fn">addLatency</span>(PaymentPort, <span class="tk-num">3s</span>)</span>
+<span class="line">    result <span class="tk-op">=</span> orderService.<span class="tk-fn">place</span>(order)</span>
+<span class="line">    assert result <span class="tk-kw">in</span> [Pending, PaymentTimeout] <span class="tk-kw">and</span> reservation released <span class="tk-kw">or</span> expiring</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Over-specifying contracts:</strong> Asserting every field in a response makes harmless provider changes break builds. Specify only what the consumer uses.</li>
+          <li><strong>Treating contracts as behavior tests:</strong> A passing contract says nothing about timeouts, retries, or partial failure. Test those separately with fault injection.</li>
+          <li><strong>Not gating deployment on verification:</strong> If contract results do not block a release, drift returns. Use a can-i-deploy style check.</li>
+          <li><strong>Expecting a third party to verify your pact:</strong> External gateways will not. Use a sandbox, recorded interactions with periodic refresh, or schema checks.</li>
+          <li><strong>Faking the database for transaction logic:</strong> In-memory stubs hide isolation anomalies and retry requirements. Use a real database in component tests.</li>
+          <li><strong>Sharing mutable fixtures:</strong> Tests that depend on shared state or ordering create flaky pipelines. Make each test own its data.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams build a <strong>layered test strategy</strong> and give each layer a clear job. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define boundaries:</strong> Put each dependency behind an interface (a port) owned by the order service, with an HTTP or SQL adapter as the implementation.</li>
+          <li><strong>Step 1 — Unit tests with fakes:</strong> Test domain logic through DI using in-memory fakes. These should run in seconds.</li>
+          <li><strong>Step 2 — Component tests with Testcontainers:</strong> Run the service against a real database (and broker) to test queries, transactions, and retry behavior on serialization failures.</li>
+          <li><strong>Step 3 — Consumer contracts:</strong> Generate contracts from consumer tests, publish them to a broker, verify them in provider pipelines, and gate deploys on compatibility.</li>
+          <li><strong>Step 4 — Pre-production integration:</strong> Run a small suite against real providers (and the payment sandbox) to check configuration, authentication, and wiring.</li>
+          <li><strong>Step 5 — Fault and performance testing:</strong> In a separate pipeline, inject latency, timeouts, and partial failures, and run load tests to validate timeouts, retries, and idempotency.</li>
+        </ul>
+        <p>Give each test layer one job, and keep the slow, nondeterministic checks out of the pull-request path.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Keep pull-request builds <strong>fast and hermetic</strong> with DI and contract-backed stubs, keep stubs <strong>honest</strong> by having providers verify the contracts, and keep <strong>realism and failure testing in separate stages</strong>. Use real containers for the dependencies you own, and fault injection to exercise latency and partial failure.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

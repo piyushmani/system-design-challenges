@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aisha&#x27;s Near-Real-Time Dashboard: How to Efficiently Maintain the Materialized View? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">09 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Materialized Views</span>
+      <span class="tag tag--green">Real-time Dashboards</span>
+      <span class="tag tag--amber">Data Pipelines</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Aisha&#x27;s Near-Real-Time Dashboard: How to Efficiently Maintain the Materialized View?</h1>
+      <p class="q-scenario"><strong>Aisha</strong>, a backend engineer, is building a <strong>near-real-time metrics endpoint</strong> for an analytics dashboard that aggregates <strong>orders, payments, and refunds</strong> across several microservices, each owning its own database. The endpoint must hold a <strong>p99 read latency under 100 ms</strong> during heavy concurrent dashboard usage, while the source services keep <strong>high write throughput</strong>. The system must <strong>tolerate partial outages</strong>, and both <strong>staleness and update failures must be observable</strong>. Staleness of <strong>a few seconds</strong> is acceptable. She needs to choose how the materialized view(s) behind the endpoint are maintained.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Modify the materialized view synchronously within the source database transaction (e.g., using a DB trigger or in-transaction write to the MV table) to guarantee strongly consistent reads.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Produce change events from the source databases and employ a CDC + stream-processing pipeline (e.g., Debezium -&gt; Kafka -&gt; Kafka Streams/Flink) for incremental updates to read-optimized materialized view stores (e.g., a dedicated Postgres/ClickHouse/Elasticsearch table), while exposing metrics and offsets for monitoring.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Maintain a read-through/write-through Redis caching layer preceding the canonical queries: during writes, invalidate or refresh cache entries through a pub/sub channel; on cache misses, reads revert to the DB and populate the cache to ensure low latency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Refrain from maintaining a persistent MV: calculate aggregations on the fly at query time utilizing highly optimized distributed SQL queries and sharded partial aggregates, potentially supplementing with background batch recomputes every few minutes for less critical paths.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: CDC + Stream Processing into a Read-Optimized MV Store</h3>
+        <p>Every requirement in the scenario points at <strong>decoupling the read path from the write path</strong>: sub-100 ms p99 under heavy dashboard concurrency, no slowdown for write-heavy source services, survival of partial outages, observable staleness, and a freshness budget of seconds (not milliseconds). A <strong>CDC + stream-processing pipeline</strong> that incrementally maintains a purpose-built MV store is the only option that satisfies all of them at once. The dashboard reads pre-aggregated rows from a store tuned for reads, the source databases only pay the cost of writing their own transaction log, and Kafka acts as a durable buffer between the two. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Read isolation:</strong> Dashboard queries hit a store holding pre-aggregated rows (keyed by tenant, metric, time bucket). Read latency no longer depends on source-database load, so a single-partition lookup comfortably fits a 100 ms p99 budget even with many concurrent dashboards.</li>
+          <li><strong>Near-zero write-path impact:</strong> CDC tails the database log (WAL/binlog) or a transactional outbox table, so no extra locks, triggers, or cross-service calls land on the order, payment, or refund write transactions. Source throughput is untouched.</li>
+          <li><strong>Failure isolation and replay:</strong> Kafka durably buffers events. If Flink or the MV store is down, writes continue, the dashboard serves the last known data (stale but available), and the pipeline catches up from committed offsets. The same log lets you rebuild a view from scratch.</li>
+          <li><strong>Observability by construction:</strong> Consumer lag, end-to-end freshness (now minus the watermark of the data materialized), dead-letter counts, and checkpoint age are first-class metrics. The API can return an <code>as_of</code> timestamp so clients and alerts see staleness directly.</li>
+          <li><strong>Correct incremental aggregation:</strong> Keyed state plus idempotent upserts of absolute bucket totals gives effectively-once results even when events are redelivered. Refunds become negative deltas applied to the original order's bucket instead of ad hoc recomputation.</li>
+        </ul>
+        <p>A production-grade version includes a <strong>transactional outbox or CDC per service</strong>, <strong>keyed incremental aggregation with event-time watermarks</strong>, <strong>idempotent upserts into the MV store</strong>, a <strong>freshness SLO with alerting</strong>, and a periodic <strong>reconciliation job</strong> that compares the view against the source of truth to catch drift.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔒</div>
+          <h4>A — Synchronous In-Transaction MV Update</h4>
+          <p>Strong consistency is attractive, but it <strong>couples every write to the view</strong>. Aggregate rows (daily revenue, refund counts) become hot rows that serialize concurrent writers through lock contention, which directly hurts the high write throughput requirement. A slow or failed MV update fails the business transaction, so a view problem becomes an outage. Worse, orders, payments, and refunds live in <em>different microservices and databases</em>, so one local transaction cannot cover them without 2PC. <strong>Caveat:</strong> for a single database with modest write volume and a hard need for read-your-writes (for example, a ledger balance), this is simple and correct.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">⚡</div>
+          <h4>C — Redis Read-Through / Write-Through Cache</h4>
+          <p>A cache is an optimization in front of a query, not a way to <em>maintain</em> an aggregate. Each write invalidates or refreshes aggregate entries, so hot dashboard keys churn constantly, and every miss falls back to an expensive aggregation over the source databases, exactly when concurrency is highest (cache stampede, p99 spikes). Redis pub/sub is fire-and-forget, so a missed message silently leaves stale data with no lag metric to alert on. Aggregation across several services still has to be computed somewhere. <strong>Caveat:</strong> a small Redis or in-process cache with a 1-2 second TTL is a good <em>complement</em> in front of the MV store for the hottest tiles.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧮</div>
+          <h4>D — Compute on the Fly at Query Time</h4>
+          <p>With no persisted view, query cost scales with data volume and with the number of concurrent dashboards, so holding p99 under 100 ms at peak is hard, and analytical reads compete with transactional writes for the same resources. The batch recompute 'every few minutes' for non-critical paths also contradicts the few-seconds staleness target. Failures in any shard or source directly degrade reads. <strong>Caveat:</strong> this works for low-concurrency, ad hoc exploration, or when a columnar engine ingests events directly, which is essentially option B with a different sink.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — CDC + Stream Processing into a Read-Optimized MV Store ✓</h4>
+          <p>Produce change events from the source databases and employ a CDC + stream-processing pipeline (e.g., Debezium -&gt; Kafka -&gt; Kafka Streams/Flink) for incremental updates to read-optimized materialized vi</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read p99 Latency</th><th>Write-Path Impact</th><th>Fault Isolation</th><th>Staleness Bound (seconds)</th><th>Staleness Observability</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Synchronous MV in Transaction</td><td>Excellent ✅</td><td>High (latency, lock contention) ❌</td><td>Poor (MV failure fails writes) ❌</td><td>Zero staleness ✅</td><td>Limited ⚠</td><td>Low, but infeasible across services ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — CDC + Stream Processing ✓</td><td>Excellent ✅</td><td>Negligible ✅</td><td>Strong (log buffers outages) ✅</td><td>Seconds, bounded ⚠</td><td>Strong (lag, offsets, as_of) ✅</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">C — Redis Cache with Invalidation</td><td>Great on hits, poor on misses ⚠</td><td>Low–Medium ⚠</td><td>Medium ⚠</td><td>Unbounded if a message is lost ❌</td><td>Weak (silent staleness) ❌</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Compute at Query Time</td><td>Poor under concurrency ❌</td><td>Medium (reads compete with writes) ⚠</td><td>Medium ⚠</td><td>Minutes on batch paths ❌</td><td>Medium ⚠</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Synchronous MV in Transaction</h4>
+          <p>A single database, modest write volume, and a hard requirement that reads reflect the latest write (for example, an account balance or a stock counter updated in the same transaction).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — CDC + Stream Processing</h4>
+          <p>Multiple services or databases feed one read model, writes are heavy, reads must be fast under load, and seconds of staleness are acceptable. Needs a team able to operate the streaming stack.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Redis Cache with Invalidation</h4>
+          <p>Repeated reads of the same query result with a clear invalidation key, where a miss is cheap enough to absorb. Best as a layer in front of another store.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Compute at Query Time</h4>
+          <p>Low-concurrency or ad hoc analytics, small data volumes, or an OLAP engine that already ingests the raw events and can scan fast enough.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> CDC to Materialized View Pipeline</h3>
+        <p>Source services publish changes through CDC into Kafka, a stream processor maintains incremental aggregates, and the dashboard reads only from the MV store:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    O[(Orders DB)] --&gt;|outbox or WAL| CDC[Debezium CDC]
+    P[(Payments DB)] --&gt;|outbox or WAL| CDC
+    R[(Refunds DB)] --&gt;|outbox or WAL| CDC
+    CDC --&gt; K[Kafka topics]
+    K --&gt; S[Flink or Kafka Streams - incremental aggregates]
+    S --&gt;|idempotent upserts| M[(MV store - ClickHouse or Postgres)]
+    S --&gt;|late or bad events| DLQ[Dead-letter topic]
+    M --&gt; API[Metrics API]
+    API --&gt; D[Dashboard]
+    K -.-&gt; OBS[Lag, freshness, DLQ, checkpoint metrics]
+    S -.-&gt; OBS
+    API -.-&gt; OBS">flowchart LR
+    O[(Orders DB)] --&gt;|outbox or WAL| CDC[Debezium CDC]
+    P[(Payments DB)] --&gt;|outbox or WAL| CDC
+    R[(Refunds DB)] --&gt;|outbox or WAL| CDC
+    CDC --&gt; K[Kafka topics]
+    K --&gt; S[Flink or Kafka Streams - incremental aggregates]
+    S --&gt;|idempotent upserts| M[(MV store - ClickHouse or Postgres)]
+    S --&gt;|late or bad events| DLQ[Dead-letter topic]
+    M --&gt; API[Metrics API]
+    API --&gt; D[Dashboard]
+    K -.-&gt; OBS[Lag, freshness, DLQ, checkpoint metrics]
+    S -.-&gt; OBS
+    API -.-&gt; OBS</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Incremental Aggregation with Idempotent Upserts</h3>
+        <p>A stream job keeps bucket totals in checkpointed state, dedupes by entity version, flushes absolute totals to the MV store, and publishes freshness. The read API returns data with an as_of timestamp:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Stream job: consumes orders, payments, refunds topics (keyed by entity id)</span></span>
+<span class="line">state: lastVersion[(source, entityId)]        <span class="tk-com">// checkpointed, used for dedupe</span></span>
+<span class="line">state: bucketTotal[(tenant, region, metric, bucket)]</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onEvent</span>(e):</span>
+<span class="line">    <span class="tk-kw">if</span> e.version <span class="tk-op">&lt;=</span> lastVersion[(e.source, e.entityId)]:</span>
+<span class="line">        <span class="tk-kw">return</span>                                      <span class="tk-com">// duplicate or replayed event</span></span>
+<span class="line">    <span class="tk-kw">if</span> e.eventTime <span class="tk-op">&lt;</span> watermark <span class="tk-op">-</span> ALLOWED_LATENESS:</span>
+<span class="line">        <span class="tk-fn">deadLetter</span>(e); metrics.<span class="tk-fn">inc</span>(<span class="tk-str">&#x27;late_events&#x27;</span>); <span class="tk-kw">return</span></span>
+<span class="line">    delta <span class="tk-op">=</span> <span class="tk-fn">computeDelta</span>(e, <span class="tk-fn">previousState</span>(e))       <span class="tk-com">// refund =&gt; negative revenue delta on the original order&#x27;s bucket</span></span>
+<span class="line">    bucket <span class="tk-op">=</span> <span class="tk-fn">floor</span>(e.eventTime, <span class="tk-num">10s</span>)</span>
+<span class="line">    key <span class="tk-op">=</span> (e.tenant, e.region, e.metric, bucket)</span>
+<span class="line">    bucketTotal[key] <span class="tk-op">+</span><span class="tk-op">=</span> delta</span>
+<span class="line">    dirtyKeys.<span class="tk-fn">add</span>(key)</span>
+<span class="line">    lastVersion[(e.source, e.entityId)] <span class="tk-op">=</span> e.version</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Flush every second or when the watermark advances</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">flush</span>():</span>
+<span class="line">    batch <span class="tk-op">=</span> [(k, bucketTotal[k]) <span class="tk-kw">for</span> k <span class="tk-kw">in</span> dirtyKeys]</span>
+<span class="line">    mvStore.<span class="tk-fn">upsertBatch</span>(batch, asOf <span class="tk-op">=</span> watermark)    <span class="tk-com">// absolute totals, so a retry is harmless</span></span>
+<span class="line">    dirtyKeys.<span class="tk-fn">clear</span>()</span>
+<span class="line">    <span class="tk-fn">commitCheckpointAndOffsets</span>()                    <span class="tk-com">// only after the sink acknowledged</span></span>
+<span class="line">    metrics.<span class="tk-fn">gauge</span>(<span class="tk-str">&#x27;mv_freshness_seconds&#x27;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> watermark)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Read path: single-partition lookup, no joins or scans across services</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getDashboard</span>(tenant, range):</span>
+<span class="line">    rows <span class="tk-op">=</span> mvStore.<span class="tk-fn">query</span>(tenant, range)             <span class="tk-com">// target p99 well under 100 ms</span></span>
+<span class="line">    asOf <span class="tk-op">=</span> mvStore.<span class="tk-fn">asOf</span>(tenant)</span>
+<span class="line">    <span class="tk-kw">return</span> { data: rows, as_of: asOf, stale: (<span class="tk-fn">now</span>() <span class="tk-op">-</span> asOf) <span class="tk-op">&gt;</span> <span class="tk-num">5s</span> }</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Treating at-least-once as exactly-once:</strong> Redelivered events double-count revenue. Keep per-entity version state and write idempotent upserts of absolute totals, not blind increments.</li>
+          <li><strong>Ignoring out-of-order and late events:</strong> A refund can arrive before the order event is processed. Use event-time buckets, watermarks, allowed lateness, and a DLQ with a repair path.</li>
+          <li><strong>Exposing raw table CDC as a public contract:</strong> Any schema change upstream breaks the pipeline. Use an outbox or domain events with schema-registry compatibility rules.</li>
+          <li><strong>No freshness metric:</strong> Consumer lag alone is not enough (an idle topic has zero lag). Measure end-to-end freshness from event time to materialization and return <code>as_of</code> in the API.</li>
+          <li><strong>Committing offsets before the sink acknowledges:</strong> A crash then loses data silently. Commit offsets (or checkpoints) only after the MV store write succeeds.</li>
+          <li><strong>No rebuild path:</strong> Bugs in aggregation logic need reprocessing. Keep retention or snapshots long enough to replay, and rehearse the rebuild.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams treat the materialized view as a product with an explicit <strong>freshness SLO</strong> and build it in layers. A typical rollout looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define the contract:</strong> Agree on metric definitions, the freshness SLO (for example, p99 end-to-end lag under 5 s), and what the dashboard shows when data is stale.</li>
+          <li><strong>Step 1 — Emit reliable change events:</strong> Use a transactional outbox or Debezium per service, with versioned schemas in a registry and a stable event key (entity id).</li>
+          <li><strong>Step 2 — Incremental aggregation:</strong> Flink or Kafka Streams keeps keyed state, applies deltas (refunds as negative amounts), assigns event-time buckets, and handles late events with watermarks.</li>
+          <li><strong>Step 3 — Serve from a read-optimized store:</strong> Idempotent upserts into ClickHouse, Postgres, or Elasticsearch, partitioned by tenant and time, behind a thin metrics API that returns <code>as_of</code>.</li>
+          <li><strong>Step 4 — Observe and degrade gracefully:</strong> Alert on consumer lag, freshness, DLQ growth, and checkpoint failures. Serve last-known data with a staleness banner instead of failing.</li>
+          <li><strong>Step 5 — Reconcile and rebuild:</strong> A periodic batch job compares the view with source-of-truth counts, and the log or snapshots allow a full rebuild with no downtime.</li>
+        </ul>
+        <p>Add micro-caching only after the MV store is in place and measurements show a need.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When many readers and heavy writers share the same data, <strong>move aggregation off both the write path and the read path</strong>. CDC plus stream processing keeps views incrementally fresh within seconds, isolates failures, and makes lag measurable. Pair it with idempotent updates, event-time handling, and a reconciliation job, and accept bounded eventual consistency in exchange for scale and availability.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

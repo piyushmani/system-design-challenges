@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How should Priya architect CDN caching and invalidation for near-real-time content? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">08 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">CDN</span>
+      <span class="tag tag--green">Cache Invalidation</span>
+      <span class="tag tag--amber">Real-time Content</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">How should Priya architect CDN caching and invalidation for near-real-time content?</h1>
+      <p class="q-scenario"><strong>Priya</strong> is a backend developer on an <strong>international e-commerce site</strong>. Product pages are mostly static (images, descriptions), but <strong>price and inventory change frequently</strong> and must reach users in major markets <strong>within seconds</strong>. <strong>Flash sales and Black Friday</strong> bring extreme traffic spikes, so the <strong>origin must be shielded</strong> from overload. She needs a CDN strategy that <strong>minimizes user latency</strong>, <strong>protects the origin under load</strong>, and provides <strong>fast, dependable cache invalidation</strong> whenever prices or stock change.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Configure exceptionally short Time-To-Live (TTL) values (e.g., 3 to 5 seconds) on the endpoints serving pricing data, depending on the CDN&#x27;s standard caching mechanisms to ensure updates become visible almost instantly. Leave the origin server logic unaltered and accept the consequent increase in origin traffic during traffic surges.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Maintain extended TTLs (ranging from minutes to hours) for the majority of files. Whenever a price or inventory update occurs, synchronously invoke the CDN&#x27;s purge API to eliminate the cached object across all edge Points of Presence (PoPs) prior to committing the update to the database. Handle these purges as a mandatory, blocking step within the data update process.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Apply moderate TTLs (ranging from tens of seconds to several minutes) in combination with a &#x27;stale-while-revalidate&#x27; caching strategy. Implement an origin shield (a tiered caching layer) to safeguard the origin server, and emit update events to an independent invalidation service. This service will trigger tag-based or selective asynchronous purges at the edge locations. For highly critical changes, execute immediate, targeted purges exclusively for the affected cache keys.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Cease caching pricing and inventory responses at the CDN tier entirely. Instead, relocate the logic for price calculations and inventory verification to edge compute nodes (such as serverless functions running at the CDN edge). This ensures every request is processed at the edge to consistently deliver the most current data, reserving traditional caching strictly for static content.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Moderate TTL + Stale-While-Revalidate + Origin Shield + Event-Driven Tag Purge</h3>
+        <p>Priya needs two things that normally conflict: <strong>freshness within seconds</strong> and <strong>origin protection at flash-sale scale</strong>. Option C layers complementary mechanisms so no single one carries the whole load: a TTL as the safety net, stale-while-revalidate for latency, a shield with request collapsing for origin protection, and <em>event-driven</em> purges for speed. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Origin protection even during purges:</strong> An origin shield plus request collapsing means a single request per object reaches the origin even when hundreds of PoPs revalidate at the same moment.</li>
+          <li><strong>Freshness without polling:</strong> Purging on change delivers updates in seconds and generates no origin traffic for unchanged items. The TTL is only a backstop if a purge fails.</li>
+          <li><strong>No user-visible latency cliff:</strong> Stale-while-revalidate serves the cached copy instantly while refreshing in the background, and stale-if-error keeps pages up when the origin struggles.</li>
+          <li><strong>Targeted, scalable invalidation:</strong> Surrogate keys or cache tags (for example <code>product-123</code>) purge groups of related objects in one call. An asynchronous invalidation service coalesces, batches, and rate-limits CDN API calls, and critical changes get an immediate targeted purge.</li>
+          <li><strong>Decoupled and observable:</strong> The price service commits to the database, then emits an event (outbox or change-data-capture). The purge pipeline has its own retries, DLQ, and metrics (purge-to-visible latency, cache hit ratio, origin offload).</li>
+        </ul>
+        <p>Treat <strong>TTL as the safety net and purge as the fast path</strong>. Order matters: commit to the database first, then publish the event, then purge by tag (optionally followed by a delayed second purge for requests that were in flight). Track <strong>purge-to-visible latency</strong>, <strong>edge hit ratio</strong>, <strong>origin request rate</strong>, and <strong>stale-served ratio</strong>.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">⏱️</div>
+          <h4>A — Very Short TTLs (3–5 Seconds)</h4>
+          <p>Simple, and a short TTL does give 'seconds' freshness with no extra infrastructure. But it turns freshness into a polling problem: every PoP re-requests every hot object every few seconds whether or not anything changed. Without a shield and request collapsing, each expiry window can send a burst to the origin, and the option explicitly accepts increased origin traffic during surges, the opposite of the shielding requirement. There is also no fast path for urgent corrections (such as a pricing error) beyond waiting out the TTL.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧹</div>
+          <h4>B — Long TTLs with Blocking Purge Before Commit</h4>
+          <p>Wrong order and wrong coupling. Purging <em>before</em> the database commit lets a concurrent request re-cache the old price right after the purge. Blocking the write on the CDN API ties price updates to CDN availability, latency, and rate limits (purge speed varies widely by vendor). If a purge fails or is slow, long TTLs keep wrong prices live for hours, a pricing-integrity risk. Long TTLs with purge is a sound idea only when purges happen after commit, asynchronously, with retries, and with a short TTL backstop.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧮</div>
+          <h4>D — No CDN Caching for Price and Stock; Edge Compute</h4>
+          <p>Edge functions are great for personalization, redirects, A/B tests, and light transformation. But computing price and stock at the edge on every request still needs authoritative data, so each request becomes a call to a central store (origin load and hot keys, now at flash-sale volume) or to an edge key-value store that is itself eventually consistent and needs propagation. You lose the cache's collapse-and-offload property exactly when you need it, pay per-request compute at peak, and add complexity.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Moderate TTL + Stale-While-Revalidate + Origin Shield + Event-Driven Tag Purge ✓</h4>
+          <p>Apply moderate TTLs (ranging from tens of seconds to several minutes) in combination with a &#x27;stale-while-revalidate&#x27; caching strategy. Implement an origin shield (a tiered caching layer) to safeguard</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Freshness (Time to Update)</th><th>Origin Protection</th><th>User Latency</th><th>Behavior When Purge Fails</th><th>Implementation Complexity</th><th>Cost at Peak</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Very Short TTLs</td><td>Good ✅ (bounded by TTL)</td><td>Poor ❌</td><td>Good ⚠ (periodic misses)</td><td>Good ✅ (self-heals in seconds)</td><td>Low ✅</td><td>High ❌ (origin load)</td></tr>
+            <tr><td class="tt-option">B — Long TTL + Blocking Purge</td><td>Excellent ✅ (if purge works)</td><td>Good ✅</td><td>Excellent ✅</td><td>Poor ❌ (stale for hours)</td><td>Medium ⚠</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Moderate TTL + SWR + Shield + Tag Purge ✓</td><td>Excellent ✅ (seconds)</td><td>Excellent ✅</td><td>Excellent ✅</td><td>Good ✅ (TTL backstop)</td><td>Medium–High ⚠</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Edge Compute, No Caching</td><td>Excellent ✅ (if data store is fresh)</td><td>Moderate ⚠ (load moves to data store)</td><td>Good ⚠</td><td>Good ✅</td><td>High ❌</td><td>High ❌ (per-request compute)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Very Short TTLs</h4>
+          <p>Low-traffic or small catalogs where the origin can absorb periodic revalidation easily, or when the CDN offers no usable purge API.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Long TTL + Blocking Purge</h4>
+          <p>Rarely as described. A long-TTL-plus-purge model suits infrequently changing content (such as articles) when purges are post-commit, asynchronous, and retried.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Moderate TTL + SWR + Shield + Tag Purge</h4>
+          <p>Global catalogs with frequent price and stock changes and spiky traffic, where both freshness in seconds and origin protection are required.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">✅</div>
+          <h4>D — Edge Compute, No Caching</h4>
+          <p>Per-request logic that genuinely differs by user or region (personalization, geo rules, A/B tests, edge authentication), with data replicated to the edge.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Read Path with Stale-While-Revalidate and Origin Shield</h3>
+        <p>Users are served from the edge; refreshes are collapsed at the shield so the origin sees one request:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U as User
+    participant E as Edge PoP
+    participant S as Origin Shield
+    participant O as Origin
+    U-&gt;&gt;E: GET /api/products/123/offer
+    alt Fresh in cache
+        E--&gt;&gt;U: Cache hit (a few ms)
+    else Stale but within SWR window
+        E--&gt;&gt;U: Serve stale copy immediately
+        E-&gt;&gt;S: Background revalidate
+        S-&gt;&gt;O: One collapsed request
+        O--&gt;&gt;S: Fresh price and stock
+        S--&gt;&gt;E: Update cache
+    else Cache miss
+        E-&gt;&gt;S: Fetch
+        S-&gt;&gt;O: One collapsed request
+        O--&gt;&gt;S: Response
+        S--&gt;&gt;E: Response
+        E--&gt;&gt;U: Response
+    end">sequenceDiagram
+    participant U as User
+    participant E as Edge PoP
+    participant S as Origin Shield
+    participant O as Origin
+    U-&gt;&gt;E: GET /api/products/123/offer
+    alt Fresh in cache
+        E--&gt;&gt;U: Cache hit (a few ms)
+    else Stale but within SWR window
+        E--&gt;&gt;U: Serve stale copy immediately
+        E-&gt;&gt;S: Background revalidate
+        S-&gt;&gt;O: One collapsed request
+        O--&gt;&gt;S: Fresh price and stock
+        S--&gt;&gt;E: Update cache
+    else Cache miss
+        E-&gt;&gt;S: Fetch
+        S-&gt;&gt;O: One collapsed request
+        O--&gt;&gt;S: Response
+        S--&gt;&gt;E: Response
+        E--&gt;&gt;U: Response
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Cache Headers and Event-Driven Invalidation Consumer</h3>
+        <p>The origin tags and times responses; a consumer coalesces change events into rate-limited soft purges, with the TTL as the backstop:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Origin response headers for the price and stock fragment</span></span>
+<span class="line">Cache<span class="tk-op">-</span>Control: public, max<span class="tk-op">-</span>age<span class="tk-op">=</span><span class="tk-num">0</span>, s<span class="tk-op">-</span>maxage<span class="tk-op">=</span><span class="tk-num">30</span>, stale<span class="tk-op">-</span><span class="tk-kw">while</span><span class="tk-op">-</span>revalidate<span class="tk-op">=</span><span class="tk-num">60</span>, stale<span class="tk-op">-</span><span class="tk-kw">if</span><span class="tk-op">-</span>error<span class="tk-op">=</span><span class="tk-num">600</span></span>
+<span class="line">Surrogate<span class="tk-op">-</span>Key: product<span class="tk-op">-</span><span class="tk-num">123</span> offer<span class="tk-op">-</span>eu           <span class="tk-com">// CDN tag vocabulary (surrogate keys or cache tags, depending on vendor)</span></span>
+<span class="line">ETag: W<span class="tk-op">/</span><span class="tk-str">&quot;v1874&quot;</span>                               <span class="tk-com">// cheap revalidation with 304 responses</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onPriceChanged</span>(event):                <span class="tk-com">// consumes the change stream, only after the DB commit</span></span>
+<span class="line">    pending.<span class="tk-fn">add</span>(<span class="tk-str">&#x27;product-&#x27;</span> <span class="tk-op">+</span> event.productId)   <span class="tk-com">// coalesce bursts: many updates become one purge per tag</span></span>
+<span class="line"></span>
+<span class="line">every <span class="tk-num">500</span> ms:</span>
+<span class="line">    batch <span class="tk-op">=</span> pending.<span class="tk-fn">drain</span>(maxSize <span class="tk-op">=</span> <span class="tk-num">100</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> batch.<span class="tk-fn">isEmpty</span>(): <span class="tk-kw">return</span></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        cdn.<span class="tk-fn">softPurgeByTag</span>(batch)               <span class="tk-com">// mark stale; edges serve stale while revalidating via the shield</span></span>
+<span class="line">        metrics.<span class="tk-fn">observe</span>(<span class="tk-str">&#x27;purge_latency&#x27;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> <span class="tk-fn">oldestCommitTime</span>(batch))</span>
+<span class="line">    <span class="tk-kw">catch</span> RateLimited <span class="tk-kw">or</span> Timeout:</span>
+<span class="line">        pending.<span class="tk-fn">addAll</span>(batch)                   <span class="tk-com">// retry later; the 30 s TTL is the backstop</span></span>
+<span class="line">        <span class="tk-fn">backoff</span>(exponential <span class="tk-op">+</span> jitter)</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">containsCritical</span>(batch):                 <span class="tk-com">// for example a price error or a legal takedown</span></span>
+<span class="line">        cdn.<span class="tk-fn">hardPurgeByTag</span>(<span class="tk-fn">criticalTags</span>(batch))</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">checkout</span>(cart):</span>
+<span class="line">    price <span class="tk-op">=</span> pricingService.<span class="tk-fn">getAuthoritativePrice</span>(cart)   <span class="tk-com">// never trust the price displayed from the CDN</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Purging before the database commit:</strong> A concurrent request refetches the old value and re-caches it. Always purge after commit.</li>
+          <li><strong>Caching the whole page as one object:</strong> A tiny price change then purges everything. Separate volatile fragments from static content.</li>
+          <li><strong>Hard-purging hot keys at peak:</strong> Every PoP refetches at once. Prefer soft purges with stale-while-revalidate behind a shield.</li>
+          <li><strong>No TTL backstop:</strong> Relying only on purge success means one failed purge becomes long-lived wrong data.</li>
+          <li><strong>Cache-key pollution:</strong> Query strings, cookies, and wide <code>Vary</code> headers fragment the cache and wreck the hit ratio. Normalize keys and strip irrelevant parameters.</li>
+          <li><strong>Caching private data in a shared cache:</strong> Personalized or user-specific responses need private or no-store handling.</li>
+          <li><strong>Treating the CDN price as authoritative:</strong> Re-validate price and stock server-side at cart and checkout.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams decide <strong>how stale each field may be</strong> and then build layers to meet those budgets. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Set staleness budgets per field:</strong> Price (seconds, with checkout authoritative), stock (display in buckets such as in stock, low, out), descriptions (hours).</li>
+          <li><strong>Step 1 — Split content by volatility:</strong> Versioned, immutable URLs with very long TTLs for assets; a moderate-TTL shell; a short-TTL offer fragment with stale-while-revalidate.</li>
+          <li><strong>Step 2 — Protect the origin:</strong> Enable an origin shield and request collapsing, and set <code>stale-while-revalidate</code> and <code>stale-if-error</code> (verify support on your CDN).</li>
+          <li><strong>Step 3 — Tag and invalidate:</strong> Attach surrogate keys to responses and build an invalidation service that consumes change events, coalesces, rate-limits, retries, and uses a DLQ.</li>
+          <li><strong>Step 4 — Prepare for flash sales:</strong> Pre-warm popular objects, prefer soft purges, publish price changes through a queue, load-test purge storms, and consider a waiting room.</li>
+          <li><strong>Step 5 — Verify continuously:</strong> Synthetic probes that measure purge-to-visible time per region, plus dashboards for hit ratio, origin RPS, and stale-served ratio, with alerts on purge failures.</li>
+        </ul>
+        <p>Show the CDN's price, but charge the authoritative one.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Seconds-level freshness and origin protection are both achievable by <strong>combining</strong> moderate TTLs, stale-while-revalidate, an origin shield with request collapsing, and <strong>post-commit, event-driven, tag-based purges</strong>. Keep the TTL as a backstop, split volatile data from static content, and always re-check price and stock authoritatively at checkout.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

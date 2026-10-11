@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Selecting an immutable source of truth for order history: What is the right pattern for Jordan? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">10 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Source of Truth</span>
+      <span class="tag tag--green">Immutability</span>
+      <span class="tag tag--amber">Data History</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Selecting an immutable source of truth for order history: What is the right pattern for Jordan?</h1>
+      <p class="q-scenario"><strong>Jordan</strong>, a backend architect, is building the <strong>order-history service</strong> for a <strong>globally distributed e-commerce platform</strong>. The requirements are more than <strong>5,000 order events per second</strong>, a <strong>tamper-proof audit log</strong> for regulators, <strong>sub-100 ms reads of current order state</strong> for checkout, <strong>horizontal scale across two regions</strong> with high availability, and the ability for support staff to <strong>reconstruct any historical state</strong>. Jordan must choose an <strong>immutable source of truth</strong> and a strategy for serving reads that balances scalability, availability, read performance, and strict auditability <strong>without excessive operational complexity</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">An append-only, partitioned event log (Kafka-like) as the immutable source of truth: record every domain event partitioned by orderId or aggregate, keep the raw log as the audit trail, build asynchronous materialized read models (CQRS) for low-latency current-state reads, use snapshots for hot aggregates and log compaction for long-term retention, and replicate the log across regions with leader-follower or quorum replication.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Immutability inside a relational database: insert-only tables (no updates) enforced by constraints and triggers, current state in separate denormalized tables updated synchronously in the same transaction, on a strongly consistent distributed SQL database (or synchronous cross-region replication) so reads always see the latest committed state.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Immutable JSON event blobs in object storage (S3 with versioning) with a central metadata index in a lightweight database, periodic batch jobs that rebuild indices and refresh current-state caches that serve reads, and the object store as the authoritative audit trail, accepting eventual visibility of new blobs.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">A custom single-leader append-only commit log (WAL) that fsyncs synchronously and waits for cross-region quorum consensus on every write for immediate global durability and strict ordering, with reads served from the leader or from followers that serve only fully synced commits.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Event Log with CQRS and Multi-Region Replication</h3>
+        <p>Jordan needs three different things from three different access patterns: <strong>durable, ordered, tamper-evident history</strong> (write path), <strong>millisecond reads of current state</strong> (checkout), and <strong>point-in-time reconstruction</strong> (support). An immutable event log separates these concerns cleanly: the log is the audit record and the basis for reconstruction, and independent materialized views serve fast reads in each region. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Throughput with headroom:</strong> 5,000 events per second is comfortable for a partitioned log (a modest cluster handles far more), and sequential appends partitioned by orderId keep per-order ordering.</li>
+          <li><strong>Reads decoupled from the audit store:</strong> Checkout reads hit a materialized read model (a key-value or wide-column store keyed by orderId), typically single-digit milliseconds in-region, so the 100 ms budget is never spent on the log itself.</li>
+          <li><strong>Point-in-time reconstruction:</strong> Support can rebuild any order's state at time T by replaying its events (starting from the nearest snapshot) with no special historical tables.</li>
+          <li><strong>Regional availability:</strong> Each region serves reads from a local read model fed by the replicated log, so a regional failure does not take down checkout reads elsewhere, and the read side scales independently of the write side.</li>
+          <li><strong>Why not just a database (Option B)?</strong> A distributed SQL database can meet the functional needs and is operationally simpler, but its immutability is a convention (triggers can be disabled and privileged users can edit rows), and synchronous cross-region commits add tens to over a hundred milliseconds to every write.</li>
+        </ul>
+        <p>A strong implementation uses <strong>home-region write ownership</strong>, <strong>hash-chained, schema-versioned events</strong>, <strong>idempotent projectors with version guards</strong>, <strong>snapshots</strong> for hot aggregates, <strong>WORM archival</strong> for compliance, and <strong>per-region replication-lag dashboards</strong>. If the team does not want to operate a log platform, a distributed SQL database with an append-only events table and change streams is a simpler variant of the same idea.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🧱</div>
+          <h4>B — Insert-Only Relational / Distributed SQL</h4>
+          <p>This is the strongest alternative: insert-only tables on a strongly consistent distributed SQL database (Spanner, CockroachDB, and similar) give transactional consistency and simple reads. The weaknesses are that immutability enforced by triggers and constraints is policy that privileged users can bypass, cross-region synchronous commits put wide-area round trips on every write, and a denormalized current-state table updated in the same transaction adds write amplification and contention at 5,000 events per second. <strong>Caveat:</strong> at lower volumes, or when the team already runs such a database, it is a very reasonable choice.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🗃️</div>
+          <h4>C — Object Storage Blobs with Batch-Built Indexes</h4>
+          <p>Object storage is an excellent immutable archive (with versioning or Object Lock) but a poor primary write path for 5,000 small events per second: per-object request costs and the small-file problem add up, and listing and indexing are slow. Periodic batch rebuilds mean current-state reads can be stale by the batch interval, which violates checkout freshness, and 'eventual visibility' of new blobs is incompatible with a source of truth that must be authoritative. It belongs in Option A as the cold, archival tier.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🛠️</div>
+          <h4>D — Custom WAL with Synchronous Cross-Region Quorum</h4>
+          <p>Waiting for fsync and a cross-region quorum on every write puts wide-area round trips in every write's latency and tail latency, and availability drops whenever the quorum is unreachable. A single leader limits write scalability, and serving reads only from the leader or fully synced followers wastes capacity. Building a replicated log yourself reproduces what Raft-based systems and log platforms already provide, with a high correctness and operations burden.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>A — Event Log with CQRS and Multi-Region Replication ✓</h4>
+          <p>An append-only, partitioned event log (Kafka-like) as the immutable source of truth: record every domain event partitioned by orderId or aggregate, keep the raw log as the audit trail, build asynchron</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Throughput (5k events/s)</th><th>Tamper Evidence</th><th>Checkout Read Latency (under 100 ms)</th><th>Cross-Region Availability</th><th>Historical Reconstruction</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Event Log + CQRS ✓</td><td>High ✅</td><td>Strong ⚠ (needs hash chain and WORM)</td><td>Low via read models ✅</td><td>Good ✅ (regional read models)</td><td>Native ✅</td><td>High ⚠</td></tr>
+            <tr><td class="tt-option">B — Insert-Only SQL</td><td>Medium ⚠ (synchronous commits)</td><td>Weak ⚠ (policy based)</td><td>Low ✅</td><td>Good ✅ (if distributed SQL)</td><td>Good ✅ (history tables)</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — Object Store + Batch Indexes</td><td>Medium ⚠ (small objects)</td><td>Strong ✅ (Object Lock)</td><td>Stale ❌ (batch refresh)</td><td>Good ✅</td><td>Slow ⚠ (batch replay)</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Custom Quorum WAL</td><td>Low ❌ (sync quorum per write)</td><td>Medium ⚠</td><td>Medium ⚠ (leader or synced follower)</td><td>Weak ❌ (quorum dependent)</td><td>Good ✅</td><td>Very high ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Event Log + CQRS</h4>
+          <p>High-volume, multi-region order or ledger-style domains where audit, replay, and independent read scaling are core requirements.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Insert-Only SQL</h4>
+          <p>Moderate volumes, strong consistency needs, a team already operating a distributed SQL database, and audit requirements met by append-only tables plus strict access controls.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Object Store + Batch Indexes</h4>
+          <p>Long-term archive of the event stream, large payloads, or low-frequency compliance snapshots, as the cold tier of another design.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Custom Quorum WAL</h4>
+          <p>Rarely: only when building a storage engine or replicated-log product itself; otherwise use Raft-based systems or an existing log platform.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Regional Read Path: Checkout Served from a Local Read Model</h3>
+        <p>Checkout reads never touch the log; each region projects the replicated events into its own read model and exposes replication lag:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Checkout Service
+    participant RM as Regional Read Model
+    participant L as Regional Log Replica
+    participant P as Projector
+    C-&gt;&gt;RM: 1. Get order 123 current state
+    RM--&gt;&gt;C: 2. Status with version in under 10 ms
+    L-&gt;&gt;P: 3. Deliver replicated events in order
+    P-&gt;&gt;RM: 4. Apply only if version is newer
+    Note over L,RM: Lag metric per region and fallback to the home region if behind">sequenceDiagram
+    participant C as Checkout Service
+    participant RM as Regional Read Model
+    participant L as Regional Log Replica
+    participant P as Projector
+    C-&gt;&gt;RM: 1. Get order 123 current state
+    RM--&gt;&gt;C: 2. Status with version in under 10 ms
+    L-&gt;&gt;P: 3. Deliver replicated events in order
+    P-&gt;&gt;RM: 4. Apply only if version is newer
+    Note over L,RM: Lag metric per region and fallback to the home region if behind</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Hash-Chained Append and Point-in-Time Reconstruction</h3>
+        <p>Writes are routed to the order's home region and chained for tamper evidence; support reconstructs state as of any timestamp from the nearest snapshot plus events, verifying the chain while replaying:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Write path: home-region ownership and hash chain</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">appendEvent</span>(orderId, evt):</span>
+<span class="line">    home <span class="tk-op">=</span> <span class="tk-fn">regionOf</span>(orderId)                                  <span class="tk-com">// deterministic home region per order</span></span>
+<span class="line">    <span class="tk-kw">if</span> home <span class="tk-op">!=</span> localRegion:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">forward</span>(home, orderId, evt)                    <span class="tk-com">// avoids conflicting writers in two regions</span></span>
+<span class="line">    last <span class="tk-op">=</span> eventLog.<span class="tk-fn">lastEvent</span>(orderId)</span>
+<span class="line">    evt.version <span class="tk-op">=</span> last.version <span class="tk-op">+</span> <span class="tk-num">1</span></span>
+<span class="line">    evt.prevHash <span class="tk-op">=</span> last.hash</span>
+<span class="line">    evt.hash <span class="tk-op">=</span> <span class="tk-fn">sha256</span>(evt.prevHash <span class="tk-op">+</span> <span class="tk-fn">canonical</span>(evt))          <span class="tk-com">// tamper-evident chain</span></span>
+<span class="line">    evt.signature <span class="tk-op">=</span> kms.<span class="tk-fn">sign</span>(evt.hash)</span>
+<span class="line">    eventLog.<span class="tk-fn">append</span>(partitionKey <span class="tk-op">=</span> orderId, evt, acks <span class="tk-op">=</span> <span class="tk-str">&#x27;all&#x27;</span>, expectedVersion <span class="tk-op">=</span> last.version)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Point-in-time reconstruction for support</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reconstructAt</span>(orderId, asOf):</span>
+<span class="line">    snap <span class="tk-op">=</span> snapshotStore.<span class="tk-fn">latestBefore</span>(orderId, asOf)           <span class="tk-com">// may be null</span></span>
+<span class="line">    state <span class="tk-op">=</span> (snap <span class="tk-op">!=</span> <span class="tk-lit">null</span>) ? snap.state : <span class="tk-fn">emptyOrder</span>()</span>
+<span class="line">    fromVersion <span class="tk-op">=</span> (snap <span class="tk-op">!=</span> <span class="tk-lit">null</span>) ? snap.version <span class="tk-op">+</span> <span class="tk-num">1</span> : <span class="tk-num">1</span></span>
+<span class="line">    prevHash <span class="tk-op">=</span> (snap <span class="tk-op">!=</span> <span class="tk-lit">null</span>) ? snap.lastHash : GENESIS_HASH</span>
+<span class="line">    <span class="tk-kw">for</span> evt <span class="tk-kw">in</span> eventLog.<span class="tk-fn">read</span>(orderId, fromVersion):</span>
+<span class="line">        <span class="tk-kw">if</span> evt.at <span class="tk-op">&gt;</span> asOf:  <span class="tk-kw">break</span></span>
+<span class="line">        <span class="tk-kw">if</span> evt.prevHash <span class="tk-op">!=</span> prevHash <span class="tk-kw">or</span> evt.hash <span class="tk-op">!=</span> <span class="tk-fn">sha256</span>(evt.prevHash <span class="tk-op">+</span> <span class="tk-fn">canonical</span>(evt)):</span>
+<span class="line">            <span class="tk-kw">throw</span> <span class="tk-fn">TamperDetected</span>(orderId, evt.version)         <span class="tk-com">// chain verified while replaying</span></span>
+<span class="line">        state <span class="tk-op">=</span> <span class="tk-fn">apply</span>(state, evt)</span>
+<span class="line">        prevHash <span class="tk-op">=</span> evt.hash</span>
+<span class="line">    <span class="tk-kw">return</span> state</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Regional projector: idempotent and version-guarded</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">project</span>(evt):</span>
+<span class="line">    cur <span class="tk-op">=</span> readModel.<span class="tk-fn">get</span>(evt.orderId)</span>
+<span class="line">    <span class="tk-kw">if</span> cur <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> cur.version <span class="tk-op">&gt;=</span> evt.version:  <span class="tk-kw">return</span></span>
+<span class="line">    readModel.<span class="tk-fn">put</span>(evt.orderId, {status: <span class="tk-fn">statusFor</span>(evt), version: evt.version, at: evt.at})</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Compacting the source-of-truth log:</strong> Compaction deletes older events per key, which silently destroys the history regulators expect you to keep.</li>
+          <li><strong>Treating append-only as tamper-proof:</strong> An API that only appends can still be bypassed by an administrator. Add hash chains, signatures, and WORM archival.</li>
+          <li><strong>Active-active writes to the same order:</strong> Concurrent writers in two regions create conflicting event sequences. Assign a home region per order.</li>
+          <li><strong>Unversioned events:</strong> Events must stay readable for years. Use a schema registry, additive evolution, and upcasters.</li>
+          <li><strong>Never testing replay:</strong> Replay at scale can take hours. Snapshots and rehearsals prevent surprises during an incident.</li>
+          <li><strong>Read models without lag handling:</strong> Checkout may read a stale status. Return version tokens on writes and fall back to the home region when a replica is behind.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Production designs for order history tend to converge on a log-plus-views architecture, hardened step by step:</p>
+        <ul>
+          <li><strong>Step 0 — Define the compliance bar:</strong> Which events, retention periods, and level of tamper evidence (WORM, hash chain, external anchoring) do auditors actually require?</li>
+          <li><strong>Step 1 — Event model:</strong> Versioned, immutable domain events keyed by orderId, carrying actor and timestamp.</li>
+          <li><strong>Step 2 — Home-region writes:</strong> Each order is owned by one region for writes, and the log is replicated to the other for reads and disaster recovery.</li>
+          <li><strong>Step 3 — Read models per region:</strong> Idempotent projectors maintain current state in a low-latency store, with lag metrics and a fallback that rebuilds from snapshot plus events.</li>
+          <li><strong>Step 4 — Snapshots and tiering:</strong> Snapshot hot aggregates, and tier old segments to object storage with Object Lock.</li>
+          <li><strong>Step 5 — Reconstruction tooling:</strong> A support tool that replays events as of a timestamp, plus regular drills to rebuild read models and fail over regions.</li>
+        </ul>
+        <p>Treat reconstruction and regional failover as features you test, not assumptions.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Use an <strong>immutable, partitioned event log as the source of truth</strong> and serve checkout from <strong>regional materialized views</strong>. Make 'tamper-proof' real with hash chaining and WORM archival, keep compaction away from the audit log, and be explicit about the two-region replication and write-ownership model.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

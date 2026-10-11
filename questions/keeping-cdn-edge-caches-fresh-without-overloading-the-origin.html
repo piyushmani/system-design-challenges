@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Keeping CDN Edge Caches Fresh Without Overloading the Origin — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">15 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Cache Invalidation</span>
+      <span class="tag tag--green">Stale Data</span>
+      <span class="tag tag--amber">Race Conditions</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Keeping CDN Edge Caches Fresh Without Overloading the Origin</h1>
+      <p class="q-scenario"><strong>Noah</strong>, a backend architect at a streaming service, uses a <strong>global CDN</strong>. Video files are mostly <strong>immutable</strong>, but <strong>metadata</strong> (titles, thumbnails, availability) changes frequently, and <strong>urgent legal takedowns</strong> must be reflected at the edge within <strong>seconds</strong>. The CDN serves <strong>billions of requests per day</strong>, so both <strong>origin load</strong> and <strong>user latency</strong> matter. He needs a freshness strategy that keeps reads fast and hit ratios high, makes invalidation reasonably quick, and avoids a <em>brittle control plane</em>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Apply extremely brief Time-To-Live (TTL) values (e.g., 1 to 5 seconds) or enforce a no-cache policy, requiring every request to be validated against the origin using conditional GETs or ETags. This approach ensures content freshness but significantly increases origin load and introduces extra latency per request.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Maintain lengthy TTLs to maximize cache hits, while deploying a centralized synchronous purge API. Upon content modification, the origin signals the control plane to issue direct purge commands, waiting for acknowledgment from every Point of Presence (PoP) before declaring success, effectively simulating strong consistency for invalidations.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Leverage long TTLs in conjunction with cache-control directives like stale-while-revalidate to allow background conditional revalidation at the edge. Supplement this with a best-effort pub/sub invalidation mechanism communicating from the origin to the PoPs (or the CDN&#x27;s control plane) to expedite propagation. To handle emergency takedowns, incorporate short-lived signed URLs or a specific flag triggering short TTLs.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Utilize a multi-CDN strategy paired with cache-busting techniques: avoid cache purging entirely. Instead, deploy updated content using novel content-hash URLs and rotate access keys to execute takedowns. Implement DNS traffic steering alongside origin-initiated redirects during deployments, ensuring edge nodes gradually adopt the updated set of URLs.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Long TTL + Stale-While-Revalidate + Async Invalidation + Takedown Path</h3>
+        <p>The workload isn't one problem, it's <strong>three with different freshness needs</strong>: immutable video, mutable metadata, and legally urgent takedowns. Option C is the only one that treats them differently: <strong>long TTLs with stale-while-revalidate</strong> keep hit ratio and latency high, <strong>best-effort asynchronous invalidation</strong> shortens the freshness window without a brittle control plane, and takedowns get a <strong>separate, access-based mechanism</strong> (short-lived signed URLs or a no-cache flag) so they never depend on cache purge timing. Here's why it stands out:</p>
+        <ul>
+          <li><strong>High hit ratio and low latency:</strong> With long <code>s-maxage</code> and <code>stale-while-revalidate</code>, users get an immediate response from the edge while it refreshes in the background. The origin sees roughly one conditional request per object per refresh (further reduced by an origin shield and request collapsing).</li>
+          <li><strong>Fast invalidation without blocking:</strong> Purging by surrogate key or tag through the CDN API is asynchronous and idempotent, and on modern CDNs typically propagates within seconds. A slow or unreachable PoP never blocks publishing, and the TTL is the backstop for any missed purge.</li>
+          <li><strong>Takedowns don't depend on cache behavior:</strong> Short-lived signed URLs or tokens (for example 60 to 120 seconds) mean revoking access is simply 'stop issuing tokens' and 'edge denies revoked or expired tokens'. The time-to-effect is bounded by the token lifetime even if a purge is delayed. A hard purge runs in parallel as defense in depth.</li>
+          <li><strong>Operationally simple:</strong> It uses standard HTTP caching semantics and CDN-native features instead of a custom control plane that must coordinate every PoP.</li>
+          <li><strong>Good fit for the content classes:</strong> Immutable video can use content-hashed or versioned URLs with a very long TTL, while metadata gets the SWR plus event-driven purge treatment.</li>
+        </ul>
+        <p>Define explicit SLOs: <strong>purge propagation p99</strong>, <strong>cache hit ratio</strong>, <strong>stale-served ratio</strong>, and <strong>takedown time-to-effect</strong>. Run takedown drills regularly, because an untested legal path is a liability.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">⏱️</div>
+          <h4>A — Very Short TTL or No-Cache</h4>
+          <p>Freshness is excellent, but the <strong>hit ratio collapses</strong>: with N PoPs and a TTL of a few seconds, each popular object triggers a revalidation per PoP every few seconds, and every conditional GET still pays an origin round trip. At billions of requests per day this overloads the origin and adds latency for users. <strong>Caveat:</strong> short TTLs are appropriate for a small set of genuinely volatile objects (for example live availability counters), not as the global policy.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🛑</div>
+          <h4>B — Synchronous Purge with Global Acknowledgment</h4>
+          <p>Waiting for every PoP to acknowledge ties publishing to the <strong>slowest or partitioned PoP</strong>, which makes the control plane brittle and creates a tail-latency and availability coupling. It also gives a false sense of strong consistency: in-flight requests, client caches and intermediate proxies are outside the guarantee. <strong>Caveat:</strong> track purge completion for audit and alerting, but do not gate publishing on it.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔑</div>
+          <h4>D — Multi-CDN with Content-Hash URLs and No Purging</h4>
+          <p>Content-hashed URLs are excellent for immutable assets (and should be used for video and thumbnails), but metadata referenced through stable URLs still needs invalidation. Takedown by rotating keys is blunt: it can break unrelated content under the same key, and DNS steering depends on DNS TTLs, which are not 'seconds'. Multi-CDN also multiplies operational complexity and configuration drift. <strong>Caveat:</strong> a strong complement to option C for assets, but not a complete answer.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Long TTL + Stale-While-Revalidate + Async Invalidation + Takedown Path ✓</h4>
+          <p>Leverage long TTLs in conjunction with cache-control directives like stale-while-revalidate to allow background conditional revalidation at the edge. Supplement this with a best-effort pub/sub invalid</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Cache Hit Ratio</th><th>Origin Load</th><th>Update Freshness</th><th>Takedown Speed</th><th>Control-Plane Brittleness</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Very Short TTL / No-Cache</td><td>Very low ❌</td><td>Very high ❌</td><td>Fresh ✅</td><td>Fast via TTL ✅</td><td>Low ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Synchronous Global Purge</td><td>High ✅</td><td>Low ✅</td><td>Fast but gated ⚠</td><td>Fast until one PoP stalls ⚠</td><td>High ❌</td><td>High ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Long TTL + SWR + Async Purge ✓</td><td>High ✅</td><td>Low ✅</td><td>Seconds, bounded by TTL ✅</td><td>Seconds to a minute (token TTL) ✅</td><td>Low (best effort) ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Multi-CDN + Hashed URLs</td><td>Very high ✅</td><td>Low ✅</td><td>Instant for versioned URLs, stable URLs still need care ⚠</td><td>Medium (key rotation, DNS TTL) ⚠</td><td>Medium ⚠</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Very Short TTL / No-Cache</h4>
+          <p>A small set of highly volatile, low-volume objects where freshness outweighs cost. Per-user or real-time data is often better served outside the CDN cache.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Synchronous Global Purge</h4>
+          <p>Rare, compliance-driven cases with small catalogs where explicit confirmation is required. Even then, run it asynchronously for audit rather than gating publication.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Long TTL + SWR + Async Purge</h4>
+          <p>Large catalogs with mixed mutable and immutable content, strict latency goals, and takedown requirements, which is this scenario.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Multi-CDN + Hashed URLs</h4>
+          <p>Immutable assets, build artifacts, static sites and video segments with versioned URLs, or when multi-CDN resilience is a business requirement.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Read Path with Stale-While-Revalidate and Request Collapsing</h3>
+        <p>Fresh objects are served from cache. Slightly stale objects are served immediately while a single collapsed revalidation refreshes them. Misses go through the origin shield:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U as Viewer
+    participant E as Edge PoP
+    participant S as Origin Shield
+    participant O as Origin
+    U-&gt;&gt;E: GET metadata
+    alt Fresh in cache
+        E--&gt;&gt;U: 200 from cache
+    else Stale within SWR window
+        E--&gt;&gt;U: 200 stale copy, immediately
+        E-&gt;&gt;S: Background conditional GET with ETag
+        S-&gt;&gt;O: One collapsed revalidation per object
+        O--&gt;&gt;S: 304 or new content
+        S--&gt;&gt;E: Refresh cache
+    else Miss
+        E-&gt;&gt;S: GET
+        S-&gt;&gt;O: GET, collapsed
+        O--&gt;&gt;E: 200 with Cache-Control headers
+        E--&gt;&gt;U: 200
+    end">sequenceDiagram
+    participant U as Viewer
+    participant E as Edge PoP
+    participant S as Origin Shield
+    participant O as Origin
+    U-&gt;&gt;E: GET metadata
+    alt Fresh in cache
+        E--&gt;&gt;U: 200 from cache
+    else Stale within SWR window
+        E--&gt;&gt;U: 200 stale copy, immediately
+        E-&gt;&gt;S: Background conditional GET with ETag
+        S-&gt;&gt;O: One collapsed revalidation per object
+        O--&gt;&gt;S: 304 or new content
+        S--&gt;&gt;E: Refresh cache
+    else Miss
+        E-&gt;&gt;S: GET
+        S-&gt;&gt;O: GET, collapsed
+        O--&gt;&gt;E: 200 with Cache-Control headers
+        E--&gt;&gt;U: 200
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Cache Headers, Async Purge and Takedown Flow</h3>
+        <p>Origin responses set per-class cache policy. Changes trigger soft purges by key. Takedowns revoke access first, then hard-purge as defense in depth:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">serveMetadata</span>(req):</span>
+<span class="line">    item <span class="tk-op">=</span> repo.<span class="tk-fn">get</span>(req.id)</span>
+<span class="line">    headers <span class="tk-op">=</span> {</span>
+<span class="line">        <span class="tk-str">&#x27;ETag&#x27;</span>: item.version,</span>
+<span class="line">        <span class="tk-str">&#x27;Surrogate-Key&#x27;</span>: <span class="tk-str">&#x27;title-&#x27;</span> <span class="tk-op">+</span> item.id <span class="tk-op">+</span> <span class="tk-str">&#x27; catalog&#x27;</span></span>
+<span class="line">    }</span>
+<span class="line">    <span class="tk-kw">if</span> item.takedownPending <span class="tk-kw">or</span> item.legalHold:</span>
+<span class="line">        headers[<span class="tk-str">&#x27;Cache-Control&#x27;</span>] <span class="tk-op">=</span> <span class="tk-str">&#x27;no-store&#x27;</span>           <span class="tk-com">// never cached, never served stale</span></span>
+<span class="line">    <span class="tk-kw">else</span>:</span>
+<span class="line">        headers[<span class="tk-str">&#x27;Cache-Control&#x27;</span>] <span class="tk-op">=</span> <span class="tk-str">&#x27;public, max-age=60, s-maxage=3600, stale-while-revalidate=300, stale-if-error=600&#x27;</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">Response</span>(item, headers)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onMetadataChanged</span>(item):</span>
+<span class="line">    db.<span class="tk-fn">commit</span>(item)</span>
+<span class="line">    eventBus.<span class="tk-fn">publish</span>(<span class="tk-fn">Invalidate</span>(key <span class="tk-op">=</span> <span class="tk-str">&#x27;title-&#x27;</span> <span class="tk-op">+</span> item.id))   <span class="tk-com">// async, retried with backoff</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onInvalidate</span>(event):</span>
+<span class="line">    purgeApi.<span class="tk-fn">purgeByKey</span>(event.key, soft <span class="tk-op">=</span> <span class="tk-lit">true</span>)           <span class="tk-com">// mark stale, revalidate in background</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">issuePlaybackUrl</span>(user, videoId):</span>
+<span class="line">    <span class="tk-kw">if</span> denylist.<span class="tk-fn">contains</span>(videoId): <span class="tk-kw">return</span> DENIED</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">sign</span>(path <span class="tk-op">=</span> <span class="tk-str">&#x27;/video/&#x27;</span> <span class="tk-op">+</span> videoId, expires <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">+</span> <span class="tk-num">90s</span>)   <span class="tk-com">// signature excluded from cache key, validated at edge</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">takedown</span>(videoId):</span>
+<span class="line">    denylist.<span class="tk-fn">add</span>(videoId)                                 <span class="tk-com">// checked at token issue and at the edge</span></span>
+<span class="line">    purgeApi.<span class="tk-fn">purgeByKey</span>(<span class="tk-str">&#x27;video-&#x27;</span> <span class="tk-op">+</span> videoId, soft <span class="tk-op">=</span> <span class="tk-lit">false</span>) <span class="tk-com">// hard purge as defense in depth</span></span>
+<span class="line">    audit.<span class="tk-fn">log</span>(<span class="tk-str">&#x27;takedown&#x27;</span>, videoId, <span class="tk-fn">now</span>())</span>
+<span class="line">    <span class="tk-com">// effective within one token lifetime even if some PoP misses the purge</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Using SWR on content that must disappear immediately:</strong> Stale-while-revalidate is a deliberate staleness window. Takedown-sensitive objects need no-store or access-based control.</li>
+          <li><strong>Signature or token in the cache key:</strong> Every user gets a unique key and a cache miss. Exclude it from the key and validate at the edge.</li>
+          <li><strong>Purging by URL instead of surrogate key:</strong> Variants (query strings, formats, languages) are missed. Tag objects and purge by key.</li>
+          <li><strong>Purge storms and thundering herds:</strong> A mass purge sends every PoP back to the origin at once. Prefer soft purge with SWR, plus origin shield and request collapsing.</li>
+          <li><strong>No TTL backstop:</strong> If you rely only on purge events, one lost message becomes indefinite staleness.</li>
+          <li><strong>Never testing the takedown path:</strong> The first real test of the legal SLA should not be a real legal demand.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Large streaming platforms separate content by <strong>how it changes</strong>, then pick a freshness mechanism per class:</p>
+        <ul>
+          <li><strong>Step 0 — Classify content:</strong> Immutable assets, mutable metadata, and legally sensitive content each get their own policy.</li>
+          <li><strong>Step 1 — Immutable assets:</strong> Content-hashed or versioned URLs with <code>Cache-Control: immutable</code> and a year-long TTL. No invalidation needed.</li>
+          <li><strong>Step 2 — Metadata:</strong> Long <code>s-maxage</code> with SWR and stale-if-error, surrogate keys per title, and event-driven soft purge on change.</li>
+          <li><strong>Step 3 — Takedown path:</strong> Short-lived signed URLs, a denylist checked at token issue and at the edge, and a hard purge for defense in depth. Audit-log every step.</li>
+          <li><strong>Step 4 — Protect the origin:</strong> Origin shield, request collapsing, and rate limits on revalidation after purges.</li>
+          <li><strong>Step 5 — Measure and drill:</strong> Dashboards for hit ratio, purge latency and stale-served ratio, plus scheduled takedown drills.</li>
+        </ul>
+        <p>Make freshness a property of the content class, not a global knob.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Use <strong>long TTLs and stale-while-revalidate for speed</strong>, <strong>asynchronous purge for freshness</strong>, and <strong>access control for takedowns</strong>. Don't build a control plane that waits for every PoP. The cost is a few more moving parts (event bus, signed URLs, denylist) and a bounded window of staleness for normal metadata.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

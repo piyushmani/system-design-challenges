@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aisha&#x27;s Choice: Selecting an indexing pattern for low-latency semantic search — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">14 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Semantic Search</span>
+      <span class="tag tag--green">Indexing</span>
+      <span class="tag tag--amber">Low Latency</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Aisha&#x27;s Choice: Selecting an indexing pattern for low-latency semantic search</h1>
+      <p class="q-scenario"><strong>Aisha</strong>, a software engineer, is designing a semantic search backend for an e-commerce catalog with <strong>tens of millions of products</strong>. The system handles up to <strong>10k writes or updates per minute</strong> (about 170 per second), <strong>hundreds of search queries per second</strong> with occasional spikes, and must keep end-to-end search latency <strong>under 100 ms</strong>. New or updated items must be searchable within about <strong>one minute</strong>. The deployment spans <strong>two regions</strong> for high availability and must be easy to observe, scale, and recover. She must choose the best strategy for generating vector embeddings and updating the vector database without excessive operational burden.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Synchronous write-through: compute the embedding and upsert it into the vector DB inside the write request before responding.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Asynchronous streaming pipeline: persist metadata, publish an event to a durable broker (Kafka), and let independent consumers embed and idempotently upsert into the vector DB.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Hybrid: a synchronous fast path for critical items (such as promotions) and an asynchronous stream for everything else, selected by an item-level flag.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Query-time merge: save metadata immediately, embed only unindexed items at query time and merge their scores with the main index, and rebuild the index in offline batches.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Asynchronous Streaming Pipeline</h3>
+        <p>The requirements only conflict if indexing sits in the request path. At roughly <strong>170 updates per second</strong> and a <strong>one-minute freshness</strong> budget, indexing does not need to be synchronous at all. A durable event stream between the write path and the vector index lets the API return in milliseconds, absorbs spikes, and gives each stage its own scaling and failure handling, while freshness becomes a <strong>measurable lag metric</strong> that fits comfortably inside the one-minute target. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Write latency stays low:</strong> The API commits metadata plus an event (via a transactional outbox or CDC) and returns. Embedding model inference, which takes tens to hundreds of milliseconds and can queue on GPUs, never blocks the client.</li>
+          <li><strong>Freshness matches the SLO:</strong> End-to-end lag (event, embedding, upsert, searchable) is typically seconds, well inside one minute, and it can be observed per partition and alerted on.</li>
+          <li><strong>Spike absorption and independent scaling:</strong> Kafka buffers bursts such as bulk catalog imports, consumers scale horizontally on lag, and the embedding service can batch requests for GPU efficiency.</li>
+          <li><strong>Availability decoupling:</strong> A vector DB or embedding outage does not stop catalog writes. Events accumulate and drain on recovery, and replay also gives you disaster recovery and a path to re-embed with new models.</li>
+          <li><strong>Idempotent, versioned upserts make it safe:</strong> Keyed by product ID with a monotonic version, consumers can retry and tolerate duplicates or out-of-order events, so at-least-once delivery is sufficient.</li>
+        </ul>
+        <p>A production setup has a <strong>transactional outbox or CDC</strong> to avoid dual writes, <strong>content-hash checks</strong> so only embedding-relevant changes are re-embedded, <strong>versioned idempotent upserts</strong>, a <strong>dead-letter queue</strong>, and <strong>per-region consumers</strong> reading a replicated stream. Track indexing lag p99, consumer lag, upsert error rate, and search p99. If lag approaches the freshness budget, scale consumers before changing the architecture.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔗</div>
+          <h4>A — Synchronous Write-Through</h4>
+          <p>Embedding generation in the request path adds model inference latency to every write, and the write now fails or slows whenever the embedding service or vector DB is degraded, so <strong>availability is coupled</strong> to the weakest dependency. The promised 'immediate consistency' is also weaker than it looks: many vector indexes expose new vectors only after a refresh or segment flush, and a dual write to two stores is still not atomic. <strong>Caveat:</strong> for small catalogs, admin tools, or prototypes with low write rates, where simplicity beats resilience, it works.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔀</div>
+          <h4>C — Hybrid Fast Path</h4>
+          <p>It solves a problem the SLO does not have, because one-minute freshness is already met by the async path. The cost is real: two indexing paths to test and monitor, flag management, and races where the sync and async paths write different versions of the same item (which demands strict versioning). <strong>Caveat:</strong> it is reasonable only if a small subset truly needs sub-second visibility, and even then it is often simpler to speed up the async path with a priority topic.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧮</div>
+          <h4>D — Query-Time Merge</h4>
+          <p>This pushes cost onto the read path, exactly where the 100 ms budget is tightest: extra embedding calls, a second search, and score merging on every query (cross-source score normalization is hard). During ingestion spikes the unindexed set grows, so query latency grows with write volume, and caching becomes difficult because results depend on that set. <strong>Caveat:</strong> a small, bounded 'delta index' of very recent items (not query-time embedding) is a legitimate optimization on top of the async pipeline.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Asynchronous Streaming Pipeline ✓</h4>
+          <p>Asynchronous streaming pipeline: persist metadata, publish an event to a durable broker (Kafka), and let independent consumers embed and idempotently upsert into the vector DB.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Latency</th><th>Freshness</th><th>Search Latency Impact</th><th>Availability / Failure Isolation</th><th>Spike Handling</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Synchronous Write-Through</td><td>High (embedding inline) ❌</td><td>Immediate, index refresh may add delay ✅</td><td>None ✅</td><td>Coupled ❌</td><td>Poor (backpressure) ❌</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Async Streaming Pipeline ✓</td><td>Low ✅</td><td>Seconds, lag-bound ✅</td><td>None ✅</td><td>Decoupled ✅</td><td>Excellent (buffered) ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — Hybrid Fast Path</td><td>Mixed ⚠</td><td>Immediate for flagged items ✅</td><td>None ✅</td><td>Partly coupled ⚠</td><td>Mixed ⚠</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">D — Query-Time Merge</td><td>Low ✅</td><td>Immediate for new items ✅</td><td>Higher query latency ❌</td><td>Read path coupled ❌</td><td>Smooth for writes ✅</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Synchronous Write-Through</h4>
+          <p>Small catalogs, low write rates, admin-driven updates, or prototypes where immediate visibility matters and the embedding and vector services are highly available.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Async Streaming Pipeline</h4>
+          <p>Medium to large catalogs with continuous updates, minute-level freshness, multi-region requirements, and a need to isolate failures and absorb spikes.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Hybrid Fast Path</h4>
+          <p>A small, well-defined subset (flash promotions, compliance takedowns) needs seconds-level visibility and the team can afford two paths with strict versioning.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Query-Time Merge</h4>
+          <p>Short-lived delta windows (items added in the last few minutes) kept as a small bounded side index, or very low query volume where the extra read cost is acceptable.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Query Path (Local Region)</h3>
+        <p>Search stays in the local region and never waits on the indexing pipeline:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U as User
+    participant S as Search API
+    participant EC as Query Embedding Cache
+    participant EM as Embedding Service
+    participant V as Vector DB Local Region
+    participant M as Metadata Store
+    U-&gt;&gt;S: 1. Search query
+    S-&gt;&gt;EC: 2. Lookup query embedding
+    alt Cache hit
+        EC--&gt;&gt;S: 3a. Vector
+    else Cache miss
+        S-&gt;&gt;EM: 3b. Embed query
+        EM--&gt;&gt;S: Vector
+        S-&gt;&gt;EC: Store with TTL
+    end
+    S-&gt;&gt;V: 4. ANN search with filters (top K)
+    V--&gt;&gt;S: 5. Candidate IDs and scores
+    S-&gt;&gt;M: 6. Hydrate product details
+    M--&gt;&gt;S: Product data
+    S--&gt;&gt;U: 7. Ranked results (under 100 ms)">sequenceDiagram
+    participant U as User
+    participant S as Search API
+    participant EC as Query Embedding Cache
+    participant EM as Embedding Service
+    participant V as Vector DB Local Region
+    participant M as Metadata Store
+    U-&gt;&gt;S: 1. Search query
+    S-&gt;&gt;EC: 2. Lookup query embedding
+    alt Cache hit
+        EC--&gt;&gt;S: 3a. Vector
+    else Cache miss
+        S-&gt;&gt;EM: 3b. Embed query
+        EM--&gt;&gt;S: Vector
+        S-&gt;&gt;EC: Store with TTL
+    end
+    S-&gt;&gt;V: 4. ANN search with filters (top K)
+    V--&gt;&gt;S: 5. Candidate IDs and scores
+    S-&gt;&gt;M: 6. Hydrate product details
+    M--&gt;&gt;S: Product data
+    S--&gt;&gt;U: 7. Ranked results (under 100 ms)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent Embedding Consumer</h3>
+        <p>A batch consumer that applies deletes, skips stale events and unchanged content, embeds in batches, performs version-guarded upserts, and dead-letters poison messages:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onProductEvent</span>(batch):                                   <span class="tk-com">// Kafka consumer, keyed by productId</span></span>
+<span class="line">    toEmbed <span class="tk-op">=</span> []</span>
+<span class="line">    <span class="tk-kw">for</span> event <span class="tk-kw">in</span> batch:</span>
+<span class="line">        <span class="tk-kw">if</span> event.type <span class="tk-op">==</span> <span class="tk-str">&quot;DELETED&quot;</span>:</span>
+<span class="line">            vectorDb.<span class="tk-fn">delete</span>(event.productId, ifVersionLessThan <span class="tk-op">=</span> event.version)    <span class="tk-com">// tombstone</span></span>
+<span class="line">            <span class="tk-kw">continue</span></span>
+<span class="line"></span>
+<span class="line">        newHash <span class="tk-op">=</span> <span class="tk-fn">sha256</span>(event.title <span class="tk-op">+</span> event.description <span class="tk-op">+</span> event.attributes)</span>
+<span class="line">        stored  <span class="tk-op">=</span> vectorDb.<span class="tk-fn">getMeta</span>(event.productId)                <span class="tk-com">// returns version + contentHash</span></span>
+<span class="line">        <span class="tk-kw">if</span> stored <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> stored.version <span class="tk-op">&gt;=</span> event.version:</span>
+<span class="line">            <span class="tk-kw">continue</span>                                               <span class="tk-com">// stale or duplicate event</span></span>
+<span class="line">        <span class="tk-kw">if</span> stored <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> stored.contentHash <span class="tk-op">==</span> newHash:</span>
+<span class="line">            vectorDb.<span class="tk-fn">updateMetadata</span>(event.productId, event.filterFields, version <span class="tk-op">=</span> event.version)   <span class="tk-com">// price, stock: no re-embed</span></span>
+<span class="line">            <span class="tk-kw">continue</span></span>
+<span class="line">        toEmbed.<span class="tk-fn">add</span>((event, newHash))</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> toEmbed is <span class="tk-kw">not</span> empty:</span>
+<span class="line">        vectors <span class="tk-op">=</span> embeddingService.<span class="tk-fn">embedBatch</span>(toEmbed.<span class="tk-fn">map</span>(text), timeout <span class="tk-op">=</span> <span class="tk-num">2s</span>)      <span class="tk-com">// batched for GPU efficiency</span></span>
+<span class="line">        vectorDb.<span class="tk-fn">upsertBatch</span>(</span>
+<span class="line">            [(e.productId, vector, e.filterFields, version <span class="tk-op">=</span> e.version, contentHash <span class="tk-op">=</span> h) ...],</span>
+<span class="line">            conditional <span class="tk-op">=</span> <span class="tk-str">&quot;only if version is greater than stored version&quot;</span>)</span>
+<span class="line">    <span class="tk-fn">commitOffsets</span>(batch)                                           <span class="tk-com">// after success: at-least-once delivery</span></span>
+<span class="line"></span>
+<span class="line">on <span class="tk-fn">failure</span>(batch):</span>
+<span class="line">    retry <span class="tk-kw">with</span> exponential <span class="tk-fn">backoff</span> (max <span class="tk-num">5</span> attempts)</span>
+<span class="line">    <span class="tk-kw">if</span> still failing: publish to deadLetterTopic <span class="tk-kw">and</span> <span class="tk-kw">continue</span>      <span class="tk-com">// never block a partition forever</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Freshness SLO tracking</span></span>
+<span class="line">indexingLag <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> event.createdAt                              <span class="tk-com">// keep p99 under ~30 s to protect the 60 s target</span></span>
+<span class="line">alert <span class="tk-kw">if</span> oldestUnindexedEventAge <span class="tk-op">&gt;</span> <span class="tk-num">45</span> s</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Dual write without an outbox:</strong> Writing to the DB and publishing to Kafka as separate steps can lose or duplicate events on a crash. Use a transactional outbox or CDC.</li>
+          <li><strong>Unversioned or non-idempotent upserts:</strong> Out-of-order or retried events can overwrite a newer vector with an older one. Carry a monotonic version and apply only if newer.</li>
+          <li><strong>Re-embedding on every update:</strong> Price or stock changes do not alter semantics. Hash the embedding inputs and skip unchanged content, treating price and stock as filterable metadata updates rather than new vectors.</li>
+          <li><strong>Ignoring deletes:</strong> Delisted products must be removed with tombstone events, or they keep appearing in results.</li>
+          <li><strong>Mixing embedding model versions in one index:</strong> Vectors from different models are not comparable. Version the index and migrate with an alias swap.</li>
+          <li><strong>No lag alert or DLQ:</strong> Silent consumer stalls turn a one-minute SLO into hours. Alert on the age of the oldest unindexed event and route poison messages to a dead-letter queue.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams building semantic search usually treat embeddings as a <strong>derived data store</strong> fed from the source of truth, and evolve in this order:</p>
+        <ul>
+          <li><strong>Step 0 — Define SLOs:</strong> Set targets for freshness (p99 time to searchable), query p99, and recall. 10k per minute is modest, but size for bulk-reindex peaks too.</li>
+          <li><strong>Step 1 — Reliable event capture:</strong> A transactional outbox or CDC from the primary DB into Kafka, keyed by product ID.</li>
+          <li><strong>Step 2 — Embedding workers:</strong> Batch requests to the embedding service, skip unchanged content using a hash, and cache embeddings by content hash.</li>
+          <li><strong>Step 3 — Idempotent upsert:</strong> Version-guarded upserts into the vector DB with metadata filters, plus retry with backoff and a DLQ.</li>
+          <li><strong>Step 4 — Multi-region:</strong> Replicate the event stream (or have each region consume it) and keep a regional index per region so queries stay local. Fail traffic over at the DNS or gateway level.</li>
+          <li><strong>Step 5 — Evolve safely:</strong> Blue/green index builds for model changes, replay for recovery, and sampled recall checks against ground truth.</li>
+        </ul>
+        <p>Treat the index as rebuildable and the event log as the source for rebuilding it.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When freshness is measured in <strong>minutes, not milliseconds</strong>, decouple indexing from the write path with a durable stream and idempotent consumers. You get low write latency, spike absorption, and independent failure domains, and freshness becomes a lag metric you can alert on. Reach for synchronous or hybrid paths only when the requirement is genuinely sub-second visibility.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

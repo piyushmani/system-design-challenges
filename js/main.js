@@ -98,16 +98,16 @@ document.documentElement.setAttribute('data-style', STYLE_MAP[ACTIVE_STYLE_ID] |
     });
 
     const moreBtn = document.getElementById('filterMoreBtn');
-    if (moreBtn) {
+    const drawer = document.getElementById('tagsDrawer');
+    if (moreBtn && drawer) {
       moreBtn.addEventListener('click', () => {
-        const bar = document.querySelector('.filter-bar');
-        if (bar.classList.contains('show-hidden-tags')) {
-          bar.classList.remove('show-hidden-tags');
-          moreBtn.textContent = moreBtn.dataset.originalText || moreBtn.textContent;
+        const isOpen = drawer.classList.toggle('is-open');
+        moreBtn.classList.toggle('active', isOpen);
+        if (isOpen) {
+          moreBtn.dataset.originalText = moreBtn.dataset.originalText || moreBtn.textContent;
+          moreBtn.textContent = "✕ Close topics";
         } else {
-          bar.classList.add('show-hidden-tags');
-          moreBtn.dataset.originalText = moreBtn.textContent;
-          moreBtn.textContent = "Show less";
+          moreBtn.textContent = moreBtn.dataset.originalText || moreBtn.textContent;
         }
       });
     }

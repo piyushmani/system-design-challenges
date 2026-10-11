@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cart Chaos: Selecting the Optimal Load Balancer for Multi-Region Traffic — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">06 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Load Balancing</span>
+      <span class="tag tag--green">Multi-Region</span>
+      <span class="tag tag--amber">Traffic Routing</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Cart Chaos: Selecting the Optimal Load Balancer for Multi-Region Traffic</h1>
+      <p class="q-scenario"><strong>Derek</strong>, backend tech lead at a fast-growing e-commerce platform, has just moved to a <strong>multi-region deployment</strong> to cut latency for global customers. A <strong>global load balancer</strong> sends traffic to regional Kubernetes clusters. <strong>Cart interactions</strong> must feel instant, while <strong>checkout and inventory</strong> must be strictly consistent to <strong>prevent overselling</strong>. The design must provide <strong>high availability, low latency and clear observability</strong>, survive the loss of a region, and not trap a user's session inside a single pod or region. He must choose a routing and session strategy that meets these goals.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">DNS geo-routing with low TTLs to the nearest region and a fully active-active application layer; carts are stored locally and replicated asynchronously across regions (eventual consistency), with conflicts handled at checkout.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">A global L7 load balancer with health checks and geo-routing to the nearest healthy region; stateless services; carts in a strongly consistent, globally replicated store (or a cache with robust conflict resolution); checkout runs through the store&#x27;s strict consistency layer.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">The client SDK picks the best region by measured latency and uses sticky sessions at the regional balancer to keep cart data in pod memory or local cache; on pod failure, requests fail over to a global store or another region.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Send every checkout and cart write to a single primary region through the global load balancer, serve reads from replicas in other regions, and rely on multi-AZ deployment in the primary region for availability.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Global L7 + Stateless Services + Strong Store</h3>
+        <p>Given the split requirement (fast carts, strictly correct checkout and inventory) and the need to survive a regional failure, the best design is a <strong>global Layer 7 load balancer in front of stateless services</strong>, with state held in a store that provides strong consistency for the paths that need it. Routing stays simple and observable, any healthy region can serve any request, and the consistency guarantee comes from the data layer rather than from routing tricks. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Routing that follows health and proximity:</strong> A global L7 balancer (anycast or latency-based routing with active health checks) steers users to the nearest healthy region and drains a failing one within seconds, without waiting on DNS TTLs.</li>
+          <li><strong>Stateless services remove stickiness:</strong> With no session state in pods, any instance in any region can handle a request. Deploys, autoscaling and pod failures stop being user-visible, and failover does not lose carts.</li>
+          <li><strong>Consistency lives in the data layer:</strong> Inventory reservation and order placement go through a store with strong guarantees (consensus-backed or single-writer per key), so two regions cannot both sell the last unit.</li>
+          <li><strong>Observability is end to end:</strong> The L7 balancer can attach a request ID, region and routing decision to every request, and expose per-region latency, error rate, health status and failover events for dashboards and tracing.</li>
+          <li><strong>Cart speed and checkout safety can be tuned separately:</strong> Cart operations can use the nearest replica or a conflict-tolerant model (a per-user home region or a mergeable structure), while checkout takes the strict path only at the moment correctness matters.</li>
+        </ul>
+        <p>A solid implementation uses <strong>health-checked, latency-aware global routing</strong>, <strong>stateless services with externalized sessions</strong> (a signed token or a shared store), <strong>idempotent checkout with idempotency keys</strong>, <strong>inventory reservations with expiry</strong>, <strong>request IDs and region tags in every trace</strong>, and <strong>regular regional failover drills</strong>.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🌐</div>
+          <h4>A — DNS Geo-Routing with Async Carts</h4>
+          <p>DNS routing reacts slowly because of resolver caching and TTL behavior, even with low TTLs, so failover can leave users hitting a dead region for minutes. More importantly, asynchronous cross-region replication means two regions can both sell the last unit before they hear about each other, and discovering that at checkout means <strong>cancelled orders and refunds</strong>. <strong>Caveat:</strong> eventually consistent carts are fine, and often the right choice for the cart itself; the problem is applying the same model to inventory and checkout.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Client-Side Region Selection with Sticky Sessions</h4>
+          <p>Keeping carts in pod memory makes the pod a single point of failure for the user's cart, and sticky sessions undermine load distribution and rolling deploys. Letting the client choose the region adds a control and trust problem (stale measurements, no central way to drain a region, hard observability), and failover relies on a store that is not part of the primary design. <strong>Caveat:</strong> client-side latency probing can feed hints into a central routing decision, but the platform should keep control of routing.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📍</div>
+          <h4>D — Single Primary Region for Writes</h4>
+          <p>Funneling every write to one region guarantees consistency but makes <strong>checkout and cart latency poor for distant users</strong>, and multi-AZ does not protect against the loss of the entire region. The primary becomes both a bottleneck and a regional single point of failure, and failover requires a risky promotion with possible data loss from asynchronous replication. <strong>Caveat:</strong> this is a simple and valid design for early-stage systems or user bases concentrated in one geography, and it can be a stepping stone to option B.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Global L7 + Stateless Services + Strong Store ✓</h4>
+          <p>A global L7 load balancer with health checks and geo-routing to the nearest healthy region; stateless services; carts in a strongly consistent, globally replicated store (or a cache with robust confli</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Cart Latency for Users</th><th>Oversell Protection</th><th>Regional Failover Speed</th><th>Session Resilience</th><th>Observability</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — DNS Geo-Routing + Async Carts</td><td>Low ✅</td><td>Weak ❌</td><td>Slow (DNS TTLs) ❌</td><td>Good (regional replication) ⚠</td><td>Medium ⚠</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Global L7 + Stateless + Strong Store ✓</td><td>Low for carts, higher for checkout ⚠</td><td>Strong ✅</td><td>Fast (health checks) ✅</td><td>Good (stateless) ✅</td><td>High ✅</td><td>Medium–High ⚠</td></tr>
+            <tr><td class="tt-option">C — Client Routing + Sticky Sessions</td><td>Low ✅</td><td>Depends on fallback store ⚠</td><td>Client dependent ❌</td><td>Poor (pod memory) ❌</td><td>Low ❌</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Single Primary Region</td><td>High for distant users ❌</td><td>Strong ✅</td><td>Risky promotion ❌</td><td>Good ✅</td><td>Medium ⚠</td><td>Low ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — DNS Geo-Routing + Async Carts</h4>
+          <p>Content-heavy or browse-focused experiences where eventual consistency is acceptable everywhere and the cost of a conflict is low.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Global L7 + Stateless + Strong Store</h4>
+          <p>Global e-commerce and similar systems that need low-latency browsing, strict correctness for inventory and payments, and regional fault tolerance.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Client Routing + Sticky Sessions</h4>
+          <p>Latency-sensitive client experiences (games, real-time apps) with a stable session model, where a lost session is cheap and the client app is under your control.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Single Primary Region</h4>
+          <p>Early-stage products or single-geography user bases where simplicity matters more than cross-region latency, as a stepping stone to multi-region.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Global L7 Routing with Stateless Regional Services</h3>
+        <p>The global load balancer routes to the nearest healthy region. Services are stateless, carts use a fast mergeable store, and checkout and inventory use a strongly consistent store:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TB
+    U[Customers worldwide] --&gt; G[Global L7 load balancer with health checks]
+    G --&gt;|Nearest healthy| R1[Region 1 Kubernetes]
+    G --&gt;|Nearest healthy| R2[Region 2 Kubernetes]
+    G --&gt;|Nearest healthy| R3[Region 3 Kubernetes]
+    R1 --&gt; S1[Stateless cart and checkout services]
+    R2 --&gt; S2[Stateless cart and checkout services]
+    R3 --&gt; S3[Stateless cart and checkout services]
+    S1 --&gt; CS[Cart store with home region and merge rules]
+    S2 --&gt; CS
+    S3 --&gt; CS
+    S1 --&gt; IS[Strongly consistent inventory and order store]
+    S2 --&gt; IS
+    S3 --&gt; IS
+    G --&gt; OBS[Metrics and tracing with region and request id]">flowchart TB
+    U[Customers worldwide] --&gt; G[Global L7 load balancer with health checks]
+    G --&gt;|Nearest healthy| R1[Region 1 Kubernetes]
+    G --&gt;|Nearest healthy| R2[Region 2 Kubernetes]
+    G --&gt;|Nearest healthy| R3[Region 3 Kubernetes]
+    R1 --&gt; S1[Stateless cart and checkout services]
+    R2 --&gt; S2[Stateless cart and checkout services]
+    R3 --&gt; S3[Stateless cart and checkout services]
+    S1 --&gt; CS[Cart store with home region and merge rules]
+    S2 --&gt; CS
+    S3 --&gt; CS
+    S1 --&gt; IS[Strongly consistent inventory and order store]
+    S2 --&gt; IS
+    S3 --&gt; IS
+    G --&gt; OBS[Metrics and tracing with region and request id]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Reservation-Based Checkout and Fast Cart Path</h3>
+        <p>Checkout is idempotent and uses a linearizable reservation. Cart operations use a nearest-replica, mergeable model so they stay fast:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">checkout</span>(cart, idempotencyKey):</span>
+<span class="line">    <span class="tk-com">// Replay protection: the same key always returns the same outcome</span></span>
+<span class="line">    existing <span class="tk-op">=</span> orderStore.<span class="tk-fn">getByIdempotencyKey</span>(idempotencyKey)</span>
+<span class="line">    <span class="tk-kw">if</span> existing <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> existing</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 1. Strict path: reserve stock with a quorum or single-writer write</span></span>
+<span class="line">    reservation <span class="tk-op">=</span> inventoryStore.<span class="tk-fn">reserve</span>(</span>
+<span class="line">        items <span class="tk-op">=</span> cart.items,</span>
+<span class="line">        ttl <span class="tk-op">=</span> 10min,</span>
+<span class="line">        requestId <span class="tk-op">=</span> idempotencyKey,</span>
+<span class="line">        consistency <span class="tk-op">=</span> <span class="tk-str">&#x27;LINEARIZABLE&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> reservation.failed:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">OutOfStock</span>(reservation.unavailableSkus)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 2. Revalidate price from the authoritative source (carts may be stale)</span></span>
+<span class="line">    total <span class="tk-op">=</span> pricing.<span class="tk-fn">quote</span>(cart.items)</span>
+<span class="line">    <span class="tk-kw">if</span> total <span class="tk-op">!=</span> cart.displayedTotal:</span>
+<span class="line">        inventoryStore.<span class="tk-fn">release</span>(reservation.id)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">PriceChanged</span>(total)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 3. Charge, then confirm or release</span></span>
+<span class="line">    payment <span class="tk-op">=</span> paymentProvider.<span class="tk-fn">charge</span>(cart.userId, total, idempotencyKey <span class="tk-op">=</span> idempotencyKey)</span>
+<span class="line">    <span class="tk-kw">if</span> payment.failed:</span>
+<span class="line">        inventoryStore.<span class="tk-fn">release</span>(reservation.id)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">PaymentFailed</span>(payment.reason)</span>
+<span class="line"></span>
+<span class="line">    order <span class="tk-op">=</span> orderStore.<span class="tk-fn">create</span>(cart, reservation.id, payment.id, idempotencyKey <span class="tk-op">=</span> idempotencyKey)</span>
+<span class="line">    inventoryStore.<span class="tk-fn">confirm</span>(reservation.id)</span>
+<span class="line">    <span class="tk-kw">return</span> order</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Cart operations take the fast path: nearest replica, mergeable model</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">addToCart</span>(userId, sku, qty):</span>
+<span class="line">    cartStore.<span class="tk-fn">merge</span>(userId, { sku: sku, qty: qty, ts: <span class="tk-fn">now</span>() })   <span class="tk-com">// union of items, latest quantity per sku wins</span></span>
+<span class="line">    <span class="tk-kw">return</span> cartStore.<span class="tk-fn">read</span>(userId, consistency <span class="tk-op">=</span> <span class="tk-str">&#x27;LOCAL&#x27;</span>)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Relying on DNS TTLs for failover:</strong> Resolvers and clients cache longer than expected. Use health-checked global routing with fast drain, and keep DNS as a coarse layer.</li>
+          <li><strong>Sticky sessions for stateful pods:</strong> They hide state problems until a pod restarts. Externalize state and treat stickiness, if used at all, as a performance hint.</li>
+          <li><strong>One consistency model for everything:</strong> Strong everywhere makes carts slow, eventual everywhere oversells. Split by operation.</li>
+          <li><strong>Checking stock without reserving it:</strong> A read-then-purchase flow oversells under concurrency. Reserve atomically with an expiry.</li>
+          <li><strong>Non-idempotent checkout:</strong> Retries after timeouts create duplicate orders or charges. Use idempotency keys end to end.</li>
+          <li><strong>Untested regional failover:</strong> Capacity, quorum and data-layer assumptions break in the first real outage. Run failover drills, including loss of the strongly consistent store's quorum.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, global commerce platforms <strong>assign each kind of data a consistency level</strong> and route accordingly. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Classify operations:</strong> Browse and cart reads and writes (latency-sensitive, mergeable), checkout and inventory (correctness-critical), and analytics (eventual).</li>
+          <li><strong>Step 1 — Put a global L7 entry point in front:</strong> Latency-based routing with active health checks, automatic regional failover and a clear procedure to drain a region.</li>
+          <li><strong>Step 2 — Make services stateless:</strong> Externalize sessions (signed tokens or a shared store) and keep pods disposable.</li>
+          <li><strong>Step 3 — Pick stores per consistency need:</strong> Home-region or mergeable stores for carts, strongly consistent storage for inventory reservations and orders.</li>
+          <li><strong>Step 4 — Make checkout idempotent and reservation-based:</strong> Reserve stock with an expiry at checkout, confirm on payment, release on timeout, and use idempotency keys on every step.</li>
+          <li><strong>Step 5 — Observe and rehearse:</strong> Dashboards for per-region latency, error rates, replication lag and reservation conflicts, plus regular game days that fail a region on purpose.</li>
+        </ul>
+        <p>Match the consistency model to the operation, not to the whole application.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Use a <strong>global L7 load balancer</strong> for health-aware, geo-aware routing, keep services <strong>stateless</strong>, and put strong consistency in the <strong>data layer for checkout and inventory</strong> while keeping carts fast. DNS-only eventual consistency risks overselling, sticky in-memory sessions are fragile, and a single write region sacrifices latency and regional resilience.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

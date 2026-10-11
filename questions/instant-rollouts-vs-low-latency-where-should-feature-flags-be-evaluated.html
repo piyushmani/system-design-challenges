@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Instant rollouts vs. low latency: Where should feature flags be evaluated? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">10 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Feature Flags</span>
+      <span class="tag tag--green">Deployment</span>
+      <span class="tag tag--amber">Edge Computing</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Instant rollouts vs. low latency: Where should feature flags be evaluated?</h1>
+      <p class="q-scenario"><strong>Maya</strong> is the platform architect for a <strong>globally distributed SaaS</strong> application serving millions of users across regions. Customers expect <strong>API responses under 100 ms</strong>, while product teams need <strong>instant rollouts</strong> and <strong>emergency kill switches</strong>. Today every API request calls a <strong>central flag service</strong>, which inflates <strong>tail latency</strong> and is a <strong>single point of failure</strong> during outages. She must redesign flag evaluation to keep <strong>latency low at scale</strong>, enable <strong>near-real-time rollouts and rollbacks</strong>, stay <strong>highly available in every region</strong>, and provide <strong>observability</strong> into flag changes and their effects. Which architecture should she adopt?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep centralized synchronous evaluation: query the central flag service on every request, scale it horizontally and add caching layers in front, for immediate global consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Local in-memory caching with periodic polling: services evaluate flags locally from a cache refreshed by polling the central datastore every few seconds, falling back to the last known values if the store is unavailable.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Push-based local evaluation with fallbacks: a central control plane stores flags and broadcasts changes through a global pub/sub system; each instance runs a local SDK that evaluates flags from an in-memory cache, receives changes over a persistent connection (gRPC or SSE), falls back to polling or last-known values if the connection drops, and emits change events for metrics and audit logs.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Deployment-time flags: bake flags into deployment artifacts or environment variables, use canary deployments for gradual rollouts, and rely on rollbacks and redeploys to toggle features.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Push-Based Local Evaluation</h3>
+        <p>The core insight is to separate the <strong>control plane</strong> (where flags are authored, audited, and distributed) from the <strong>data plane</strong> (where flags are evaluated on the request path). Evaluating in-process from an in-memory ruleset takes microseconds and has no network dependency, which fixes both the tail latency and the single point of failure, while a push channel with a polling fallback keeps propagation in the sub-second to few-second range. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Zero network hops on the hot path:</strong> Evaluation is an in-process function call over a locally cached ruleset (typically microseconds), so flag checks stop contributing to p99 and the 100 ms API budget is untouched.</li>
+          <li><strong>Fast propagation:</strong> Changes streamed over SSE or gRPC typically reach instances in about a second or less (depending on fan-out topology), which is what makes kill switches useful during incidents. Polling alone (Option B) is bounded by the poll interval and adds load proportional to fleet size.</li>
+          <li><strong>Survives outages (fail-static):</strong> If the control plane or the push channel fails, instances keep serving from the last known ruleset and reconnect with backoff, while a bootstrap snapshot or code-level defaults cover cold starts. A flag-service outage stops being an API outage.</li>
+          <li><strong>Regional fan-out:</strong> Regional relay or proxy nodes (the pattern behind LaunchDarkly's relay proxy, Unleash Edge, and flagd/OpenFeature setups) hold the persistent connections to local instances, so the control plane does not carry tens of thousands of direct connections.</li>
+          <li><strong>Observability built in:</strong> Control-plane audit logs record who changed what and when, and SDKs emit evaluation counts, ruleset versions, and propagation lag per instance, so a flag change can be correlated with error-rate or latency shifts.</li>
+        </ul>
+        <p>A mature setup includes <strong>versioned, validated rulesets</strong>, <strong>push with polling fallback</strong>, a <strong>bootstrap snapshot</strong> shipped with the artifact, <strong>deterministic bucketing</strong>, <strong>flag lifecycle management</strong> (owners, expiry, cleanup), and <strong>metrics on propagation lag and stale instances</strong>. Test the failure path regularly by cutting the control plane and confirming the platform keeps serving.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🌐</div>
+          <h4>A — Centralized Synchronous Evaluation</h4>
+          <p>Scaling and caching the central service reduces load but not the architectural problem: every request still pays a network round trip, the flag service stays on the critical path, and a regional or global outage still takes the API down. Adding a cache in front also undermines the 'immediate global consistency' claim, since cached entries are stale by definition. <strong>Caveat:</strong> a central call can be acceptable for rarely evaluated, low-QPS back-office paths.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">⏱️</div>
+          <h4>B — Local Cache with Polling</h4>
+          <p>A simple, widely used design and a valid <em>fallback</em> layer: local evaluation fixes latency and availability. The shortfall is propagation: a kill switch takes up to a full poll interval, and thousands of instances polling creates thundering-herd load unless you add jitter, ETags, or a CDN or relay in front. If a few seconds of delay is acceptable and you want the lowest operational cost, it is a legitimate choice, and it is exactly what Option C falls back to when the push connection drops.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🚢</div>
+          <h4>D — Deployment-Time Flags</h4>
+          <p>Deployment-time flags couple release speed to your CI/CD pipeline: a rollback takes minutes at best (build, canary, rollout), per-user or percentage targeting is impractical with environment variables, and an emergency kill switch would depend on the very deployment system that may be degraded during an incident. Flag state is also hard to audit across services. <strong>Caveat:</strong> deployment configuration is fine for permanent operational config (not true flags), and canaries complement flags for risky code releases.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Push-Based Local Evaluation ✓</h4>
+          <p>Push-based local evaluation with fallbacks: a central control plane stores flags and broadcasts changes through a global pub/sub system; each instance runs a local SDK that evaluates flags from an in-</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Evaluation Latency</th><th>Rollout and Kill-Switch Speed</th><th>Availability (No SPOF)</th><th>Cross-Instance Consistency</th><th>Operational Complexity</th><th>Auditability and Observability</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Central Sync Evaluation</td><td>Network hop per request ❌</td><td>Instant at the source ✅</td><td>Poor ❌ (SPOF)</td><td>Strong ⚠ (weaker once cached)</td><td>Medium ⚠</td><td>Centralized ✅</td></tr>
+            <tr><td class="tt-option">B — Local Cache + Polling</td><td>Microseconds ✅</td><td>Up to poll interval ⚠</td><td>Good ✅ (last known values)</td><td>Eventual ⚠</td><td>Low ✅</td><td>Moderate ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Push-Based Local Evaluation ✓</td><td>Microseconds ✅</td><td>Sub-second to seconds ✅</td><td>Strong ✅ (fail-static)</td><td>Eventual ⚠ (versioned)</td><td>Medium–High ⚠</td><td>Strong ✅</td></tr>
+            <tr><td class="tt-option">D — Deployment-Time Flags</td><td>None (compiled in) ✅</td><td>Minutes (redeploy) ❌</td><td>Good ✅</td><td>Per deployment ⚠</td><td>Low ✅</td><td>Weak ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Central Sync Evaluation</h4>
+          <p>Low-QPS administrative or back-office paths where a network call is affordable and instant global consistency matters more than latency.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Local Cache + Polling</h4>
+          <p>Smaller systems or relaxed propagation needs (tens of seconds is fine), or as the fallback path inside a push-based design.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Push-Based Local Evaluation</h4>
+          <p>Latency-sensitive, multi-region services that need kill switches in seconds, audit trails, and resilience to control-plane outages.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Deployment-Time Flags</h4>
+          <p>Static configuration that rarely changes (not true feature flags), or gating that should be tied to a specific build.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Flag Evaluation on the Request Path</h3>
+        <p>The hot path is a local, in-memory lookup with no network dependency:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant A as API Instance
+    participant S as Local SDK Cache
+    C-&gt;&gt;A: API request
+    A-&gt;&gt;S: 1. isEnabled for flag and user
+    S--&gt;&gt;A: 2. Evaluated in memory in microseconds
+    A--&gt;&gt;C: Response
+    Note over A,S: No network call on the request path">sequenceDiagram
+    participant C as Client
+    participant A as API Instance
+    participant S as Local SDK Cache
+    C-&gt;&gt;A: API request
+    A-&gt;&gt;S: 1. isEnabled for flag and user
+    S--&gt;&gt;A: 2. Evaluated in memory in microseconds
+    A--&gt;&gt;C: Response
+    Note over A,S: No network call on the request path</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Local Flag Client with Streaming, Polling Fallback, and Staleness Tracking</h3>
+        <p>Evaluation reads an immutable in-memory snapshot (no locks, no I/O); a background loop swaps in new rulesets from the stream and falls back to polling when the connection drops:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> FlagClient:</span>
+<span class="line">    state <span class="tk-op">=</span> <span class="tk-fn">Snapshot</span>(version <span class="tk-op">=</span> <span class="tk-num">0</span>, rules <span class="tk-op">=</span> <span class="tk-fn">bootstrapRules</span>())     <span class="tk-com">// shipped with the artifact</span></span>
+<span class="line">    lastUpdate <span class="tk-op">=</span> <span class="tk-fn">now</span>()</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">isEnabled</span>(flagKey, user, <span class="tk-kw">default</span>):</span>
+<span class="line">        snap <span class="tk-op">=</span> state                                            <span class="tk-com">// atomic read, no locks, no I/O</span></span>
+<span class="line">        rule <span class="tk-op">=</span> snap.rules[flagKey]</span>
+<span class="line">        <span class="tk-kw">if</span> rule <span class="tk-op">==</span> <span class="tk-lit">null</span>:  <span class="tk-kw">return</span> <span class="tk-kw">default</span></span>
+<span class="line">        <span class="tk-kw">if</span> rule.killSwitch:  <span class="tk-kw">return</span> <span class="tk-lit">false</span>                       <span class="tk-com">// kill switch always wins</span></span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> <span class="tk-fn">matchesTargeting</span>(rule, user):  <span class="tk-kw">return</span> rule.offValue</span>
+<span class="line">        bucket <span class="tk-op">=</span> <span class="tk-fn">hash</span>(flagKey <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> user.id) <span class="tk-op">%</span> <span class="tk-num">10000</span>          <span class="tk-com">// deterministic bucketing</span></span>
+<span class="line">        <span class="tk-kw">return</span> rule.rolloutBasisPoints <span class="tk-op">&gt;</span> bucket</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">startStreaming</span>():</span>
+<span class="line">        attempt <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">        <span class="tk-kw">loop</span> forever:</span>
+<span class="line">            <span class="tk-kw">try</span>:</span>
+<span class="line">                stream <span class="tk-op">=</span> <span class="tk-fn">connectSSE</span>(regionalRelayUrl, lastEventId <span class="tk-op">=</span> state.version)</span>
+<span class="line">                attempt <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">                <span class="tk-kw">for</span> msg <span class="tk-kw">in</span> stream:                              <span class="tk-com">// heartbeats prove the connection is alive</span></span>
+<span class="line">                    <span class="tk-kw">if</span> msg.version <span class="tk-op">&gt;</span> state.version:</span>
+<span class="line">                        state <span class="tk-op">=</span> <span class="tk-fn">Snapshot</span>(msg.version, <span class="tk-fn">validate</span>(msg.rules))   <span class="tk-com">// atomic swap after validation</span></span>
+<span class="line">                        lastUpdate <span class="tk-op">=</span> <span class="tk-fn">now</span>()</span>
+<span class="line">                        metrics.<span class="tk-fn">gauge</span>(<span class="tk-str">&#x27;flag_ruleset_version&#x27;</span>, msg.version)</span>
+<span class="line">            <span class="tk-kw">catch</span> ConnectionError:</span>
+<span class="line">                attempt <span class="tk-op">=</span> attempt <span class="tk-op">+</span> <span class="tk-num">1</span></span>
+<span class="line">                <span class="tk-fn">pollOnce</span>(etag <span class="tk-op">=</span> state.etag)                     <span class="tk-com">// fallback keeps rules fresh while push is down</span></span>
+<span class="line">                <span class="tk-fn">sleep</span>(<span class="tk-fn">min</span>(<span class="tk-num">30s</span>, <span class="tk-num">1s</span> <span class="tk-op">*</span> <span class="tk-num">2</span>^attempt) <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-num">1s</span>)) <span class="tk-com">// jittered backoff avoids reconnect storms</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">stalenessSeconds</span>():</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> lastUpdate                               <span class="tk-com">// alert, and gate risky flags, when too high</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Evaluating flags with a remote call per request:</strong> Even a fast service adds tail latency and puts a dependency in the critical path.</li>
+          <li><strong>No safe defaults:</strong> If the SDK cannot load rules at cold start and the code has no default, you get exceptions or the wrong behavior. Every flag needs a default and every service a bootstrap.</li>
+          <li><strong>Push without a polling fallback:</strong> Long-lived connections drop silently behind proxies and load balancers. Without heartbeats and a poll fallback, instances can run on stale rules for hours.</li>
+          <li><strong>Thundering herd on reconnect:</strong> After an outage, every instance reconnects and refetches at once. Use jittered backoff and regional relays that serve cached rulesets.</li>
+          <li><strong>Non-deterministic bucketing:</strong> Random numbers instead of a stable hash flip users between variants and corrupt experiments.</li>
+          <li><strong>Flag debt:</strong> Flags that are never removed create combinatorial test states and dead code paths. Give each flag an owner and an expiry.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Mature teams layer these approaches and keep the evaluation path free of network calls:</p>
+        <ul>
+          <li><strong>Step 0 — Classify flags:</strong> Release flags, ops flags and kill switches, experiments, and permission flags have different latency, audit, and lifetime needs. Kill switches get the strictest propagation and safety rules.</li>
+          <li><strong>Step 1 — Local evaluation:</strong> Ship an SDK that evaluates from an in-memory ruleset; this alone removes the latency and single-point-of-failure problems.</li>
+          <li><strong>Step 2 — Streaming updates:</strong> Add SSE or gRPC push through regional relays, with polling (jitter plus ETag) as the fallback.</li>
+          <li><strong>Step 3 — Bootstrap and defaults:</strong> Include a ruleset snapshot in the artifact or fetch it at startup from regional storage, and define a safe code-level default for every flag.</li>
+          <li><strong>Step 4 — Observability and governance:</strong> Audit logs, per-instance version metrics, propagation SLOs, flag ownership, and expiry dates.</li>
+          <li><strong>Step 5 — Combine with canaries:</strong> Use progressive delivery for code changes and flags for behavior changes, so a bad release can be switched off without a rollback.</li>
+        </ul>
+        <p>Set propagation targets (for example, 99% of instances within 5 seconds) from the business need for kill switches, not from the technology.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Move <strong>evaluation into the request path's own process</strong> and keep the central service as a <strong>control plane</strong> only. Push for speed, poll for safety, and fail static with defined staleness limits. A flag decision should never need a network call on the hot path.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

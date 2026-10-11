@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya&#x27;s Wallet Service: Balance Accuracy vs. Millisecond Latency — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">09 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Consistency</span>
+      <span class="tag tag--green">Latency</span>
+      <span class="tag tag--amber">Financial Systems</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya&#x27;s Wallet Service: Balance Accuracy vs. Millisecond Latency</h1>
+      <p class="q-scenario"><strong>Maya</strong> is the backend architect for a <strong>global wallet service</strong> handling microtransactions (payments, refunds, transfers). The business requires a <strong>99.99% uptime SLA</strong> and an SLO of <strong>99.95% of API requests within 100 ms</strong>. The most important SLI is <strong>balance correctness</strong>: no <strong>double-spending</strong> and no <strong>lost updates</strong>. Users around the world read and write from many regions. She must pick an architecture that balances <strong>availability, latency, scalability, and correctness</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Operate a single, globally-distributed, strongly-consistent SQL system that executes synchronous cross-region commits for every write operation (global transactions). This approach provides a singular source of truth and straightforward correctness, although every write incurs the latency associated with cross-region commits.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Direct all write operations to a primary region and deploy read replicas in alternate regions utilizing asynchronous replication. Ensure read-after-write consistency by implementing sticky sessions or client-side routing to the primary; apply compensating transactions to manage conflicts. This strategy yields fast local reads but may expose clients to stale data and introduces complexities in handling failure scenarios.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Partition accounts by key and establish leader-based consensus (e.g., Raft) for each shard within every region: utilize synchronous replication among local replicas for the leader of each shard to guarantee strong per-account consistency and low write latency, supplemented by asynchronous cross-region replication for disaster recovery. Position leaders geographically close to the majority of a shard&#x27;s active users, and incorporate health checks alongside rapid leader failover mechanisms.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Position a low-latency cache (such as Redis) ahead of reads and writes, pushing write intents to a durable event log for asynchronous processing. Provide immediate success responses to clients whenever feasible and reconcile any conflicts subsequently. This architecture prioritizes low latency and high availability, but it necessitates accepting eventual consistency for account balances.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Per-Shard Raft Groups with Regionally Placed Leaders</h3>
+        <p>A wallet is a case where <strong>correctness is per account</strong>: the invariant (balance never goes negative, each operation applied exactly once) concerns one account at a time. That means you do not need global agreement on every write, only <strong>linearizable agreement within each account's shard</strong>. Partitioning accounts into Raft groups whose replicas sit in nearby zones gives strong consistency with a quorum round trip of a few milliseconds, and placing each leader near its users keeps the 100 ms SLO achievable. Cross-region asynchronous replication adds disaster recovery without taxing the write path. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Strong correctness where it matters:</strong> All operations on one account go through its shard leader and commit via Raft quorum, giving a single linearizable history. A conditional update (<code>balance &gt;= amount</code>) plus an idempotency key prevents double-spend and duplicate application.</li>
+          <li><strong>Latency within budget:</strong> A write commits after acknowledgement from a majority of replicas in the same region (typically 1 to 3 ms across zones), so p99.95 under 100 ms is realistic, unlike any design that waits on an intercontinental round trip.</li>
+          <li><strong>Scalable by construction:</strong> Accounts are independent, so throughput scales by adding shards. Hot accounts are limited by one leader, but a wallet's per-account rate is naturally modest.</li>
+          <li><strong>Availability through local redundancy:</strong> Losing a node or zone triggers a Raft leader election in seconds, and replicas in multiple zones keep the shard serving. Health checks and fast failover support a 99.99% target.</li>
+          <li><strong>Disaster recovery without write-path penalty:</strong> Async replication to a second region protects against region loss, with a defined RPO/RTO, while normal writes never wait on it.</li>
+        </ul>
+        <p>Combine <strong>an immutable double-entry ledger</strong>, <strong>balance updates guarded by conditional checks</strong>, <strong>idempotency keys on every mutation</strong>, <strong>geo-aware shard placement</strong>, <strong>a rehearsed failover and DR runbook</strong>, and <strong>continuous invariant checks</strong> (ledger sum equals balance, total money conserved) as a direct measurement of the correctness SLI.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🌍</div>
+          <h4>A — Global Synchronous Cross-Region Commits</h4>
+          <p>It gives the simplest mental model and strong consistency, but <strong>every write pays the cost of a cross-region quorum</strong>. Inter-continental round trips commonly range from tens to a few hundred milliseconds, which makes a 100 ms p99.95 target unrealistic for global user bases and leaves little room for retries. Partitions between regions can also stall commits. <strong>Caveat:</strong> viable when the footprint is regional (for example regions within one continent) and the latency budget allows it.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🏠</div>
+          <h4>B — Single Primary Region + Async Read Replicas</h4>
+          <p>All writes go to one region, so users elsewhere pay long round trips (violating the latency SLO), and the primary region is a concentrated availability risk. Replicas are stale, so sticky routing or compensations are needed, and when a primary fails over to an async replica, recently acknowledged writes can be lost, which in a wallet means lost updates. Compensating transactions are a poor substitute for preventing double-spend. <strong>Caveat:</strong> a reasonable, simpler design when users are concentrated near one region and the SLA is looser.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧪</div>
+          <h4>D — Cache + Event Log with Optimistic Success</h4>
+          <p>Acknowledging before validating against the authoritative balance makes <strong>double-spending possible</strong>: two concurrent debits can both succeed, and reconciliation later produces negative balances or clawbacks. That directly violates the system's most important SLI. Eventual consistency is acceptable for read-side projections, not for the decision to approve a spend. <strong>Caveat:</strong> suitable for low-value or non-monetary counters (for example loyalty points with tolerant policies), or as a read cache in front of the authoritative write path.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Per-Shard Raft Groups with Regionally Placed Leaders ✓</h4>
+          <p>Partition accounts by key and establish leader-based consensus (e.g., Raft) for each shard within every region: utilize synchronous replication among local replicas for the leader of each shard to gua</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Balance Correctness (No Double-Spend)</th><th>Write Latency (Global Users)</th><th>Availability (99.99%)</th><th>Horizontal Scalability</th><th>Disaster-Recovery Data Loss (RPO)</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Global Synchronous Commits</td><td>Strongest ✅</td><td>Poor (cross-region RTT) ❌</td><td>Good, but partitions stall commits ⚠</td><td>Good ✅</td><td>Near zero ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — Single Primary + Async Replicas</td><td>Strong at primary, risky at failover ⚠</td><td>Poor for remote writers ❌</td><td>Primary region is a risk ❌</td><td>Limited write scaling ❌</td><td>Non-zero ❌</td><td>Low–Medium ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Per-Shard Raft + Regional Leaders ✓</td><td>Strong per account ✅</td><td>Excellent for home-region users ✅</td><td>Strong (zone failover) ✅</td><td>Excellent (shard by account) ✅</td><td>Seconds with async DR ⚠</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">D — Cache + Event Log, Optimistic</td><td>Weak (double-spend possible) ❌</td><td>Excellent ✅</td><td>Excellent ✅</td><td>Excellent ✅</td><td>Depends on the log ⚠</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Global Synchronous Commits</h4>
+          <p>Users within one continent or tightly grouped regions, a relaxed latency budget, and a preference for the simplest strongly consistent model.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Single Primary + Async Replicas</h4>
+          <p>Users concentrated near one region, moderate availability targets, and read-heavy traffic where stale reads are tolerable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Per-Shard Raft + Regional Leaders</h4>
+          <p>Global user base, strict per-account correctness, tight latency SLOs, and a team able to operate a sharded consensus system or a managed equivalent.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Cache + Event Log, Optimistic</h4>
+          <p>Non-monetary or low-risk counters and read-side projections where temporary inconsistency is acceptable and corrections are cheap.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Write Path: Local Raft Quorum, Async Cross-Region DR</h3>
+        <p>A debit is routed to the account shard's leader, commits after a local majority acknowledges, and replicates to the DR region asynchronously:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant API as Regional API
+    participant L as Shard Leader (Raft)
+    participant F as Local Followers (other zones)
+    participant DR as DR Region (async)
+    C-&gt;&gt;API: Debit 20 with Idempotency-Key K
+    API-&gt;&gt;L: Route to leader for the account shard
+    L-&gt;&gt;L: Check K not seen and balance is at least 20
+    L-&gt;&gt;F: Append log entry
+    F--&gt;&gt;L: Quorum ack (about 1 to 3 ms in region)
+    L--&gt;&gt;API: Committed with new balance
+    API--&gt;&gt;C: 200 OK
+    L--&gt;&gt;DR: Async replicate log (RPO of seconds)">sequenceDiagram
+    participant C as Client
+    participant API as Regional API
+    participant L as Shard Leader (Raft)
+    participant F as Local Followers (other zones)
+    participant DR as DR Region (async)
+    C-&gt;&gt;API: Debit 20 with Idempotency-Key K
+    API-&gt;&gt;L: Route to leader for the account shard
+    L-&gt;&gt;L: Check K not seen and balance is at least 20
+    L-&gt;&gt;F: Append log entry
+    F--&gt;&gt;L: Quorum ack (about 1 to 3 ms in region)
+    L--&gt;&gt;API: Committed with new balance
+    API--&gt;&gt;C: 200 OK
+    L--&gt;&gt;DR: Async replicate log (RPO of seconds)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent Conditional Debit and Cross-Shard Transfer</h3>
+        <p>A debit commits atomically on the account's shard with an idempotency check and a balance guard. Transfers across shards use a persisted state machine with holds so each step can be retried safely:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">debit</span>(accountId, amount, idemKey):</span>
+<span class="line">    shard <span class="tk-op">=</span> router.<span class="tk-fn">leaderFor</span>(accountId)                     <span class="tk-com">// leader placed near the account&#x27;s home region</span></span>
+<span class="line">    <span class="tk-kw">return</span> shard.<span class="tk-fn">transaction</span>():                             <span class="tk-com">// commits after a Raft majority acknowledges</span></span>
+<span class="line">        prior <span class="tk-op">=</span> ledger.<span class="tk-fn">find</span>(idemKey)</span>
+<span class="line">        <span class="tk-kw">if</span> prior <span class="tk-op">!=</span> <span class="tk-lit">null</span>: <span class="tk-kw">return</span> prior.result               <span class="tk-com">// retry: same answer, no second effect</span></span>
+<span class="line">        acct <span class="tk-op">=</span> select balance, version <span class="tk-kw">from</span> accounts where id <span class="tk-op">=</span> accountId <span class="tk-kw">for</span> update</span>
+<span class="line">        <span class="tk-kw">if</span> acct.balance <span class="tk-op">&lt;</span> amount:</span>
+<span class="line">            <span class="tk-kw">return</span> INSUFFICIENT_FUNDS</span>
+<span class="line">        update accounts set balance <span class="tk-op">=</span> balance <span class="tk-op">-</span> amount, version <span class="tk-op">=</span> version <span class="tk-op">+</span> <span class="tk-num">1</span> where id <span class="tk-op">=</span> accountId</span>
+<span class="line">        ledger.<span class="tk-fn">insert</span>(entryId <span class="tk-op">=</span> idemKey, account <span class="tk-op">=</span> accountId, delta <span class="tk-op">=</span> <span class="tk-op">-</span>amount, ts <span class="tk-op">=</span> <span class="tk-fn">hlcNow</span>())</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">OK</span>(acct.balance <span class="tk-op">-</span> amount)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">transfer</span>(src, dst, amount, transferId):</span>
+<span class="line">    state <span class="tk-op">=</span> transfers.<span class="tk-fn">createIfAbsent</span>(transferId, src, dst, amount, status <span class="tk-op">=</span> <span class="tk-str">&#x27;PENDING&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> state.status <span class="tk-kw">in</span> [<span class="tk-str">&#x27;COMPLETED&#x27;</span>, <span class="tk-str">&#x27;FAILED&#x27;</span>]: <span class="tk-kw">return</span> state.result          <span class="tk-com">// idempotent replay</span></span>
+<span class="line"></span>
+<span class="line">    hold <span class="tk-op">=</span> router.<span class="tk-fn">leaderFor</span>(src).<span class="tk-fn">placeHold</span>(src, amount, holdId <span class="tk-op">=</span> transferId)  <span class="tk-com">// conditional on available balance</span></span>
+<span class="line">    <span class="tk-kw">if</span> hold <span class="tk-op">!=</span> OK:</span>
+<span class="line">        transfers.<span class="tk-fn">update</span>(transferId, status <span class="tk-op">=</span> <span class="tk-str">&#x27;FAILED&#x27;</span>, reason <span class="tk-op">=</span> hold)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">FAILED</span>(hold)</span>
+<span class="line"></span>
+<span class="line">    credited <span class="tk-op">=</span> <span class="tk-fn">retryWithBackoff</span>(maxAttempts <span class="tk-op">=</span> <span class="tk-num">5</span>):</span>
+<span class="line">        router.<span class="tk-fn">leaderFor</span>(dst).<span class="tk-fn">credit</span>(dst, amount, entryId <span class="tk-op">=</span> transferId <span class="tk-op">+</span> <span class="tk-str">&#x27;:credit&#x27;</span>)   <span class="tk-com">// idempotent by entry id</span></span>
+<span class="line">    <span class="tk-kw">if</span> credited <span class="tk-op">!=</span> OK:</span>
+<span class="line">        router.<span class="tk-fn">leaderFor</span>(src).<span class="tk-fn">releaseHold</span>(transferId)                          <span class="tk-com">// compensate</span></span>
+<span class="line">        transfers.<span class="tk-fn">update</span>(transferId, status <span class="tk-op">=</span> <span class="tk-str">&#x27;FAILED&#x27;</span>, reason <span class="tk-op">=</span> <span class="tk-str">&#x27;credit failed&#x27;</span>)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">FAILED</span>(<span class="tk-str">&#x27;credit failed&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line">    router.<span class="tk-fn">leaderFor</span>(src).<span class="tk-fn">captureHold</span>(transferId)                              <span class="tk-com">// cannot fail for a valid hold</span></span>
+<span class="line">    transfers.<span class="tk-fn">update</span>(transferId, status <span class="tk-op">=</span> <span class="tk-str">&#x27;COMPLETED&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> OK</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// A recovery worker scans transfers stuck in PENDING and resumes them from persisted state</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Read-modify-write without a guard:</strong> Reading a balance then writing a new one races under concurrency. Use conditional updates or serializable transactions on the shard.</li>
+          <li><strong>No idempotency keys:</strong> Retries after timeouts apply a payment twice. Make every mutation idempotent and return the stored result on repeat.</li>
+          <li><strong>Mutable balances with no ledger:</strong> Without append-only entries you cannot audit or reconcile. Keep an immutable ledger as the system of record.</li>
+          <li><strong>Naive cross-shard transfers:</strong> Debiting one shard and crediting another without durable state loses or duplicates money on failure. Use holds, persisted saga state, and compensation, or 2PC.</li>
+          <li><strong>Reading balances from followers for decisions:</strong> A stale balance can approve an overspend. Use leader or lease reads for authorization.</li>
+          <li><strong>Never testing region failover:</strong> RPO and RTO are theoretical until drilled. Rehearse leader failover, zone loss, and region loss regularly.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Financial platforms separate <strong>what must be linearizable</strong> (the decision to apply a movement of money on an account) from <strong>what can be eventual</strong> (reporting, notifications, analytics). Systems like Spanner, CockroachDB, and TigerBeetle reflect variations of this principle. A typical build looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — State the invariants:</strong> Balance never negative (unless overdraft is allowed), every operation applied exactly once, and total money conserved across transfers.</li>
+          <li><strong>Step 1 — Model money as an append-only ledger:</strong> Double-entry records with an account balance derived or cached transactionally, and a unique idempotency key per operation.</li>
+          <li><strong>Step 2 — Shard by account, one Raft group per shard:</strong> Replicas across zones in the account's home region, leader placement near users, and rebalancing when usage shifts.</li>
+          <li><strong>Step 3 — Make every mutation idempotent:</strong> Clients retry on timeouts, so the same request must return the same result and never apply twice.</li>
+          <li><strong>Step 4 — Handle transfers explicitly:</strong> Same-shard transfers are one transaction. Cross-shard transfers use 2PC or a saga with holds, persisted state, and compensation.</li>
+          <li><strong>Step 5 — Plan DR and verify correctness continuously:</strong> Async or quorum replication to a second region with defined RPO/RTO, regular failover drills, and background checkers that compare ledger sums with balances.</li>
+        </ul>
+        <p>Spend consistency budget only where an invariant requires it, and keep everything else eventually consistent.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For money, <strong>make the correctness boundary as small as the invariant allows</strong>: one account, one consensus group, one nearby leader. That delivers strong consistency at millisecond latency, scales by sharding, and survives local failures. Treat cross-shard transfers and region-level disaster recovery as explicit design problems with idempotent steps, persisted state, and a clearly stated RPO.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

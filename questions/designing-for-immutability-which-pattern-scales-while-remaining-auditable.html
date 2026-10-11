@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Designing for Immutability: Which pattern scales while remaining auditable? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">14 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Immutability</span>
+      <span class="tag tag--green">Auditability</span>
+      <span class="tag tag--amber">Scalability</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Designing for Immutability: Which pattern scales while remaining auditable?</h1>
+      <p class="q-scenario"><strong>Diego</strong>, a lead backend developer, is redesigning the order management system of a fast-growing online retailer. Compliance rules require every change to an order's state to be <strong>auditable and immutable</strong>, with no silent in-place updates. The system serves <strong>heavy, latency-sensitive reads</strong>, expects <strong>write surges during major sales events</strong>, and the team wants strong <strong>observability</strong> plus the ability to <strong>rebuild historical state</strong> for bug fixes and new read requirements. He must pick the architecture that best balances availability, read latency, write throughput, consistency, and operational simplicity while keeping the audit trail immutable.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Event sourcing with an append-only event store and CQRS: asynchronous materialized read views, periodic snapshots, and idempotent consumers.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Store each state change as a versioned immutable object in S3 and synchronously update a SQL database of pointers to the latest state; serve reads from SQL.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Keep a strictly consistent relational database with in-place transactional updates, trigger-based diffs into an audit table, and read replicas for reads.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Use Kafka as the event backbone with a compacted topic holding the latest state per order for reads, archive raw events to immutable storage, and use synchronous reads from the compacted topic for strict freshness.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Event Sourcing + CQRS</h3>
+        <p>Event sourcing with CQRS is the only option in which <strong>immutability is the storage model itself</strong> rather than a layer bolted on afterwards. Every order change is appended as an immutable event, the current state is a pure function of that history, and read models are disposable projections. That one design decision satisfies compliance (the log is the audit trail), supports rebuilds for bug fixes and new read requirements (replay the log), and lets reads and writes scale independently during sales spikes. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Auditability by construction:</strong> There is no UPDATE or DELETE path on the event store. Corrections are new compensating events (for example, <code>OrderAddressCorrected</code>), so history cannot be silently rewritten. Hash chaining or WORM storage (such as object lock) adds tamper evidence.</li>
+          <li><strong>Write throughput under surge:</strong> Appends are sequential and cheap, and contention is limited to a single order's stream because each order is its own aggregate protected by optimistic concurrency (expected version). A sales surge spreads across millions of independent streams rather than one hot row.</li>
+          <li><strong>Read latency decoupled from writes:</strong> Materialized views (cache, key-value store, search index) are shaped for each query pattern, so reads are single-key lookups served from memory or replicas and never touch the event log.</li>
+          <li><strong>Rebuild and observability:</strong> A new read model or a fixed projection bug means replaying events (or the latest snapshot plus the tail). Each event carries who, what, when, and a correlation ID, which gives traceability for free.</li>
+          <li><strong>Operational resilience:</strong> Idempotent consumers (dedupe on aggregate ID + version) make at-least-once delivery safe, so projector crashes or redeliveries are harmless, and a lagging or broken read model never takes down the write path.</li>
+        </ul>
+        <p>A production-grade setup has <strong>optimistic concurrency on append</strong>, a <strong>transactional outbox or change feed</strong> for publishing, <strong>idempotent projectors</strong>, <strong>snapshots every N events</strong>, and <strong>projection-lag alerts</strong>. Track append latency, projection lag, and full-rebuild time before big sales events. If aggregates stay small (an order has tens of events, not thousands), snapshots may be unnecessary.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🪣</div>
+          <h4>B — Versioned S3 Objects + SQL Pointer</h4>
+          <p>Versioning gives immutable history, but this is a <strong>dual write</strong>: S3 and SQL are updated without a shared transaction, so a failure between the two leaves history without a pointer or a pointer without history. Synchronous S3 writes also add latency to every state change and tie write availability to two systems. The SQL row is still updated in place, so the current state remains mutable, and S3 object versions are an archive rather than an ordered, queryable event stream, which makes replay and projection building painful. <strong>Caveat:</strong> S3 with Object Lock is an excellent <em>archive tier</em> for the event log in the recommended design.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔄</div>
+          <h4>C — In-Place Updates + Trigger Audit</h4>
+          <p>This fails the 'immutable' requirement: state is overwritten in place, and the audit table is just another mutable table unless it is locked down separately. Triggers add write amplification on the hottest path during sales and hold row locks longer, and diffs record <em>what</em> changed but not <em>why</em>. Read replicas scale reads, but replica lag produces stale reads that are hard to reason about, and the single primary remains the write ceiling. <strong>Caveat:</strong> for a small system with modest traffic and light audit needs, it is the simplest to operate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🌊</div>
+          <h4>D — Kafka + Compacted Topic</h4>
+          <p>Kafka is a great <em>transport</em> but a poor system of record here. Log compaction <strong>discards older records per key</strong>, so the compacted topic is by definition not an audit trail, and auditability depends entirely on a separate archive pipeline. Kafka has no native point-lookup API, so 'synchronous reads' need an additional state store (for example, Kafka Streams interactive queries) with its own rebalancing and recovery issues, and there is no per-aggregate optimistic concurrency on append. <strong>Caveat:</strong> Kafka is the right backbone for distributing events <em>from</em> the event store to projectors, which is exactly how it is used in the recommended design.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>A — Event Sourcing + CQRS ✓</h4>
+          <p>Event sourcing with an append-only event store and CQRS: asynchronous materialized read views, periodic snapshots, and idempotent consumers.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Immutability / Auditability</th><th>Write Throughput Under Surge</th><th>Read Latency</th><th>Read Consistency</th><th>Rebuild / Replay Capability</th><th>Operational Simplicity</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Event Sourcing + CQRS ✓</td><td>Native ✅</td><td>High (per-order streams) ✅</td><td>Very low (precomputed views) ✅</td><td>Eventual (needs read-your-writes) ⚠</td><td>Excellent ✅</td><td>Moderate complexity ⚠</td></tr>
+            <tr><td class="tt-option">B — S3 Versions + SQL Pointer</td><td>Partial (archive only) ⚠</td><td>Medium (sync dual write) ⚠</td><td>Low (SQL) ✅</td><td>Strong, but dual-write drift ⚠</td><td>Poor ❌</td><td>Moderate ⚠</td></tr>
+            <tr><td class="tt-option">C — In-Place + Trigger Audit</td><td>Weak (state is mutable) ❌</td><td>Low (trigger overhead, single primary) ❌</td><td>Low via replicas ✅</td><td>Replica lag ⚠</td><td>Poor (diffs only) ❌</td><td>Simple ✅</td></tr>
+            <tr><td class="tt-option">D — Kafka + Compacted Topic</td><td>Partial (compaction drops history) ⚠</td><td>High ✅</td><td>Needs a state store ⚠</td><td>Eventual ⚠</td><td>Good, from the archive ⚠</td><td>Complex (state stores + archive) ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Event Sourcing + CQRS</h4>
+          <p>Strict audit and immutability requirements, order lifecycles with many state transitions, several read shapes, replay or what-if analysis, and traffic spikes where read and write scaling differ.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — S3 Versions + SQL Pointer</h4>
+          <p>Low-write systems needing cheap long-term retention of document-like versions (contracts, uploads) that can tolerate occasional reconciliation between the store and the index.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — In-Place + Trigger Audit</h4>
+          <p>Simple CRUD systems with moderate traffic where audit means 'who changed what' and tampering risk is low. A trigger-based audit table or temporal tables are enough.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Kafka + Compacted Topic</h4>
+          <p>Streaming-first platforms where latest-state-per-key is the main need (changelogs, caches) and a separate system of record handles history.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> CQRS Command and Query Flow</h3>
+        <p>Commands append immutable events with a version check, projectors update read views asynchronously, and queries never touch the event store:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant A as Order API
+    participant E as Event Store
+    participant B as Broker
+    participant P as Projector
+    participant V as Read View
+    C-&gt;&gt;A: 1. PlaceOrder or ChangeStatus command
+    A-&gt;&gt;E: 2. Append events (expected version N)
+    alt Version conflict
+        E--&gt;&gt;A: Conflict
+        A--&gt;&gt;C: 409 retry with fresh state
+    else Appended
+        E--&gt;&gt;A: OK (new version N+1)
+        A--&gt;&gt;C: 3. Accepted (version N+1)
+    end
+    E-&gt;&gt;B: 4. Publish via outbox or change feed
+    B-&gt;&gt;P: 5. Deliver event (at least once)
+    P-&gt;&gt;V: 6. Idempotent upsert if version is newer
+    C-&gt;&gt;A: 7. GET order
+    A-&gt;&gt;V: 8. Read latest view
+    V--&gt;&gt;A: View (version N+1)
+    A--&gt;&gt;C: 9. Order state">sequenceDiagram
+    participant C as Client
+    participant A as Order API
+    participant E as Event Store
+    participant B as Broker
+    participant P as Projector
+    participant V as Read View
+    C-&gt;&gt;A: 1. PlaceOrder or ChangeStatus command
+    A-&gt;&gt;E: 2. Append events (expected version N)
+    alt Version conflict
+        E--&gt;&gt;A: Conflict
+        A--&gt;&gt;C: 409 retry with fresh state
+    else Appended
+        E--&gt;&gt;A: OK (new version N+1)
+        A--&gt;&gt;C: 3. Accepted (version N+1)
+    end
+    E-&gt;&gt;B: 4. Publish via outbox or change feed
+    B-&gt;&gt;P: 5. Deliver event (at least once)
+    P-&gt;&gt;V: 6. Idempotent upsert if version is newer
+    C-&gt;&gt;A: 7. GET order
+    A-&gt;&gt;V: 8. Read latest view
+    V--&gt;&gt;A: View (version N+1)
+    A--&gt;&gt;C: 9. Order state</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Command Handling with Optimistic Concurrency and Idempotent Projection</h3>
+        <p>A command handler that loads state from snapshot plus events, appends with an expected version, and an idempotent projector that tolerates redelivery:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleCommand</span>(orderId, command):</span>
+<span class="line">    <span class="tk-com">// Load state: latest snapshot + events after it</span></span>
+<span class="line">    snapshot <span class="tk-op">=</span> snapshotStore.<span class="tk-fn">latest</span>(orderId)                    <span class="tk-com">// may be null</span></span>
+<span class="line">    events   <span class="tk-op">=</span> eventStore.<span class="tk-fn">read</span>(orderId, afterVersion <span class="tk-op">=</span> snapshot?.version ?? <span class="tk-num">0</span>)</span>
+<span class="line">    state    <span class="tk-op">=</span> <span class="tk-fn">fold</span>(applyEvent, snapshot?.state ?? <span class="tk-fn">emptyOrder</span>(), events)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Validate business rules against current state (pure function, no I/O)</span></span>
+<span class="line">    newEvents <span class="tk-op">=</span> <span class="tk-fn">decide</span>(state, command)                          <span class="tk-com">// e.g. OrderShipped. Never an in-place edit</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Atomic append: unique key (orderId, version) enforces optimistic concurrency</span></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        eventStore.<span class="tk-fn">append</span>(orderId, newEvents, expectedVersion <span class="tk-op">=</span> state.version)</span>
+<span class="line">    <span class="tk-kw">catch</span> VersionConflict:</span>
+<span class="line">        <span class="tk-kw">throw</span> Conflict                                          <span class="tk-com">// caller reloads state and retries</span></span>
+<span class="line"></span>
+<span class="line">    newVersion <span class="tk-op">=</span> state.version <span class="tk-op">+</span> newEvents.size</span>
+<span class="line">    <span class="tk-kw">if</span> newVersion <span class="tk-op">%</span> <span class="tk-num">50</span> <span class="tk-op">==</span> <span class="tk-num">0</span>:</span>
+<span class="line">        snapshotStore.<span class="tk-fn">saveAsync</span>(orderId, <span class="tk-fn">applyAll</span>(state, newEvents), newVersion)</span>
+<span class="line">    <span class="tk-kw">return</span> newVersion                                           <span class="tk-com">// client can use it for read-your-writes</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Projector: the broker is partitioned by orderId, so per-order ordering is preserved.</span></span>
+<span class="line"><span class="tk-com">// Delivery is at-least-once, so the projector must be idempotent.</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onEvent</span>(event):</span>
+<span class="line">    current <span class="tk-op">=</span> readView.<span class="tk-fn">get</span>(event.orderId)</span>
+<span class="line">    <span class="tk-kw">if</span> current <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> current.version <span class="tk-op">&gt;=</span> event.version:</span>
+<span class="line">        <span class="tk-kw">return</span>                                                  <span class="tk-com">// duplicate or replay, ignore</span></span>
+<span class="line">    readView.<span class="tk-fn">upsert</span>(event.orderId, <span class="tk-fn">project</span>(current, event), version <span class="tk-op">=</span> event.version)   <span class="tk-com">// conditional write</span></span>
+<span class="line">    metrics.<span class="tk-fn">projectionLag</span>(<span class="tk-fn">now</span>() <span class="tk-op">-</span> event.timestamp)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Query side: never touches the event store on the happy path</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getOrder</span>(orderId, minVersion <span class="tk-op">=</span> <span class="tk-lit">null</span>):</span>
+<span class="line">    view <span class="tk-op">=</span> readView.<span class="tk-fn">get</span>(orderId)</span>
+<span class="line">    <span class="tk-kw">if</span> minVersion <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> (view <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> view.version <span class="tk-op">&lt;</span> minVersion):</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">rehydrateFromEventStore</span>(orderId)                 <span class="tk-com">// read-your-writes fallback</span></span>
+<span class="line">    <span class="tk-kw">return</span> view</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Dual-writing events:</strong> Writing to the database and publishing to Kafka as two separate steps loses or duplicates events on a crash. Use a transactional outbox, or let the event store be the source of the feed.</li>
+          <li><strong>Editing history:</strong> 'Fixing' a bad event in place destroys the audit guarantee. Append a compensating event instead.</li>
+          <li><strong>Ignoring schema evolution:</strong> Events live forever. Use versioned schemas and upcasters, and never change the meaning of an existing field.</li>
+          <li><strong>Non-idempotent projectors:</strong> Brokers deliver at least once. Guard writes by (aggregate ID, version) or use version-conditional upserts.</li>
+          <li><strong>Giant aggregates without snapshots:</strong> Unbounded streams make loading slow. Keep aggregate boundaries tight (one order) and snapshot long-lived streams.</li>
+          <li><strong>Hiding eventual consistency from users:</strong> A confirmation page reading a stale view shows 'order not found'. Return a version token and support read-your-writes.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams adopt event sourcing <em>selectively</em> and build it on proven components:</p>
+        <ul>
+          <li><strong>Step 0 — Scope it:</strong> Apply event sourcing to the order aggregate, where audit and replay matter, not to every table. Keep plain CRUD for catalog data and preferences.</li>
+          <li><strong>Step 1 — Event store with optimistic concurrency:</strong> A PostgreSQL append-only table (UPDATE and DELETE revoked), EventStoreDB, or DynamoDB, with a unique key on (order_id, version).</li>
+          <li><strong>Step 2 — Reliable publishing:</strong> A transactional outbox or CDC feeds Kafka, and consumers are idempotent.</li>
+          <li><strong>Step 3 — One projection per read need:</strong> Redis or a key-value store for order status, a search index for support tools, a warehouse for analytics.</li>
+          <li><strong>Step 4 — Snapshots and replay tooling:</strong> Snapshot every N events, and rebuild projections into a new version that you switch to atomically (blue/green).</li>
+          <li><strong>Step 5 — Compliance hardening:</strong> Archive to WORM storage, hash-chain events, crypto-shred personal data, and audit access to the log itself.</li>
+        </ul>
+        <p>Start with the aggregate that carries the compliance burden and grow from there.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When history must be <strong>immutable and replayable</strong>, make the append-only log the source of truth and derive everything else from it. Event sourcing + CQRS gives auditability by construction and scales reads and writes independently, at the price of eventually consistent read models and a larger operational surface. Do not simulate immutability with triggers or dual writes, and do not treat a compacted topic as an audit log.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

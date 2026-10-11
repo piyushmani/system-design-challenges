@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scaling Real-Time Leaderboards: Where should window functions be executed? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">14 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Real-time Leaderboards</span>
+      <span class="tag tag--green">Window Functions</span>
+      <span class="tag tag--amber">Stream Processing</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Scaling Real-Time Leaderboards: Where should window functions be executed?</h1>
+      <p class="q-scenario"><strong>Lena</strong>, a systems engineer, is building a feature that shows <strong>running totals, dense rankings, and 7-day rolling statistics</strong> for <strong>millions of users</strong>. Events arrive at roughly <strong>100k per second</strong> into a primary OLTP Postgres database. Users expect <strong>near-real-time updates (under about 5 seconds of staleness)</strong> and <strong>query responses under 300 ms</strong>. The heavy window-function work (sliding windows, running sums, <code>row_number()</code> aggregations) must not degrade the OLTP database, and the design must stay fault tolerant and observable. She needs the architecture with the best trade-off between operational complexity, latency, availability, and scalability.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Run the window functions directly on the primary Postgres OLTP database, adding read replicas, indexes, and vertical scaling as needed.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Compute everything in an overnight batch job into a read-only table and serve queries from it, accepting up to 24 hours of staleness.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Stream changes with CDC into a read-optimized analytical store (ClickHouse, Druid, Snowflake), run the window functions there, and accept eventual consistency with lag monitoring and backfills.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Build continuous aggregates or materialized views inside the Postgres cluster (or a read replica), refreshed every 1-5 seconds, and serve queries from them.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: CDC + Analytical Store</h3>
+        <p>Window functions over millions of users are <strong>scan-and-sort heavy</strong> work, and the primary is already absorbing 100k writes per second. The winning move is to <strong>take the computation off the OLTP path</strong>: capture changes with CDC, stream them into a columnar analytical engine built for aggregation and ranking, and serve the leaderboard from there. This isolates the transactional workload, meets the seconds-level freshness target, and lets the read tier scale independently. Here's why it stands out:</p>
+        <ul>
+          <li><strong>OLTP isolation:</strong> CDC reads the write-ahead log, so it adds little load to the primary, and heavy ranking queries never compete with transactional writes for CPU, buffer cache, or locks.</li>
+          <li><strong>Engine fit:</strong> Columnar stores such as ClickHouse, Druid, or Pinot ingest streams continuously and aggregate huge row counts per second per node. Running totals and 7-day windows, especially via incremental rollups, fit comfortably inside a 300 ms budget.</li>
+          <li><strong>Freshness is tunable and measurable:</strong> End-to-end lag (WAL, Debezium, Kafka, ingest) is typically sub-second to a few seconds, within the 5-second target, and the lag itself is a metric you can alert on.</li>
+          <li><strong>Independent scaling and availability:</strong> The analytics cluster scales horizontally with replicas for read QPS. If it fails, OLTP keeps working and the leaderboard degrades to stale data instead of taking the product down.</li>
+          <li><strong>Why not a bigger primary or more replicas?</strong> Replicas replay the same WAL, so they do not reduce per-query cost, and long window queries on a replica can be cancelled by replication conflicts or make it fall behind. More hardware raises cost without changing the shape of the problem.</li>
+        </ul>
+        <p>A solid implementation has <strong>log-based CDC (for example Debezium)</strong>, <strong>idempotent, deduplicated ingestion</strong>, <strong>incremental rollups</strong>, <strong>freshness and lag SLO alerts</strong>, and a <strong>replay and backfill procedure</strong>. Measure end-to-end staleness (event time versus the time it appears on the leaderboard) and p99 query latency. If lag regularly exceeds 5 seconds, tune batching or move the hot path to a stream processor (such as Flink) that maintains scores continuously.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔥</div>
+          <h4>A — Window Functions on the Primary</h4>
+          <p>At 100k writes per second the primary is already busy. Window functions must <strong>scan and sort large row sets</strong> (a global dense rank over millions of users touches every user's total), which consumes CPU, memory, and I/O and competes with transactional work, causing latency spikes and vacuum pressure. Read replicas help with isolation but not with per-query cost. <strong>Caveat:</strong> at much smaller scale (thousands of users, modest write rate) a replica with good indexes is perfectly fine and the simplest option.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🌙</div>
+          <h4>B — Nightly Batch</h4>
+          <p>Operationally simple and cheap, but it <strong>violates the core requirement</strong>: up to 24 hours of staleness against a 5-second target. <strong>Caveat:</strong> batch is still valuable as a <em>reconciliation</em> layer, where a nightly job recomputes totals from the source of truth to correct drift in the streaming path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧱</div>
+          <h4>D — Materialized Views in Postgres</h4>
+          <p>Native Postgres materialized views are refreshed by <strong>recomputing the whole query</strong>, so refreshing a millions-of-users ranking every 1-5 seconds is not feasible and adds exactly the load you are trying to avoid. A replica cannot refresh them at all because it is read-only. Incremental options (TimescaleDB continuous aggregates, pg_ivm) work for sums and counts over time buckets, but rank-style window functions cannot be maintained incrementally, and everything still shares the same cluster's resources and write ingest. <strong>Caveat:</strong> continuous aggregates are a good fit for per-user rolling sums at moderate ingest rates, as a stepping stone.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — CDC + Analytical Store ✓</h4>
+          <p>Stream changes with CDC into a read-optimized analytical store (ClickHouse, Druid, Snowflake), run the window functions there, and accept eventual consistency with lag monitoring and backfills.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>OLTP Impact</th><th>Freshness</th><th>Query Latency at Scale</th><th>Horizontal Scalability</th><th>Operational Complexity</th><th>Fault Isolation</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Window Functions on Primary</td><td>High ❌</td><td>Real-time ✅</td><td>Poor under load ❌</td><td>Vertical only ❌</td><td>Low ✅</td><td>None ❌</td></tr>
+            <tr><td class="tt-option">B — Nightly Batch</td><td>Low ✅</td><td>About 24 h ❌</td><td>Very low (precomputed) ✅</td><td>High ✅</td><td>Low ✅</td><td>Good ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — CDC + Analytical Store ✓</td><td>Low ✅</td><td>Seconds ✅</td><td>Low (tens to hundreds of ms) ✅</td><td>High ✅</td><td>High ⚠</td><td>Good ✅</td></tr>
+            <tr><td class="tt-option">D — Postgres Materialized Views</td><td>High ❌</td><td>Seconds only if refresh is cheap ⚠</td><td>Low (precomputed) ✅</td><td>Limited ⚠</td><td>Medium ⚠</td><td>None ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Window Functions on Primary</h4>
+          <p>A small user base or modest write rate where an indexed query on a replica meets the SLA and operational simplicity matters most.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Nightly Batch</h4>
+          <p>Daily or weekly reports, billing summaries, or leaderboards where hours of staleness are acceptable (for example, season-end standings).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — CDC + Analytical Store</h4>
+          <p>High write rates and large user bases that need second-level freshness and sub-second queries while the OLTP database must be protected.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Postgres Materialized Views</h4>
+          <p>Moderate scale, a requirement to stay inside Postgres, and aggregations that can be maintained incrementally (sums or counts per time bucket), for example with TimescaleDB continuous aggregates.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Leaderboard Data Flow (CDC to Analytical Store)</h3>
+        <p>Writes stay on Postgres. Ranking is computed downstream and served from an analytical store:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant App as App Servers
+    participant PG as Postgres OLTP
+    participant CDC as Debezium CDC
+    participant K as Kafka
+    participant CH as Analytical Store
+    participant API as Leaderboard API
+    participant U as User
+    App-&gt;&gt;PG: 1. INSERT event (100k per sec)
+    PG--&gt;&gt;CDC: 2. WAL stream via replication slot
+    CDC-&gt;&gt;K: 3. Publish change events
+    K-&gt;&gt;CH: 4. Ingest and update rollups
+    U-&gt;&gt;API: 5. GET leaderboard or my rank
+    API-&gt;&gt;CH: 6. Query rollups (top N and rank)
+    CH--&gt;&gt;API: 7. Result (under 300 ms)
+    API--&gt;&gt;U: 8. Response with data freshness timestamp">sequenceDiagram
+    participant App as App Servers
+    participant PG as Postgres OLTP
+    participant CDC as Debezium CDC
+    participant K as Kafka
+    participant CH as Analytical Store
+    participant API as Leaderboard API
+    participant U as User
+    App-&gt;&gt;PG: 1. INSERT event (100k per sec)
+    PG--&gt;&gt;CDC: 2. WAL stream via replication slot
+    CDC-&gt;&gt;K: 3. Publish change events
+    K-&gt;&gt;CH: 4. Ingest and update rollups
+    U-&gt;&gt;API: 5. GET leaderboard or my rank
+    API-&gt;&gt;CH: 6. Query rollups (top N and rank)
+    CH--&gt;&gt;API: 7. Result (under 300 ms)
+    API--&gt;&gt;U: 8. Response with data freshness timestamp</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> ClickHouse-Style Rollups and Rank Queries</h3>
+        <p>An append-only event table, an incrementally maintained hourly rollup, and the dense-rank, per-user rank, and running-total queries served from it:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">sql</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">-- 1) Append-only table fed by CDC (deduplicate on source_lsn upstream, or use ReplacingMergeTree)</span></span>
+<span class="line">CREATE TABLE score_events</span>
+<span class="line">(</span>
+<span class="line">    user_id    UInt64,</span>
+<span class="line">    points     Int32,</span>
+<span class="line">    event_time <span class="tk-fn">DateTime64</span>(<span class="tk-num">3</span>),</span>
+<span class="line">    source_lsn UInt64</span>
+<span class="line">)</span>
+<span class="line">ENGINE <span class="tk-op">=</span> MergeTree</span>
+<span class="line">ORDER <span class="tk-fn">BY</span> (user_id, event_time);</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- 2) Incremental hourly rollup, maintained on every insert (no rescans of raw events)</span></span>
+<span class="line">CREATE TABLE user_hourly</span>
+<span class="line">(</span>
+<span class="line">    user_id UInt64,</span>
+<span class="line">    hour    DateTime,</span>
+<span class="line">    points  <span class="tk-fn">SimpleAggregateFunction</span>(sum, Int64)</span>
+<span class="line">)</span>
+<span class="line">ENGINE <span class="tk-op">=</span> AggregatingMergeTree</span>
+<span class="line">ORDER <span class="tk-fn">BY</span> (user_id, hour);</span>
+<span class="line"></span>
+<span class="line">CREATE MATERIALIZED VIEW user_hourly_mv TO user_hourly AS</span>
+<span class="line">SELECT user_id, <span class="tk-fn">toStartOfHour</span>(event_time) AS hour, <span class="tk-fn">sum</span>(<span class="tk-fn">toInt64</span>(points)) AS points</span>
+<span class="line">FROM score_events</span>
+<span class="line">GROUP BY user_id, hour;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- 3) Top 100 over a rolling 7-day window with dense ranking (cache this result for a few seconds)</span></span>
+<span class="line">SELECT user_id, score, <span class="tk-fn">dense_rank</span>() <span class="tk-fn">OVER</span> (ORDER BY score DESC) AS rnk</span>
+<span class="line">FROM</span>
+<span class="line">(</span>
+<span class="line">    SELECT user_id, <span class="tk-fn">sum</span>(points) AS score</span>
+<span class="line">    FROM user_hourly</span>
+<span class="line">    WHERE hour <span class="tk-op">&gt;=</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> INTERVAL <span class="tk-num">7</span> DAY</span>
+<span class="line">    GROUP BY user_id</span>
+<span class="line">)</span>
+<span class="line">ORDER BY rnk, user_id</span>
+<span class="line">LIMIT <span class="tk-num">100</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- 4) One user&#x27;s dense rank = 1 + number of distinct scores higher than theirs</span></span>
+<span class="line"><span class="tk-com">--    (for very hot paths, keep a score histogram or a Redis sorted set instead)</span></span>
+<span class="line">SELECT <span class="tk-num">1</span> <span class="tk-op">+</span> <span class="tk-fn">uniqExact</span>(score) AS my_rank</span>
+<span class="line">FROM</span>
+<span class="line">(</span>
+<span class="line">    SELECT user_id, <span class="tk-fn">sum</span>(points) AS score</span>
+<span class="line">    FROM user_hourly</span>
+<span class="line">    WHERE hour <span class="tk-op">&gt;=</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> INTERVAL <span class="tk-num">7</span> DAY</span>
+<span class="line">    GROUP BY user_id</span>
+<span class="line">    HAVING score <span class="tk-op">&gt;</span> {my_score:Int64}</span>
+<span class="line">);</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- 5) Running total for one user (window over the user&#x27;s own events only)</span></span>
+<span class="line">SELECT event_time,</span>
+<span class="line">       <span class="tk-fn">sum</span>(points) <span class="tk-fn">OVER</span> (ORDER BY event_time ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total</span>
+<span class="line">FROM score_events</span>
+<span class="line">WHERE user_id <span class="tk-op">=</span> {uid:UInt64}</span>
+<span class="line">ORDER BY event_time;</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Ignoring replication slot lag:</strong> A stuck consumer makes Postgres retain WAL until the disk fills. Set <code>max_slot_wal_keep_size</code> and alert on slot lag.</li>
+          <li><strong>Applying CDC events non-idempotently:</strong> Redelivery after a consumer restart double-counts points. Deduplicate on source LSN or event ID, or use engine-level dedup for mutable rows.</li>
+          <li><strong>Recomputing rank from raw events per request:</strong> Even a fast columnar engine wastes budget. Use incremental rollups and cache the top pages.</li>
+          <li><strong>Choosing a warehouse for serving:</strong> Pick the engine by query concurrency and latency needs, not just by the word 'analytics'.</li>
+          <li><strong>Fuzzy rolling-window edges:</strong> Hourly buckets make '7 days' bucket-aligned. Decide whether that approximation is acceptable or use finer buckets with exact edge handling.</li>
+          <li><strong>No backfill or reconciliation plan:</strong> Schema changes, bugs, and outages create drift. Keep a replay path and a nightly reconciliation job.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Senior engineers usually build this as a pipeline with <strong>precomputation</strong> at every stage rather than as one big query:</p>
+        <ul>
+          <li><strong>Step 0 — Define the metrics:</strong> Decide which values must be exact (total score, 7-day sums) and which can lag by seconds (rank).</li>
+          <li><strong>Step 1 — Capture:</strong> Log-based CDC (Debezium on a logical replication slot) with a bounded-lag alert, or emit events to Kafka through an outbox.</li>
+          <li><strong>Step 2 — Incremental rollups:</strong> Maintain per-user hourly or per-minute sums with materialized views. The 7-day window becomes a sum over the latest buckets, not a scan of raw events.</li>
+          <li><strong>Step 3 — Serve ranking from a purpose-built structure:</strong> Top-N from the analytical store behind a short-TTL cache, or a Redis sorted set (ZADD, ZREVRANGE) for the global board. An individual's rank comes from counting users with a higher score.</li>
+          <li><strong>Step 4 — Observe and recover:</strong> Dashboards for ingest lag, rows behind, and query p99. Replay from Kafka or backfill from a Postgres snapshot after incidents.</li>
+          <li><strong>Step 5 — Reconcile:</strong> A nightly job compares aggregates with the source of truth and repairs drift.</li>
+        </ul>
+        <p>Move the work to where it is cheap, and precompute whatever you can.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Heavy <strong>window-function workloads do not belong on the OLTP primary</strong>. Stream changes out with CDC and compute rankings in an engine built for aggregation, ideally from incremental rollups. You trade a few seconds of eventual consistency for isolation, scale, and predictable latency, provided you monitor replication-slot and pipeline lag.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

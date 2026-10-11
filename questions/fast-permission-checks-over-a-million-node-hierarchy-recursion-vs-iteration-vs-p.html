@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fast Permission Checks over a Million-Node Hierarchy: Recursion vs Iteration vs Precomputation — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">11 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Recursion vs Iteration</span>
+      <span class="tag tag--green">Permissions</span>
+      <span class="tag tag--amber">Performance</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Fast Permission Checks over a Million-Node Hierarchy: Recursion vs Iteration vs Precomputation</h1>
+      <p class="q-scenario"><strong>Nora</strong> leads backend development for an <strong>access-control platform</strong> that resolves inherited permissions across an organizational hierarchy with <strong>millions of nodes</strong>. It handles about <strong>2,000 authorization checks per second</strong> with a <strong>p95 latency below 50 ms</strong>. Permission and hierarchy changes are <strong>rare</strong> but must take effect <strong>within minutes</strong>. The hierarchy is deep (tens of levels at most) but can have very large fan-out near the top. Her team is weighing <em>recursive</em> traversals (DFS, recursive SQL or service-to-service calls) against <em>iterative</em> ones (explicit queues, worker loops, precomputed paths). Which design best balances scalability, read latency, availability and write complexity?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Execute a synchronous depth-first traversal via recursive calls across microservices (where each service queries its downstream dependencies and aggregates the outcome). This provides strict per-request consistency through real-time computation.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Conduct the traversal iteratively during the request via a local worker loop or an explicit application-level stack/queue (where a single service dynamically fetches children from the database using breadth-first or depth-first patterns), maintaining brief in-memory state on a per-request basis.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Leverage a recursive database query (using WITH RECURSIVE or specialized graph database traversals) to determine the entire reachable set in a single execution when requested, and deduce the permissions from that set for each request.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Pre-calculate and cache the transitive closure or materialized paths (or a denormalized permission read-model) within a high-speed, sharded key-value store, and update it asynchronously via event-driven background tasks or CDC. This makes reads nearly instantaneous lookups, while writes initiate incremental background updates and reconciliation processes.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Precomputed Closure in a Sharded Key-Value Store</h3>
+        <p>This workload is the textbook case for <strong>moving work from the read path to the write path</strong>: reads are frequent and latency-critical, while writes are rare and may take minutes to propagate. Option D precomputes the hierarchy relationship (transitive closure or materialized ancestor paths) so an authorization check becomes a few key lookups instead of a traversal. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Latency is independent of hierarchy size:</strong> a check reads one node's ancestor path and the relevant grants with a batched multi-get, typically a few milliseconds, instead of paying one round trip per level.</li>
+          <li><strong>Read availability does not depend on live computation:</strong> the read path touches only a replicated key-value store, so a slow database or a struggling downstream service does not stall authorization.</li>
+          <li><strong>Scales horizontally:</strong> 2,000 requests per second is modest for a sharded key-value store, and capacity grows linearly by adding shards and replicas.</li>
+          <li><strong>Matches the staleness budget:</strong> within minutes is exactly what asynchronous CDC-driven updates provide, and the cost of that lag is paid only on rare writes.</li>
+          <li><strong>Recursion disappears from the hot path:</strong> traversal happens once, in a background worker, where depth and cycles are easy to bound and where the work can be retried and rate limited.</li>
+        </ul>
+        <p>Keep the relational hierarchy as the <strong>source of truth</strong>, treat the key-value closure as a <strong>rebuildable read model</strong>, and monitor propagation lag, check p95 and p99, cache hit rate and reconciliation drift. If lag approaches the minutes budget, alert before users notice.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔁</div>
+          <h4>A — Recursive Cross-Service DFS</h4>
+          <p>Each level adds a network hop, so latency grows with depth and the p95 is dominated by the slowest call in the chain. Availability multiplies: if each service is 99.9% available, a ten-level chain is roughly 99%. Retries amplify load, cycles or very wide nodes can cause runaway call trees, and timeouts are hard to budget. Strict per-request consistency is real, but it is bought with the very latency SLO the scenario sets.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔂</div>
+          <h4>B — Iterative Per-Request Traversal</h4>
+          <p>Replacing recursion with an explicit queue fixes stack-depth problems and keeps logic in one service, which is a genuine improvement. But the cost is still one database round trip per level (or per batch of children) on every request, so 2,000 checks per second multiplies into tens of thousands of queries per second against the primary. Tail latency depends on the hierarchy shape, and a wide node near the top can blow the 50 ms budget. Note that inheritance should be resolved by walking <em>up</em> the ancestors (short), not down through children (huge). <strong>Caveat:</strong> a good bounded fallback for cache misses.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🕸️</div>
+          <h4>C — Recursive SQL or Graph Traversal</h4>
+          <p><code>WITH RECURSIVE</code> pushes the traversal into the database and removes network hops, but CPU cost and latency still scale with the size of the reachable set, and the work repeats on every request. At 2,000 requests per second the primary becomes the bottleneck, plans vary with data shape, and cycle protection adds overhead. <strong>Caveat:</strong> fine for admin tooling, audits and for building the read model, just not for the hot authorization path.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>D — Precomputed Closure in a Sharded Key-Value Store ✓</h4>
+          <p>Pre-calculate and cache the transitive closure or materialized paths (or a denormalized permission read-model) within a high-speed, sharded key-value store, and update it asynchronously via event-driv</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read Latency (p95)</th><th>Read Availability</th><th>Consistency</th><th>Write Complexity</th><th>Scales with Hierarchy Size</th><th>Load on Primary DB</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Recursive Cross-Service DFS</td><td>Poor, grows with depth ❌</td><td>Poor, chain of dependencies ❌</td><td>Strong ✅</td><td>Low ✅</td><td>Poor ❌</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — Iterative Per-Request Traversal</td><td>Moderate ⚠</td><td>Medium ⚠</td><td>Strong ✅</td><td>Low ✅</td><td>Moderate ⚠</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">C — Recursive SQL / Graph Query</td><td>Variable ⚠</td><td>Medium ⚠</td><td>Strong ✅</td><td>Low ✅</td><td>Poor ❌</td><td>Very high ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Precomputed Closure in KV ✓</td><td>Excellent, a few ms ✅</td><td>High ✅</td><td>Eventual, minutes ⚠</td><td>High ❌</td><td>Excellent ✅</td><td>Low ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Recursive Cross-Service DFS</h4>
+          <p>Tiny hierarchies, low traffic or prototypes where strict real-time consistency matters more than latency and the call graph is shallow.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Iterative Per-Request Traversal</h4>
+          <p>Moderate scale, or as the cache-miss fallback; simple to reason about and reasonable when depth is small and the database can absorb the load.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Recursive SQL / Graph Query</h4>
+          <p>Admin queries, audits, impact analysis (who can access this subtree) and building or verifying the read model.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Precomputed Closure in KV</h4>
+          <p>High-read, low-write authorization with large hierarchies, strict latency SLOs and tolerable propagation delay.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Authorization Check Path</h3>
+        <p>A check is one cache lookup or one batched key-value read, followed by an in-memory evaluation along the ancestor path:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client Service
+    participant A as Authz API
+    participant L as Local Cache
+    participant K as Sharded KV Store
+    participant D as Primary DB
+    C-&gt;&gt;A: Check user U on node N
+    A-&gt;&gt;L: 1. Lookup ancestor path and grants
+    alt Local hit
+        L--&gt;&gt;A: Path and grants
+    else Local miss
+        A-&gt;&gt;K: 2. Multi-get ancestor path and grants
+        K--&gt;&gt;A: Path and grants with version
+        A-&gt;&gt;L: Cache briefly
+    end
+    A-&gt;&gt;A: 3. Evaluate allow and deny along the path
+    A--&gt;&gt;C: Decision plus version
+    Note over A,D: On a KV miss only, bounded walk up to the root in the DB, then repair the entry">sequenceDiagram
+    participant C as Client Service
+    participant A as Authz API
+    participant L as Local Cache
+    participant K as Sharded KV Store
+    participant D as Primary DB
+    C-&gt;&gt;A: Check user U on node N
+    A-&gt;&gt;L: 1. Lookup ancestor path and grants
+    alt Local hit
+        L--&gt;&gt;A: Path and grants
+    else Local miss
+        A-&gt;&gt;K: 2. Multi-get ancestor path and grants
+        K--&gt;&gt;A: Path and grants with version
+        A-&gt;&gt;L: Cache briefly
+    end
+    A-&gt;&gt;A: 3. Evaluate allow and deny along the path
+    A--&gt;&gt;C: Decision plus version
+    Note over A,D: On a KV miss only, bounded walk up to the root in the DB, then repair the entry</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Ancestor-Path Check and Incremental Update</h3>
+        <p>The check is a single batched read plus an in-memory evaluation; the update walks the changed subtree in resumable, version-guarded batches:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">isAllowed</span>(userId, nodeId, action):</span>
+<span class="line">    node <span class="tk-op">=</span> kv.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;node:&#x27;</span> <span class="tk-op">+</span> nodeId)                       <span class="tk-com">// {path: [root, ..., parent], version}</span></span>
+<span class="line">    <span class="tk-kw">if</span> node <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        node <span class="tk-op">=</span> <span class="tk-fn">rebuildNodeFromDb</span>(nodeId)                  <span class="tk-com">// bounded fallback walk up the tree, repairs the cache</span></span>
+<span class="line">    chain <span class="tk-op">=</span> node.path <span class="tk-op">+</span> [nodeId]</span>
+<span class="line">    keys <span class="tk-op">=</span> [<span class="tk-str">&#x27;grants:&#x27;</span> <span class="tk-op">+</span> n <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> userId <span class="tk-kw">for</span> n <span class="tk-kw">in</span> chain]</span>
+<span class="line">    grants <span class="tk-op">=</span> kv.<span class="tk-fn">multiGet</span>(keys)                            <span class="tk-com">// one batched round trip, not one per level</span></span>
+<span class="line"></span>
+<span class="line">    decision <span class="tk-op">=</span> DENY</span>
+<span class="line">    <span class="tk-kw">for</span> n <span class="tk-kw">in</span> chain:                                       <span class="tk-com">// root to leaf, the nearest explicit rule wins</span></span>
+<span class="line">        g <span class="tk-op">=</span> grants[<span class="tk-str">&#x27;grants:&#x27;</span> <span class="tk-op">+</span> n <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> userId]</span>
+<span class="line">        <span class="tk-kw">if</span> g <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> g.<span class="tk-fn">matches</span>(action):</span>
+<span class="line">            decision <span class="tk-op">=</span> g.effect                           <span class="tk-com">// ALLOW or DENY</span></span>
+<span class="line">    <span class="tk-kw">return</span> {decision: decision, version: node.version}</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onHierarchyChange</span>(event):                        <span class="tk-com">// CDC consumer, idempotent</span></span>
+<span class="line">    <span class="tk-kw">for</span> batch <span class="tk-kw">in</span> db.<span class="tk-fn">streamSubtree</span>(event.nodeId, batchSize <span class="tk-op">=</span> <span class="tk-num">1000</span>):</span>
+<span class="line">        updates <span class="tk-op">=</span> []</span>
+<span class="line">        <span class="tk-kw">for</span> child <span class="tk-kw">in</span> batch:</span>
+<span class="line">            updates.<span class="tk-fn">append</span>(<span class="tk-fn">put</span>(<span class="tk-str">&#x27;node:&#x27;</span> <span class="tk-op">+</span> child.id, {path: <span class="tk-fn">computePath</span>(child), version: event.version}))</span>
+<span class="line">        kv.<span class="tk-fn">multiPut</span>(updates, onlyIfVersionNewer <span class="tk-op">=</span> event.version)</span>
+<span class="line">        <span class="tk-fn">saveProgress</span>(event.id, batch.lastId)              <span class="tk-com">// resumable after a crash</span></span>
+<span class="line">    <span class="tk-fn">ack</span>(event)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Safety nets: depth cap and cycle detection in computePath, reconciliation sampler, propagation-lag alert</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Materializing user x node:</strong> this explodes storage. Store ancestor paths and grants, and evaluate at check time.</li>
+          <li><strong>Unbounded subtree rewrites:</strong> a single re-parent can trigger millions of updates. Batch, throttle and make updates resumable.</li>
+          <li><strong>No reconciliation:</strong> missed CDC events silently create wrong permissions. Run periodic recompute-and-compare jobs.</li>
+          <li><strong>Ignoring deny and revocation semantics:</strong> slow propagation of a removed permission is a security issue. Provide a fast revocation path.</li>
+          <li><strong>Cold-cache stampedes after deploys:</strong> rebuilds under load hit the database. Warm gradually and rate limit fallbacks.</li>
+          <li><strong>No versioning:</strong> without a version on decisions, callers cannot detect stale results.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Production authorization systems follow the <strong>read-optimized, precomputed</strong> approach, layered with safeguards. Google's Zanzibar, for example, uses a dedicated precomputed index for deeply nested groups. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Measure:</strong> hierarchy depth, fan-out, read/write ratio and the real staleness tolerance.</li>
+          <li><strong>Step 1 — Source of truth:</strong> keep the hierarchy and grants in a relational store with an outbox or CDC stream.</li>
+          <li><strong>Step 2 — Build the read model:</strong> a worker computes ancestor paths and denormalized grants into the sharded key-value store.</li>
+          <li><strong>Step 3 — Check path:</strong> multi-get ancestors and grants, evaluate allow and deny rules, and return the decision with a version.</li>
+          <li><strong>Step 4 — Fallback:</strong> on a missing key, run a bounded iterative walk up to the root against the database and repair the entry.</li>
+          <li><strong>Step 5 — Reconcile and observe:</strong> sample live checks against a slow, authoritative evaluator, and alert on mismatch rate and propagation lag.</li>
+        </ul>
+        <p>Use a recursive query to <em>build</em> the model, not to <em>serve</em> it.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When reads vastly outnumber writes and slight staleness is allowed, <strong>precompute at write time</strong> so reads are bounded lookups. Keep traversal logic in background workers and continuously verify the read model against the source of truth.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

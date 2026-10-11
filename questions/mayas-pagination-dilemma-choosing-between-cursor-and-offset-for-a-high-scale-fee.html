@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya&#x27;s Pagination Dilemma: Choosing Between Cursor and Offset for a High-Scale Feed — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">06 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Pagination</span>
+      <span class="tag tag--green">Cursor vs Offset</span>
+      <span class="tag tag--amber">High Scale</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya&#x27;s Pagination Dilemma: Choosing Between Cursor and Offset for a High-Scale Feed</h1>
+      <p class="q-scenario"><strong>Maya</strong> is building the backend for a <code>/user/{id}/feed</code> API in a social app. Feeds contain <strong>millions of items</strong>, users <strong>scroll deep into history</strong>, and the system sees <strong>heavy concurrent writes</strong> (new posts, edits and deletions). The feed is ordered by an immutable key such as creation time plus ID, and the data lives in a database that supports index range scans. The service needs <strong>predictable database cost</strong>, <strong>low tail latency</strong>, <strong>high availability</strong> and enough consistency that users do <strong>not see duplicates or skipped items</strong> while scrolling. She must choose a pagination approach and supporting architecture.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep it simple with SQL OFFSET/LIMIT on the primary database, scale reads with replicas, add slow-query alerts, and fall back to the primary when clients demand strong consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Use keyset (cursor-based) pagination: an opaque cursor encodes a composite sort key (for example created_at DESC, id DESC) and stateless keyset queries fetch the next page. Reads go to replicas, with fallback to the primary for freshness-critical requests, and monitoring for missing-item rates and cursor drift.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Build a per-feed in-memory ranking tier with Redis sorted sets (timestamp score with a tie-breaker), paginate with ZRANGE/ZREVRANGE for sub-millisecond reads, update the sets asynchronously from the write stream, and run background reconciliation jobs and metrics to repair mismatches.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Pre-generate static page snapshots for hot feeds (in a cache or object storage) and serve them by page index, refreshing them periodically or after a write threshold, falling back to dynamic queries for less active feeds, with page-hit and staleness metrics.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Keyset (Cursor) Pagination</h3>
+        <p>Given deep scrolling, heavy concurrent writes and the requirement for no duplicates or gaps, <strong>keyset (cursor-based) pagination</strong> on an indexed, immutable sort key is the best fit. Each page is a short index range scan that starts right after the last seen item, so cost does not grow with scroll depth, and the cursor identifies a <em>position in the sort order</em> rather than a numeric offset that shifts when rows are inserted or deleted. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Constant cost per page:</strong> A query such as <code>WHERE (created_at, id) &lt; (:c, :i) ORDER BY created_at DESC, id DESC LIMIT 20</code> seeks directly into the index. Page 1 and page 5,000 cost about the same, whereas OFFSET must read and discard every skipped row.</li>
+          <li><strong>Stable under concurrent writes:</strong> Because the cursor is a key position, new posts inserted at the top and deletions above the cursor do not shift the window. Users do not see repeated items or skipped items caused by inserts.</li>
+          <li><strong>Stateless and horizontally scalable:</strong> The cursor carries all required state, so any API instance and any replica can serve the next page. There is no server-side session or snapshot to keep alive or fail over.</li>
+          <li><strong>Predictable tail latency:</strong> Bounded index scans keep query time and buffer usage predictable, which avoids the long scans that make OFFSET queries spike at deep pages.</li>
+          <li><strong>Works with replicas and is observable:</strong> Reads can use replicas, with the primary as a fallback for freshness-critical calls. Metrics on page latency by depth, replica lag, empty-page rates and cursor errors make drift visible.</li>
+        </ul>
+        <p>A solid implementation uses a <strong>composite index matching the ORDER BY</strong> (for example <code>(user_id, created_at DESC, id DESC)</code>), an <strong>opaque, versioned, signed cursor</strong>, a <strong>fetch of limit plus one row</strong> to compute <code>has_more</code>, <strong>soft-deleted rows filtered in the query</strong>, and metrics on <strong>latency by page depth, replica lag, duplicate and missing-item reports, and cursor decode errors</strong>.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📉</div>
+          <h4>A — OFFSET/LIMIT with Replicas</h4>
+          <p>OFFSET forces the database to <strong>scan and discard</strong> all skipped rows, so cost grows linearly with depth and deep pages become slow and spiky. Under concurrent writes the offset window shifts, so users see <strong>duplicates or skipped items</strong>. Replicas add capacity but also add lag, and they do not change the per-query cost. <strong>Caveat:</strong> OFFSET is fine for small, mostly static datasets, admin tools and shallow, page-numbered lists.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">⚡</div>
+          <h4>C — Redis Sorted Sets per Feed</h4>
+          <p>Sorted sets give very fast range reads, and this is a real pattern for precomputed feeds. But it adds a <strong>second source of truth</strong> that must be kept in sync with edits and deletes through asynchronous workers, so drift, ordering mismatches and repair jobs become your problem. Memory cost for millions of items per feed can be high, and Redis availability becomes part of the feed's availability. <strong>Caveat:</strong> for ranked, fan-out-on-write feeds, a cache tier in front of keyset pagination (for the first pages) can be a worthwhile optimization once the database path is solid.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🗂️</div>
+          <h4>D — Materialized Page Snapshots</h4>
+          <p>Page-index snapshots are cheap to serve, but they are inherently <strong>stale and fragile under writes</strong>: inserting one post shifts every later page, so either snapshots refresh constantly (cost) or users see overlaps and gaps between pages generated at different times. Storage and invalidation grow with the number of feeds and pages. <strong>Caveat:</strong> caching the first page or two of a very hot feed is effective, because most users never scroll deeper.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Keyset (Cursor) Pagination ✓</h4>
+          <p>Use keyset (cursor-based) pagination: an opaque cursor encodes a composite sort key (for example created_at DESC, id DESC) and stateless keyset queries fetch the next page. Reads go to replicas, with</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Deep-Page Latency</th><th>Stability Under Writes</th><th>Statelessness</th><th>Implementation Complexity</th><th>Extra Infrastructure</th><th>Random Page Access</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — OFFSET/LIMIT</td><td>Degrades linearly ❌</td><td>Duplicates and gaps ❌</td><td>Stateless ✅</td><td>Low ✅</td><td>None ✅</td><td>Yes ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Keyset Cursor ✓</td><td>Constant ✅</td><td>Stable ✅</td><td>Stateless ✅</td><td>Low–Medium ⚠</td><td>None ✅</td><td>No ⚠</td></tr>
+            <tr><td class="tt-option">C — Redis Sorted Sets</td><td>Very low ✅</td><td>Good, but drift risk ⚠</td><td>Stateful tier ⚠</td><td>High ❌</td><td>Redis plus workers ❌</td><td>Yes (rank ranges) ✅</td></tr>
+            <tr><td class="tt-option">D — Page Snapshots</td><td>Very low on hits ✅</td><td>Overlaps and gaps across refreshes ❌</td><td>Stateful snapshots ⚠</td><td>Medium ⚠</td><td>Cache or object store ⚠</td><td>Yes ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — OFFSET/LIMIT</h4>
+          <p>Small or rarely changing datasets, admin tables and UIs that need numbered pages and random access at shallow depth.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Keyset Cursor</h4>
+          <p>Large, write-heavy, append-mostly feeds with infinite scroll and API clients (mobile, web) that need predictable cost at any depth.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Redis Sorted Sets</h4>
+          <p>Ranked or fan-out-on-write feeds where ordering is computed (scores, personalization) and sub-millisecond reads justify the cost of a derived store.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Page Snapshots</h4>
+          <p>Very hot, widely shared feeds or public timelines where the first pages are requested by many users and slight staleness is acceptable.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Keyset Pagination Read Path</h3>
+        <p>The cursor is verified, one index range scan fetches the next page plus one extra row, and replica lag is handled explicitly:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant A as Feed API
+    participant R as Read Replica
+    participant P as Primary DB
+    C-&gt;&gt;A: GET feed with cursor
+    A-&gt;&gt;A: 1. Decode and verify cursor
+    A-&gt;&gt;R: 2. Index range scan after last key LIMIT 21
+    alt Replica fresh enough
+        R--&gt;&gt;A: 3a. Rows after cursor
+    else Replica lagging beyond the cursor freshness token
+        A-&gt;&gt;P: 3b. Same query on primary
+        P--&gt;&gt;A: 3c. Rows after cursor
+    end
+    A-&gt;&gt;A: 4. Build next cursor from the last row
+    A--&gt;&gt;C: Items plus next_cursor and has_more">sequenceDiagram
+    participant C as Client
+    participant A as Feed API
+    participant R as Read Replica
+    participant P as Primary DB
+    C-&gt;&gt;A: GET feed with cursor
+    A-&gt;&gt;A: 1. Decode and verify cursor
+    A-&gt;&gt;R: 2. Index range scan after last key LIMIT 21
+    alt Replica fresh enough
+        R--&gt;&gt;A: 3a. Rows after cursor
+    else Replica lagging beyond the cursor freshness token
+        A-&gt;&gt;P: 3b. Same query on primary
+        P--&gt;&gt;A: 3c. Rows after cursor
+    end
+    A-&gt;&gt;A: 4. Build next cursor from the last row
+    A--&gt;&gt;C: Items plus next_cursor and has_more</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Keyset Feed Query with Opaque Cursor</h3>
+        <p>The query uses a row-value comparison on the composite key, fetches one extra row to compute has_more, routes to a replica only when it is fresh enough, and returns a signed cursor for the next page:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Index: feed_items(user_id, created_at DESC, id DESC), soft-deleted rows excluded</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getFeed</span>(userId, cursorToken, limit <span class="tk-op">=</span> <span class="tk-num">20</span>, freshness <span class="tk-op">=</span> <span class="tk-str">&#x27;DEFAULT&#x27;</span>):</span>
+<span class="line">    limit <span class="tk-op">=</span> <span class="tk-fn">min</span>(limit, <span class="tk-num">50</span>)</span>
+<span class="line">    cursor <span class="tk-op">=</span> cursorToken <span class="tk-op">==</span> <span class="tk-lit">null</span> ? <span class="tk-lit">null</span> : <span class="tk-fn">decodeAndVerify</span>(cursorToken)   <span class="tk-com">// opaque, versioned, signed</span></span>
+<span class="line"></span>
+<span class="line">    sql <span class="tk-op">=</span> <span class="tk-str">&#x27;SELECT id, created_at, payload FROM feed_items WHERE user_id = ? AND NOT deleted&#x27;</span></span>
+<span class="line">    params <span class="tk-op">=</span> [userId]</span>
+<span class="line">    <span class="tk-kw">if</span> cursor <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-com">// Row-value comparison; without it use: created_at &lt; ? OR (created_at = ? AND id &lt; ?)</span></span>
+<span class="line">        sql <span class="tk-op">+</span><span class="tk-op">=</span> <span class="tk-str">&#x27; AND (created_at, id) &lt; (?, ?)&#x27;</span></span>
+<span class="line">        params <span class="tk-op">+</span><span class="tk-op">=</span> [cursor.createdAt, cursor.id]</span>
+<span class="line">    sql <span class="tk-op">+</span><span class="tk-op">=</span> <span class="tk-str">&#x27; ORDER BY created_at DESC, id DESC LIMIT ?&#x27;</span></span>
+<span class="line">    params <span class="tk-op">+</span><span class="tk-op">=</span> [limit <span class="tk-op">+</span> <span class="tk-num">1</span>]                                  <span class="tk-com">// one extra row tells us if more exist</span></span>
+<span class="line"></span>
+<span class="line">    useReplica <span class="tk-op">=</span> freshness <span class="tk-op">!=</span> <span class="tk-str">&#x27;STRONG&#x27;</span> <span class="tk-kw">and</span> (cursor <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> <span class="tk-fn">replicaIsFreshFor</span>(cursor.freshnessToken))</span>
+<span class="line">    rows <span class="tk-op">=</span> (useReplica ? replica : primary).<span class="tk-fn">query</span>(sql, params)</span>
+<span class="line"></span>
+<span class="line">    hasMore <span class="tk-op">=</span> <span class="tk-fn">length</span>(rows) <span class="tk-op">&gt;</span> limit</span>
+<span class="line">    items <span class="tk-op">=</span> hasMore ? rows[<span class="tk-num">0</span>:limit] : rows</span>
+<span class="line">    nextCursor <span class="tk-op">=</span> <span class="tk-lit">null</span></span>
+<span class="line">    <span class="tk-kw">if</span> hasMore:</span>
+<span class="line">        last <span class="tk-op">=</span> items[limit <span class="tk-op">-</span> <span class="tk-num">1</span>]</span>
+<span class="line">        nextCursor <span class="tk-op">=</span> <span class="tk-fn">encodeAndSign</span>({</span>
+<span class="line">            v: <span class="tk-num">1</span>,</span>
+<span class="line">            createdAt: last.created_at,</span>
+<span class="line">            id: last.id,</span>
+<span class="line">            freshnessToken: <span class="tk-fn">currentReplicaPosition</span>()</span>
+<span class="line">        })</span>
+<span class="line"></span>
+<span class="line">    metrics.<span class="tk-fn">observe</span>(<span class="tk-str">&#x27;feed.latency&#x27;</span>, source <span class="tk-op">=</span> useReplica ? <span class="tk-str">&#x27;replica&#x27;</span> : <span class="tk-str">&#x27;primary&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> { items: items, nextCursor: nextCursor, hasMore: hasMore }</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Ordering by a non-unique column:</strong> Sorting by created_at alone drops or repeats rows that share a timestamp. Add a unique tiebreaker such as the ID and use both in the cursor.</li>
+          <li><strong>Sorting by a mutable field:</strong> An edit that changes the sort key moves the item between pages. Sort by an immutable key or snapshot the score.</li>
+          <li><strong>Index does not match the ORDER BY:</strong> A mismatch forces a sort step and removes the performance benefit. Create the composite index in the same column order and direction.</li>
+          <li><strong>Transparent cursors:</strong> Letting clients build or modify cursors locks you into the format and opens the door to tampering. Use opaque, versioned and signed cursors.</li>
+          <li><strong>Ignoring replica lag:</strong> A page from a lagging replica can skip recent items or return deleted ones. Pass a freshness hint or use the primary for read-your-writes.</li>
+          <li><strong>Computing has_more incorrectly:</strong> Guessing end-of-feed from a short page fails when items are filtered after the query. Fetch one extra row and filter inside the query.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, large feeds (social, messaging, activity streams) <strong>paginate by position, not by number</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define the ordering:</strong> Choose an immutable sort key with a unique tiebreaker. Decide whether the feed is chronological or ranked, since ranked feeds need a snapshot or a score in the key.</li>
+          <li><strong>Step 1 — Add a matching index:</strong> A composite index that mirrors the filter and ORDER BY exactly, so each page is a pure index range scan.</li>
+          <li><strong>Step 2 — Implement opaque cursors:</strong> Encode the last key (plus a version and an optional freshness token), sign it, and treat it as opaque to clients so the format can evolve.</li>
+          <li><strong>Step 3 — Route reads sensibly:</strong> Serve pages from replicas, use the primary for the first page after a write, and handle replica lag explicitly.</li>
+          <li><strong>Step 4 — Cache the head of the feed:</strong> The first pages are the hottest. Cache them with short TTLs or invalidate on write, and keep keyset queries for everything deeper.</li>
+          <li><strong>Step 5 — Monitor correctness, not just speed:</strong> Track latency by page depth, replica lag, duplicate or missing-item reports and empty-page rates, and repair feeds if drift is detected.</li>
+        </ul>
+        <p>Paginate by position in the sort order, not by how many rows to skip.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Use <strong>keyset (cursor) pagination</strong> on an indexed, immutable composite key. It gives constant per-page cost at any depth, stable results under concurrent writes, stateless scaling across replicas, and predictable tail latency. Add caching for the hottest pages if needed, but avoid OFFSET at depth and avoid maintaining a second derived feed store unless you need its ranking capabilities.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

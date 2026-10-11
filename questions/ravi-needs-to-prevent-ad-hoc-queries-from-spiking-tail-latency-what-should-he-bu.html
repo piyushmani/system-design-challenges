@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ravi needs to prevent ad-hoc queries from spiking tail latency; what should he build? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">13 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Tail Latency</span>
+      <span class="tag tag--green">Ad-hoc Queries</span>
+      <span class="tag tag--amber">Database Performance</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Ravi needs to prevent ad-hoc queries from spiking tail latency; what should he build?</h1>
+      <p class="q-scenario"><strong>Ravi</strong>, a senior backend engineer, runs a distributed <strong>OLAP service</strong> (a sharded columnar store) that executes <strong>thousands of ad-hoc analytical SQL queries per hour</strong>. Many queries join very large partitions with <strong>highly variable predicate patterns</strong>. Operations sees unpredictable <strong>tail latency</strong> and poor execution plans, and <code>EXPLAIN</code> shows the cause: <strong>inaccurate cardinality estimates</strong> that lead the planner to choose expensive <strong>broadcast joins</strong>. Ravi needs a strategy that improves both <strong>median and tail latency</strong>, keeps the service <strong>highly available</strong>, and turns <code>EXPLAIN</code> output into <strong>observability</strong> that continuously improves the planner.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Create precomputed materialized views for frequent query shapes and refresh them synchronously during writes so reads always use optimized paths. Use EXPLAIN only to verify that queries hit those views.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Build a centralized, strongly consistent cost-based optimizer service that holds authoritative global statistics and produces execution plans before queries run. Keep the statistics updated synchronously so the optimizer always works from exact data.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Push as much work as possible to individual storage shards, relying on local query optimizers and eventually consistent statistics. Each shard plans its own part independently and results are simply merged, with no global planning coordinator.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Build an EXPLAIN-centric feedback loop: collect telemetry comparing estimated and actual row counts, run lightweight offline analysis to find misestimates, refine statistics and plan templates, enable adaptive runtime re-optimization for long-running queries, and cache plans by query fingerprint. When telemetry is unavailable, fall back to conservative execution plans.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: EXPLAIN-Centric Feedback Loop with Adaptive Execution</h3>
+        <p>The symptom is tail latency, but the <strong>root cause is misestimation</strong>: the planner picks a broadcast join because it believes one side is small, and it is wrong. With highly variable predicates, correlated columns, and skewed data, no static statistics can be accurate for every ad-hoc query. So the durable fix is a loop: <strong>measure estimated versus actual rows, improve the statistics where errors cluster, and adapt at runtime when an estimate is still wrong</strong>. Here's why it stands out:</p>
+        <ul>
+          <li><strong>It targets the root cause:</strong> Comparing estimated and actual rows per operator (the q-error) pinpoints exactly which predicates, joins, or tables are misestimated, whether from stale statistics, correlation, or skew.</li>
+          <li><strong>It works for ad-hoc workloads:</strong> It does not require predicting query shapes in advance. Better multi-column statistics, histograms, and sketches improve estimates for whole families of future queries.</li>
+          <li><strong>Adaptive execution caps the damage:</strong> If the build side of a join turns out larger than expected, the engine can switch from a broadcast to a shuffled hash join at a stage boundary. This protects tail latency even when estimates are still wrong.</li>
+          <li><strong>Plan caching stabilizes behavior:</strong> Caching good plans by fingerprint avoids repeated planning cost and plan flapping, and plan baselines make regressions visible and reversible.</li>
+          <li><strong>It fails safe and stays available:</strong> Analysis runs offline, off the query path. If telemetry is missing, the planner uses conservative defaults (for example, a lower broadcast size limit) rather than guessing aggressively.</li>
+          <li><strong>EXPLAIN becomes data, not a manual tool:</strong> Dashboards on q-error percentiles, plan changes, and per-fingerprint latency let the team see planner quality improve over time.</li>
+        </ul>
+        <p>A well-run loop includes <strong>q-error tracking per operator</strong>, <strong>extended statistics</strong> on columns that show correlated errors, <strong>broadcast size limits</strong>, <strong>adaptive join selection</strong>, <strong>plan baselines with regression checks</strong>, and <strong>workload management</strong> (timeouts and resource groups). Watch the p95 q-error, the fraction of queries that change plans, and p99 latency per fingerprint.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🧱</div>
+          <h4>A — Synchronously Refreshed Materialized Views</h4>
+          <p>Views help only queries that <strong>match a precomputed shape</strong>. Ad-hoc queries with variable predicates mostly will not, so tail latency for them is unchanged. Refreshing synchronously on every write <strong>pushes view-maintenance cost onto ingestion</strong> and ties write availability to view health. Restricting EXPLAIN to 'did it use the view' throws away the diagnostic value the scenario asks for. <strong>Caveat:</strong> materialized views are an excellent targeted tool for the few recurring query fingerprints that telemetry (option D) identifies.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧠</div>
+          <h4>B — Centralized Strongly Consistent Optimizer</h4>
+          <p>Planning at a coordinator is normal, but <strong>synchronously maintaining exact global statistics</strong> makes every ingest pay for statistics updates and makes the optimizer a bottleneck and a single point of failure. Worse, exactness is not the real issue: even perfectly fresh single-column statistics cannot capture <strong>correlation between predicates or join selectivity</strong>, so misestimates persist. <strong>Caveat:</strong> statistics do not need strong consistency, since approximate and slightly stale statistics are fine if the engine can correct itself at runtime.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧩</div>
+          <h4>C — Shard-Local Optimizers with No Global Planner</h4>
+          <p>Join strategy (broadcast, shuffle, or co-located) is a <strong>global decision</strong> that depends on data across shards, so independent local planners cannot make it. Eventually consistent statistics can make shards choose different plans, and the slowest shard then dominates the query's latency, which <strong>worsens tail latency</strong>. <strong>Caveat:</strong> pushing filters, projections, and partial aggregation down to shards is valuable, but as part of a globally coordinated plan.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>D — EXPLAIN-Centric Feedback Loop with Adaptive Execution ✓</h4>
+          <p>Build an EXPLAIN-centric feedback loop: collect telemetry comparing estimated and actual row counts, run lightweight offline analysis to find misestimates, refine statistics and plan templates, enable</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Fixes Root Cause (Misestimates)</th><th>Handles Ad-hoc Variability</th><th>Median Latency</th><th>Tail Latency</th><th>Availability</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Synchronous Materialized Views</td><td>No ❌</td><td>No, recurring shapes only ❌</td><td>High for covered queries ✅</td><td>Unchanged for the rest ❌</td><td>Write path coupled ❌</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — Centralized Strongly Consistent Optimizer</td><td>Partial ⚠</td><td>Partial ⚠</td><td>Moderate ⚠</td><td>Moderate ⚠</td><td>Single point of failure ❌</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">C — Shard-Local Optimizers</td><td>No ❌</td><td>Yes ✅</td><td>Inconsistent ⚠</td><td>Worse, stragglers ❌</td><td>High ✅</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — EXPLAIN Feedback Loop ✓</td><td>Yes ✅</td><td>Yes ✅</td><td>Improves ✅</td><td>Improves ✅</td><td>High, fails safe ✅</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Synchronous Materialized Views</h4>
+          <p>A small, stable set of recurring queries or dashboards where read latency matters far more than write cost, and the view definitions rarely change.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Centralized Strongly Consistent Optimizer</h4>
+          <p>Smaller deployments with modest ingest rates where exact statistics are cheap to maintain and a central planner is acceptable as a dependency.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Shard-Local Optimizers</h4>
+          <p>Shard-local queries that never need cross-shard joins, such as lookups confined to one partition.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — EXPLAIN Feedback Loop</h4>
+          <p>Ad-hoc, high-variance analytical workloads on large distributed data, where plan quality depends on estimates that static statistics cannot get right.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> EXPLAIN Feedback and Adaptive Execution Loop</h3>
+        <p>Each execution feeds estimated-versus-actual telemetry back into statistics and plans, while the executor can adapt mid-query:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    Q[Ad-hoc query] --&gt; F[Fingerprint and plan cache lookup]
+    F --&gt; P[Planner using current statistics]
+    P --&gt; E[Distributed execution on shards]
+    E --&gt; T[Telemetry of estimated vs actual rows]
+    T --&gt; A[Offline analysis of q-error and regressions]
+    A --&gt; S[Refine statistics and plan templates]
+    S --&gt; P
+    E -. long query and large misestimate .-&gt; R[Adaptive re-optimization of join strategy]
+    R --&gt; E
+    T -. telemetry missing .-&gt; D[Conservative default plan]
+    D --&gt; E">flowchart LR
+    Q[Ad-hoc query] --&gt; F[Fingerprint and plan cache lookup]
+    F --&gt; P[Planner using current statistics]
+    P --&gt; E[Distributed execution on shards]
+    E --&gt; T[Telemetry of estimated vs actual rows]
+    T --&gt; A[Offline analysis of q-error and regressions]
+    A --&gt; S[Refine statistics and plan templates]
+    S --&gt; P
+    E -. long query and large misestimate .-&gt; R[Adaptive re-optimization of join strategy]
+    R --&gt; E
+    T -. telemetry missing .-&gt; D[Conservative default plan]
+    D --&gt; E</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Feedback Capture, Safe Planning, and Adaptive Join</h3>
+        <p>Per-operator q-error drives statistics refinement. Planning falls back to conservative settings, and the join strategy is chosen at runtime from the actual build-side size:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// 1. After each (sampled) query: record estimated vs actual rows</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">recordFeedback</span>(fingerprint, plan, actuals):</span>
+<span class="line">    <span class="tk-kw">for</span> op <span class="tk-kw">in</span> plan.operators:</span>
+<span class="line">        est <span class="tk-op">=</span> <span class="tk-fn">max</span>(op.estRows, <span class="tk-num">1</span>)</span>
+<span class="line">        act <span class="tk-op">=</span> <span class="tk-fn">max</span>(actuals[op.id].rows, <span class="tk-num">1</span>)</span>
+<span class="line">        qerror <span class="tk-op">=</span> <span class="tk-fn">max</span>(est <span class="tk-op">/</span> act, act <span class="tk-op">/</span> est)</span>
+<span class="line">        feedback.<span class="tk-fn">append</span>(fingerprint, op.predicateSignature, qerror, act)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// 2. Offline analysis, off the query path</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">refineStatistics</span>():</span>
+<span class="line">    <span class="tk-kw">for</span> sig <span class="tk-kw">in</span> feedback.<span class="tk-fn">groupBy</span>(predicateSignature) where <span class="tk-fn">p95</span>(qerror) <span class="tk-op">&gt;</span> <span class="tk-num">10</span>:</span>
+<span class="line">        <span class="tk-fn">schedule</span>(<span class="tk-fn">buildExtendedStats</span>(sig.columns))       <span class="tk-com">// multi-column stats, histograms, sketches</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// 3. Planning with a safe default and a regression guard</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">plan</span>(query):</span>
+<span class="line">    fp <span class="tk-op">=</span> <span class="tk-fn">fingerprint</span>(query)</span>
+<span class="line">    cached <span class="tk-op">=</span> planCache.<span class="tk-fn">get</span>(fp, <span class="tk-fn">selectivityBucket</span>(query))</span>
+<span class="line">    <span class="tk-kw">if</span> cached <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> cached.healthy:</span>
+<span class="line">        <span class="tk-kw">return</span> cached</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">feedbackAvailable</span>(fp):</span>
+<span class="line">        candidate <span class="tk-op">=</span> optimizer.<span class="tk-fn">plan</span>(query, stats)</span>
+<span class="line">    <span class="tk-kw">else</span>:</span>
+<span class="line">        candidate <span class="tk-op">=</span> optimizer.<span class="tk-fn">plan</span>(query, conservative)  <span class="tk-com">// prefer shuffle join, cap broadcast size</span></span>
+<span class="line">    <span class="tk-kw">if</span> baseline.<span class="tk-fn">exists</span>(fp) <span class="tk-kw">and</span> candidate.expectedCost <span class="tk-op">&gt;</span> baseline.cost <span class="tk-op">*</span> <span class="tk-num">1.2</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> baseline.plan                             <span class="tk-com">// do not adopt a likely regression</span></span>
+<span class="line">    planCache.<span class="tk-fn">put</span>(fp, <span class="tk-fn">selectivityBucket</span>(query), candidate)</span>
+<span class="line">    <span class="tk-kw">return</span> candidate</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// 4. Runtime: choose join strategy from the ACTUAL build side</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">executeJoin</span>(join):</span>
+<span class="line">    build <span class="tk-op">=</span> <span class="tk-fn">runStage</span>(join.buildSide)                    <span class="tk-com">// materialization point</span></span>
+<span class="line">    <span class="tk-kw">if</span> build.actualBytes <span class="tk-op">&lt;=</span> BROADCAST_LIMIT:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">broadcastJoin</span>(build, join.probeSide)</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">shuffleHashJoin</span>(build, join.probeSide, key <span class="tk-op">=</span> join.key)   <span class="tk-com">// re-optimized</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Tuning without a regression guard:</strong> A refreshed statistic or new plan can make some queries slower. Keep baselines and roll back when p95 latency worsens.</li>
+          <li><strong>Caching plans by raw SQL text:</strong> Literals fragment the cache. Normalize to a fingerprint, then account for parameter sensitivity with selectivity buckets.</li>
+          <li><strong>Treating every misestimate equally:</strong> Focus on errors that change a plan decision, such as a broadcast-versus-shuffle choice, not on harmless row-count drift.</li>
+          <li><strong>Collecting full plans for every query:</strong> Telemetry volume and overhead can hurt the system you are trying to help. Sample and aggregate.</li>
+          <li><strong>Ignoring skew:</strong> A correct average row count can hide a hot join key that overloads one shard. Track per-shard actuals, not just totals.</li>
+          <li><strong>No safe default:</strong> If feedback is missing and the planner stays aggressive, the first execution of a new query can be the one that spikes tail latency.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams fix the cheap things first and <strong>let measurement drive each next step</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Measure:</strong> Capture <code>EXPLAIN ANALYZE</code> for the slowest queries and compute the gap between estimated and actual rows per operator.</li>
+          <li><strong>Step 1 — Fix statistics basics:</strong> Refresh stale statistics and add histograms, distinct-count sketches, and multi-column statistics on correlated columns that show large errors.</li>
+          <li><strong>Step 2 — Add guardrails:</strong> Cap broadcast size, set query timeouts, and use admission control or resource groups so one bad query cannot hurt everyone else.</li>
+          <li><strong>Step 3 — Close the loop:</strong> Persist estimated-versus-actual feedback per fingerprint and use it to refine statistics and plan choices. Add adaptive join selection for long-running queries (systems such as Spark's adaptive query execution use this idea).</li>
+          <li><strong>Step 4 — Cache and baseline plans:</strong> Cache plans per fingerprint with selectivity buckets, and compare new plans against baselines to prevent regressions (the idea behind features like SQL Server's Query Store).</li>
+          <li><strong>Step 5 — Materialize selectively:</strong> For the few fingerprints that remain heavy and recurring, add materialized views or pre-aggregations.</li>
+        </ul>
+        <p>Fix the estimator and make the executor tolerant of its mistakes, rather than trying to pre-solve every query.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Ad-hoc tail latency comes from <strong>wrong cardinality estimates</strong>, and you cannot out-engineer that with exact statistics or precomputation. Build a loop that <strong>captures estimated versus actual rows, improves statistics, adapts joins at runtime, and caches vetted plans</strong>, with conservative defaults and regression guards so the system fails safe.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

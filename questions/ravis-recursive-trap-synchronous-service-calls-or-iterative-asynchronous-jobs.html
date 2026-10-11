@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ravi&#x27;s recursive trap: Synchronous service calls or iterative asynchronous jobs? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">10 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Recursion</span>
+      <span class="tag tag--green">Asynchronous Jobs</span>
+      <span class="tag tag--amber">System Design</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Ravi&#x27;s recursive trap: Synchronous service calls or iterative asynchronous jobs?</h1>
+      <p class="q-scenario"><strong>Ravi</strong>, a senior backend engineer, is designing a service that <strong>propagates configuration updates</strong> through a large, dynamic <strong>dependency graph of tens of thousands of nodes</strong> with <strong>varying depths</strong>. When a node receives an update it applies it and may then trigger updates in its <strong>dependent nodes</strong>. The system needs <strong>high availability</strong>, <strong>strong observability</strong>, and <strong>resilience to partial failures</strong>. He is weighing a <strong>recursive, service-to-service call chain</strong> against an <strong>iterative approach that splits the work into discrete tasks</strong>. Which strategy should he choose?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Synchronous recursive push (DFS-like): a node invokes all its dependents within the same request, retries failures, and acknowledges success only after the entire dependent subtree has been updated.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Iterative, asynchronous task processing: emit tasks (or batches of node IDs) to a durable queue; idempotent workers consume them, record progress in a persistent store, retry with exponential backoff, and are traced with distributed tracing and task-level metrics.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">A single strongly consistent database transaction that uses a recursive CTE or graph traversal to compute the transitive closure, then dispatches the updates synchronously from a central process to apply the propagation atomically.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">A centralized coordinator that loads the dependency subtree into memory, invokes dependents in breadth-first batches to control parallelism, tracks overall status, retries failed nodes, and records the final completion state in the database.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Durable Queue with Idempotent Workers</h3>
+        <p>Propagation across tens of thousands of nodes is a <strong>long-running fan-out workflow</strong> over an unreliable network, not a request/response operation. Converting recursion into an explicit work frontier on a durable queue makes each unit of work small, retryable, observable, and independently scalable, so a failure in one branch never invalidates the work already done on the others. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Bounded blast radius:</strong> A failing node affects only its own task, which is retried with backoff or parked in a dead-letter queue. In synchronous recursion, one slow or failing descendant stalls or fails every ancestor request above it.</li>
+          <li><strong>No stack or timeout problems:</strong> Depth is represented as data (task records), not as call stack and open connections. A deep chain of synchronous calls multiplies latency and timeout risk per hop, and end-to-end availability drops as the product of each hop's availability.</li>
+          <li><strong>Idempotency makes retries safe:</strong> Keying work by (version, nodeId) makes duplicates from at-least-once delivery or retries harmless, and applying config with a monotonic version number (ignore if the node is already at or beyond that version) resolves out-of-order delivery.</li>
+          <li><strong>Controlled load:</strong> Queue depth and worker concurrency are explicit knobs. You can rate-limit per target, apply backpressure, and keep a broad update from overwhelming shared dependencies.</li>
+          <li><strong>Observability and resumability:</strong> Persisted per-node status (pending, applied, failed) plus task metrics and trace context give a live view of propagation progress and let the system resume after crashes without restarting from the root.</li>
+        </ul>
+        <p>A production design includes <strong>versioned updates</strong>, <strong>idempotency keys</strong>, a <strong>persistent progress table</strong>, <strong>retry with exponential backoff and jitter</strong>, a <strong>dead-letter queue</strong>, <strong>per-target rate limits</strong>, and <strong>trace propagation</strong>. For complex ordering or approval gates, a workflow engine (Temporal, AWS Step Functions) provides durability and state tracking out of the box.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔁</div>
+          <h4>A — Synchronous Recursive Push</h4>
+          <p>Recursive synchronous calls tie the lifetime of every ancestor request to its slowest, deepest descendant. Timeouts compound per hop, a single failure cascades up (or forces repeated retries of whole subtrees), thread and connection use grows with depth and breadth, and a crash mid-propagation leaves no record of what has already been applied. Retrying without idempotency repeats side effects. <strong>Caveat:</strong> for tiny, shallow graphs where the caller needs an immediate answer, a bounded-depth synchronous fan-out can be acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧮</div>
+          <h4>C — Single Transaction with Recursive CTE</h4>
+          <p>A recursive CTE or graph query is a good way to <em>compute</em> the transitive closure (which nodes are affected), and it is useful as a step inside the solution. The mistake is expecting a database transaction to make the <em>remote application</em> of updates atomic: the transaction covers only database rows, not calls to tens of thousands of external services, and holding a large transaction open for the whole propagation blocks other work. Distributed atomic commit across that many services is impractical, and a central synchronous dispatcher remains a bottleneck and a single point of failure.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧭</div>
+          <h4>D — Centralized In-Memory Coordinator</h4>
+          <p>The closest alternative, and sound in intent: breadth-first batches control parallelism and a persistent record exists. Its weaknesses are architectural: the coordinator holds the working state in memory and is a bottleneck and single point of failure, recording only the <em>final</em> completion state means a crash loses all progress unless state is persisted per node, and it scales vertically. If its state is persisted and it dispatches through a durable queue, it effectively becomes Option B. <strong>Caveat:</strong> a durable workflow engine like Temporal is a legitimate coordinator-style implementation.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Durable Queue with Idempotent Workers ✓</h4>
+          <p>Iterative, asynchronous task processing: emit tasks (or batches of node IDs) to a durable queue; idempotent workers consume them, record progress in a persistent store, retry with exponential backoff,</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Partial-Failure Resilience</th><th>Resume After Crash</th><th>Tail Latency and Timeouts</th><th>Backpressure Control</th><th>Observability</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Sync Recursive Push</td><td>Poor ❌ (cascading failures)</td><td>No ❌</td><td>Poor ❌ (compounds per hop)</td><td>None ❌</td><td>Hard ❌ (deep call chains)</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Durable Queue + Idempotent Workers ✓</td><td>Strong ✅</td><td>Yes ✅</td><td>Decoupled ✅</td><td>Native ✅</td><td>Strong ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — Single Transaction + CTE</td><td>Poor ❌</td><td>No ❌</td><td>Poor ❌ (long transaction)</td><td>None ❌</td><td>Weak ⚠</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Central In-Memory Coordinator</td><td>Moderate ⚠</td><td>Partial ⚠ (only if state is persisted)</td><td>Good ✅</td><td>Good ✅ (batches)</td><td>Good ✅</td><td>Medium–High ⚠ (coordinator SPOF)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Sync Recursive Push</h4>
+          <p>Small, shallow, bounded graphs where the caller needs an immediate result and the failure of a subtree can simply be reported.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Durable Queue + Idempotent Workers</h4>
+          <p>Large or deep graphs, expected partial failures, a need for resumability and observability, and eventual propagation is acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Single Transaction + CTE</h4>
+          <p>Impact analysis (which nodes are affected) or graph validation, as a read-only step that feeds the task queue.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Central In-Memory Coordinator</h4>
+          <p>Workflows with complex ordering or approval gates, ideally built on a durable orchestrator with persisted state.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Iterative Propagation with a Durable Queue</h3>
+        <p>Each task claims its (version, node) pair, applies the config idempotently, then enqueues its dependents; failures retry with backoff and end up in a dead-letter queue:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant A as Admin API
+    participant DB as Progress Store
+    participant Q as Durable Queue
+    participant W as Idempotent Worker
+    participant N as Target Service
+    A-&gt;&gt;DB: 1. Create propagation v42
+    A-&gt;&gt;Q: 2. Enqueue tasks for root nodes
+    Q-&gt;&gt;W: 3. Deliver task for node X v42
+    W-&gt;&gt;DB: 4. Claim X v42 with conditional write
+    W-&gt;&gt;N: 5. Apply config v42
+    alt Success
+        N--&gt;&gt;W: OK
+        W-&gt;&gt;DB: 6. Mark X applied
+        W-&gt;&gt;Q: 7. Enqueue dependents of X
+    else Failure
+        N--&gt;&gt;W: Error or timeout
+        W-&gt;&gt;Q: Retry with backoff then dead letter after max attempts
+    end">sequenceDiagram
+    participant A as Admin API
+    participant DB as Progress Store
+    participant Q as Durable Queue
+    participant W as Idempotent Worker
+    participant N as Target Service
+    A-&gt;&gt;DB: 1. Create propagation v42
+    A-&gt;&gt;Q: 2. Enqueue tasks for root nodes
+    Q-&gt;&gt;W: 3. Deliver task for node X v42
+    W-&gt;&gt;DB: 4. Claim X v42 with conditional write
+    W-&gt;&gt;N: 5. Apply config v42
+    alt Success
+        N--&gt;&gt;W: OK
+        W-&gt;&gt;DB: 6. Mark X applied
+        W-&gt;&gt;Q: 7. Enqueue dependents of X
+    else Failure
+        N--&gt;&gt;W: Error or timeout
+        W-&gt;&gt;Q: Retry with backoff then dead letter after max attempts
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Iterative Propagation Worker with Claims, Retries, and Dead-Lettering</h3>
+        <p>Recursion is replaced by enqueueing dependents; a claim record dedupes diamond paths and retries, and re-enqueueing after a crash is safe because the queue dedupes by key:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">startPropagation</span>(update):</span>
+<span class="line">    version <span class="tk-op">=</span> configStore.<span class="tk-fn">commit</span>(update)                          <span class="tk-com">// monotonically increasing version</span></span>
+<span class="line">    propagation <span class="tk-op">=</span> progress.<span class="tk-fn">create</span>(version, status <span class="tk-op">=</span> <span class="tk-str">&#x27;RUNNING&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">for</span> node <span class="tk-kw">in</span> graph.<span class="tk-fn">directDependents</span>(update.rootNode):</span>
+<span class="line">        queue.<span class="tk-fn">enqueue</span>(<span class="tk-fn">Task</span>(propagation.id, version, node.id), dedupeKey <span class="tk-op">=</span> version <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> node.id)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleTask</span>(task):                                        <span class="tk-com">// runs in an idempotent worker</span></span>
+<span class="line">    state <span class="tk-op">=</span> progress.<span class="tk-fn">claim</span>(task.version, task.nodeId, owner <span class="tk-op">=</span> workerId, lease <span class="tk-op">=</span> <span class="tk-num">60s</span>)</span>
+<span class="line">    <span class="tk-com">// state is one of: CLAIMED, APPLIED, HELD_BY_OTHER</span></span>
+<span class="line">    <span class="tk-kw">if</span> state <span class="tk-op">==</span> HELD_BY_OTHER:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">nack</span>(task, delay <span class="tk-op">=</span> <span class="tk-num">10s</span>)                            <span class="tk-com">// another worker owns it; recheck after the lease</span></span>
+<span class="line">    <span class="tk-kw">if</span> state <span class="tk-op">==</span> APPLIED:</span>
+<span class="line">        <span class="tk-fn">enqueueDependents</span>(task)                                   <span class="tk-com">// repeat is safe (dedupe keys); covers a crash after apply</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">ack</span>(task)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        targetClient.<span class="tk-fn">applyConfig</span>(task.nodeId, task.version, timeout <span class="tk-op">=</span> <span class="tk-num">3s</span>)   <span class="tk-com">// target ignores older versions</span></span>
+<span class="line">        progress.<span class="tk-fn">markApplied</span>(task.version, task.nodeId)</span>
+<span class="line">        <span class="tk-fn">enqueueDependents</span>(task)                                   <span class="tk-com">// iterative: enqueue instead of recursing</span></span>
+<span class="line">        <span class="tk-fn">ack</span>(task)</span>
+<span class="line">    <span class="tk-kw">catch</span> RetryableError:</span>
+<span class="line">        progress.<span class="tk-fn">release</span>(task.version, task.nodeId)</span>
+<span class="line">        <span class="tk-kw">if</span> task.attempt <span class="tk-op">&gt;=</span> MAX_ATTEMPTS:</span>
+<span class="line">            <span class="tk-fn">deadLetter</span>(task)</span>
+<span class="line">            progress.<span class="tk-fn">markFailed</span>(task.version, task.nodeId)</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            queue.<span class="tk-fn">retryLater</span>(task, delay <span class="tk-op">=</span> <span class="tk-fn">backoff</span>(task.attempt) <span class="tk-op">+</span> <span class="tk-fn">jitter</span>())</span>
+<span class="line">    <span class="tk-kw">catch</span> PermanentError:</span>
+<span class="line">        <span class="tk-fn">deadLetter</span>(task)</span>
+<span class="line">        progress.<span class="tk-fn">markFailed</span>(task.version, task.nodeId)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">enqueueDependents</span>(task):</span>
+<span class="line">    <span class="tk-kw">for</span> dep <span class="tk-kw">in</span> graph.<span class="tk-fn">dependents</span>(task.nodeId):</span>
+<span class="line">        queue.<span class="tk-fn">enqueue</span>(<span class="tk-fn">Task</span>(task.propagationId, task.version, dep.id), dedupeKey <span class="tk-op">=</span> task.version <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> dep.id)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>No version on updates:</strong> Without versions, retries and reordering can apply an older config over a newer one.</li>
+          <li><strong>Non-idempotent workers:</strong> At-least-once delivery means duplicates. Dedupe with a conditional write on (version, nodeId).</li>
+          <li><strong>Ignoring diamonds and cycles:</strong> The same node can be reached through several paths and be processed repeatedly or endlessly.</li>
+          <li><strong>Unbounded fan-out:</strong> A hub node with thousands of dependents floods the queue and downstream services. Batch, rate-limit per target, and cap concurrency.</li>
+          <li><strong>Retry storms:</strong> Immediate retries from thousands of workers against a struggling service make it worse. Use exponential backoff with jitter and circuit breakers.</li>
+          <li><strong>No progress record:</strong> Without per-node state you cannot answer 'is it done?' or resume after a crash; you can only restart from the root.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, propagation systems are built as small durable workflows, not call chains:</p>
+        <ul>
+          <li><strong>Step 0 — Model the graph:</strong> Decide whether it is a DAG, whether order matters, and what the maximum fan-out is.</li>
+          <li><strong>Step 1 — Version every update:</strong> Give each change a monotonically increasing version so out-of-order or duplicate tasks become no-ops.</li>
+          <li><strong>Step 2 — Enqueue the frontier:</strong> Seed tasks for the directly affected nodes; each processed task enqueues its dependents.</li>
+          <li><strong>Step 3 — Idempotent apply and progress record:</strong> A conditional write per (version, nodeId) both dedupes work and records progress.</li>
+          <li><strong>Step 4 — Failure policy:</strong> Exponential backoff with jitter, retry limits, a dead-letter queue, a replay tool, and circuit breaking for unhealthy targets.</li>
+          <li><strong>Step 5 — Observe:</strong> Dashboards for percent complete, queue age, failure rate per target, and trace links from the root update.</li>
+        </ul>
+        <p>Persist the progress of the work, not just its result.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Replace <strong>recursion with an explicit, durable work frontier</strong>. Small idempotent tasks on a queue give you retries, backpressure, resumability, and observability that call chains cannot, at the price of eventual (not atomic) propagation, which you manage with versioning and progress tracking.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

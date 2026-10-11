@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Riley&#x27;s dilemma: fast user previews or dependable background processing? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">08 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Background Processing</span>
+      <span class="tag tag--green">User Experience</span>
+      <span class="tag tag--amber">Reliability</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Riley&#x27;s dilemma: fast user previews or dependable background processing?</h1>
+      <p class="q-scenario"><strong>Riley</strong>, a backend developer, is designing a <strong>serverless image-processing system</strong>. Clients upload images through an API and expect an <strong>immediate preview (under 500 ms)</strong> in the UI. The real processing (face detection, multi-resolution resizing, metadata extraction) is <strong>CPU-intensive and can take up to several minutes</strong>. The organization wants a serverless design that keeps the UI responsive, <strong>scales through sudden traffic spikes</strong>, provides clear <strong>observability and error handling</strong>, and limits user-facing failures when downstream tasks error out. Riley must pick the design that best balances <em>latency, scalability, fault tolerance, and operational transparency</em>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Execute a single synchronous Lambda function triggered by API Gateway to handle both preview creation and intensive processing. Only return the preview once all tasks are done (hoping most executions complete before the API Gateway times out).</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Implement a dual-path process: use a lightweight synchronous Lambda (API Gateway -&gt; Lambda) to quickly generate and return the preview along with saving metadata. Then, send a message to SQS (or EventBridge) to trigger distinct asynchronous Lambda workers for the intensive tasks, incorporating visibility timeouts, retries, and a Dead Letter Queue for failed jobs.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Save upload metadata to DynamoDB directly from the API Lambda and leverage DynamoDB Streams to invoke worker Lambdas for the heavy processing. Depend on the at-least-once delivery and per-shard ordering of Streams for the workflow.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Utilize Step Functions to manage the entire process: the API Lambda initiates a Step Functions workflow that executes coordinated steps (like a parallel Map for resizing and retries for individual stages), while the API awaits a brief callback or actively polls the workflow for completion.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Dual-Path: Sync Preview + Async Queue Workers</h3>
+        <p>The core requirement is to <strong>decouple what the user waits for (a preview in under 500 ms) from what the system needs time for (minutes of CPU work)</strong>. Option B does exactly that: a thin synchronous path returns the preview and persists job metadata, while a durable queue hands the heavy work to independently scaling workers with retries and a dead-letter queue. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Latency isolation:</strong> The request path does only bounded work (validate, create a small preview, write the job record, enqueue). Its p99 no longer depends on how long face detection or resizing takes.</li>
+          <li><strong>Elastic buffering:</strong> SQS absorbs sudden spikes, and the Lambda event-source mapping scales workers with queue depth. A maximum-concurrency cap on the mapping protects downstream resources (models, databases, third-party APIs).</li>
+          <li><strong>Built-in fault tolerance:</strong> Visibility timeouts, retries, and a DLQ mean a failing job never becomes an API error. The user already has a preview; the job simply moves to RETRYING or FAILED, and poison messages are parked for inspection and redrive.</li>
+          <li><strong>Operational transparency:</strong> A job record (status per stage) in DynamoDB, queue metrics (depth, age of oldest message, DLQ depth), and trace context propagated through message attributes give on-call engineers a clear picture of where each job is.</li>
+          <li><strong>Why not Step Functions alone?</strong> It is excellent for orchestration and per-step visibility, but as described in option D the API waits on or polls the workflow, which ties request latency to a long-running process. Step Functions is better used <em>behind</em> the queue than in front of the user.</li>
+        </ul>
+        <p>Model the job as a small state machine (<code>RECEIVED → PREVIEW_READY → PROCESSING → COMPLETE | FAILED</code>), persist it, expose a status endpoint (or push via WebSocket/SSE), and alarm on <strong>queue age</strong> and <strong>DLQ depth</strong>. If stage-level orchestration grows complex, let the queue trigger a Step Functions workflow for fan-out resizing and per-stage retries.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">⏳</div>
+          <h4>A — Single Synchronous Lambda</h4>
+          <p>This couples the user-visible response to the slowest work. API Gateway's default integration timeout is about 29 seconds while the work can take minutes, so 'hoping most executions finish in time' guarantees timeouts, client retries that duplicate work, and wasted compute. A spike multiplies long-running concurrent executions, and there is no fault isolation: a failure in face detection also fails the preview. It violates the sub-500 ms preview goal outright.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🌊</div>
+          <h4>C — DynamoDB Streams as the Job Trigger</h4>
+          <p>Workable, but the wrong tool for a job queue. It ties workflow triggering to table writes, and Streams processing is shard-based: one poison record can stall its shard until retries are exhausted (you must configure bisect-on-error, a retry limit, and an on-failure destination). Records are retained for only 24 hours. The per-shard ordering it advertises is something this workload does not need, and it is the very property that makes a single failure block later records. SQS gives per-message retries, visibility timeouts, a DLQ, and redrive. <strong>Use Streams for CDC and derived views, not as a work queue.</strong></p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔀</div>
+          <h4>D — Step Functions with API Awaiting Completion</h4>
+          <p>Great orchestration and observability (execution history, per-step retry and catch, Map state for parallel resizing), but the design has the API await a callback or poll the workflow. That re-couples request latency to a long process, and synchronous Express workflows are capped at five minutes. Standard workflows are billed per state transition, which can be costly for very high volumes of small jobs. <strong>Best placed behind the queue</strong> as the engine of the heavy path, not as the front door.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Dual-Path: Sync Preview + Async Queue Workers ✓</h4>
+          <p>Implement a dual-path process: use a lightweight synchronous Lambda (API Gateway -&gt; Lambda) to quickly generate and return the preview along with saving metadata. Then, send a message to SQS (or Event</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Preview Latency (&lt;500 ms)</th><th>Spike Absorption</th><th>Fault Isolation</th><th>Operational Visibility</th><th>Implementation Complexity</th><th>Cost Efficiency at Scale</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Single Sync Lambda</td><td>Poor ❌ (waits for all work)</td><td>Poor ❌ (concurrency burn)</td><td>None ❌</td><td>Limited ⚠ (logs only)</td><td>Low ✅</td><td>Poor ❌ (long waits billed)</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Sync Preview + SQS Workers ✓</td><td>Excellent ✅</td><td>Excellent ✅ (queue buffer)</td><td>Strong ✅ (retries + DLQ)</td><td>Good ✅ (job table + metrics)</td><td>Medium ⚠</td><td>Good ✅</td></tr>
+            <tr><td class="tt-option">C — DynamoDB Streams</td><td>Good ✅</td><td>Moderate ⚠ (shard-bound)</td><td>Moderate ⚠ (shard blocking)</td><td>Moderate ⚠</td><td>Medium ⚠</td><td>Good ✅</td></tr>
+            <tr><td class="tt-option">D — Step Functions in Front</td><td>Depends ⚠ (blocks if awaited)</td><td>Good ✅</td><td>Strong ✅ (per-step retry/catch)</td><td>Excellent ✅</td><td>Medium–High ⚠</td><td>Moderate ⚠ (state transitions)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Single Sync Lambda</h4>
+          <p>Tiny, bounded jobs that reliably finish in about a second or two (for example a single thumbnail), where simplicity matters more than resilience.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Sync Preview + SQS Workers</h4>
+          <p>A user-visible fast response plus heavy background work that must survive spikes and failures. The default pattern for upload-then-process systems.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — DynamoDB Streams</h4>
+          <p>Change-data-capture needs: audit trails, derived views, or per-key ordered reactions to table changes. Not for general job queues.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Step Functions in Front</h4>
+          <p>Multi-stage workflows with branching, parallel fan-out, long waits, or human approval, especially when a visual execution history is valuable. Often combined with option B.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Dual-Path Request Flow</h3>
+        <p>The client gets a preview immediately; heavy work happens later via the queue:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant A as API Gateway + Lambda
+    participant S as S3
+    participant D as DynamoDB
+    participant Q as SQS Queue
+    participant W as Worker Lambda
+    C-&gt;&gt;A: POST /images
+    A-&gt;&gt;S: 1. Store original and small preview
+    A-&gt;&gt;D: 2. Put job RECEIVED
+    A-&gt;&gt;Q: 3. SendMessage jobId
+    A--&gt;&gt;C: 4. 202 Accepted with jobId and preview URL
+    Q-&gt;&gt;W: 5. Deliver message
+    W-&gt;&gt;D: 6. Status PROCESSING
+    W-&gt;&gt;S: 7. Write resized outputs and metadata
+    W-&gt;&gt;D: 8. Status COMPLETE
+    C-&gt;&gt;A: GET /jobs/jobId (poll or push)">sequenceDiagram
+    participant C as Client
+    participant A as API Gateway + Lambda
+    participant S as S3
+    participant D as DynamoDB
+    participant Q as SQS Queue
+    participant W as Worker Lambda
+    C-&gt;&gt;A: POST /images
+    A-&gt;&gt;S: 1. Store original and small preview
+    A-&gt;&gt;D: 2. Put job RECEIVED
+    A-&gt;&gt;Q: 3. SendMessage jobId
+    A--&gt;&gt;C: 4. 202 Accepted with jobId and preview URL
+    Q-&gt;&gt;W: 5. Deliver message
+    W-&gt;&gt;D: 6. Status PROCESSING
+    W-&gt;&gt;S: 7. Write resized outputs and metadata
+    W-&gt;&gt;D: 8. Status COMPLETE
+    C-&gt;&gt;A: GET /jobs/jobId (poll or push)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Fast Path and Idempotent Worker</h3>
+        <p>A synchronous handler that does only bounded work, and a queue worker that is safe under duplicate delivery:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleUpload</span>(request):                        <span class="tk-com">// synchronous path, budget &lt; 500 ms</span></span>
+<span class="line">    jobId <span class="tk-op">=</span> <span class="tk-fn">newId</span>()</span>
+<span class="line">    s3.<span class="tk-fn">putObject</span>(<span class="tk-str">&#x27;in/&#x27;</span> <span class="tk-op">+</span> jobId, request.body)           <span class="tk-com">// or presigned upload for large files</span></span>
+<span class="line">    preview <span class="tk-op">=</span> <span class="tk-fn">makeThumbnail</span>(request.body, maxWidth <span class="tk-op">=</span> <span class="tk-num">320</span>)   <span class="tk-com">// bounded, cheap work only</span></span>
+<span class="line">    s3.<span class="tk-fn">putObject</span>(<span class="tk-str">&#x27;preview/&#x27;</span> <span class="tk-op">+</span> jobId, preview)</span>
+<span class="line">    ddb.<span class="tk-fn">put</span>(<span class="tk-str">&#x27;jobs&#x27;</span>, {jobId, status: <span class="tk-str">&#x27;PREVIEW_READY&#x27;</span>, createdAt: <span class="tk-fn">now</span>()}, condition <span class="tk-op">=</span> <span class="tk-fn">attribute_not_exists</span>(jobId))</span>
+<span class="line">    sqs.<span class="tk-fn">send</span>(queue, {jobId}, attributes <span class="tk-op">=</span> {traceId: <span class="tk-fn">currentTraceId</span>()})</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-num">202</span> {jobId, previewUrl: <span class="tk-fn">presign</span>(<span class="tk-str">&#x27;preview/&#x27;</span> <span class="tk-op">+</span> jobId)}</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">worker</span>(batch):                                <span class="tk-com">// SQS -&gt; Lambda with partial batch responses</span></span>
+<span class="line">    failures <span class="tk-op">=</span> []</span>
+<span class="line">    <span class="tk-kw">for</span> msg <span class="tk-kw">in</span> batch:</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            <span class="tk-com">// idempotent claim: duplicates and already-finished jobs are skipped</span></span>
+<span class="line">            claimed <span class="tk-op">=</span> ddb.<span class="tk-fn">update</span>(<span class="tk-str">&#x27;jobs&#x27;</span>, msg.jobId, set status <span class="tk-op">=</span> <span class="tk-str">&#x27;PROCESSING&#x27;</span>,</span>
+<span class="line">                                 condition <span class="tk-op">=</span> status <span class="tk-fn">IN</span> (<span class="tk-str">&#x27;PREVIEW_READY&#x27;</span>, <span class="tk-str">&#x27;PROCESSING&#x27;</span>))</span>
+<span class="line">            <span class="tk-kw">if</span> <span class="tk-kw">not</span> claimed: <span class="tk-kw">continue</span></span>
+<span class="line">            <span class="tk-kw">for</span> stage <span class="tk-kw">in</span> [extractMetadata, detectFaces, resizeAll]:</span>
+<span class="line">                <span class="tk-kw">if</span> <span class="tk-kw">not</span> <span class="tk-fn">stageDone</span>(msg.jobId, stage):</span>
+<span class="line">                    <span class="tk-fn">stage</span>(msg.jobId)                    <span class="tk-com">// writes to deterministic S3 keys</span></span>
+<span class="line">                    <span class="tk-fn">markStageDone</span>(msg.jobId, stage)</span>
+<span class="line">            ddb.<span class="tk-fn">update</span>(<span class="tk-str">&#x27;jobs&#x27;</span>, msg.jobId, set status <span class="tk-op">=</span> <span class="tk-str">&#x27;COMPLETE&#x27;</span>)</span>
+<span class="line">        <span class="tk-kw">catch</span> error:</span>
+<span class="line">            log.<span class="tk-fn">error</span>(msg.jobId, error, traceId <span class="tk-op">=</span> msg.attributes.traceId)</span>
+<span class="line">            failures.<span class="tk-fn">add</span>(msg.id)                        <span class="tk-com">// only failed items return to the queue</span></span>
+<span class="line">    <span class="tk-kw">return</span> {batchItemFailures: failures}</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Queue settings: visibilityTimeout &gt;= 6 x worker timeout, maxReceiveCount = 5 then DLQ,</span></span>
+<span class="line"><span class="tk-com">// DLQ retention 14 days, event-source maximum concurrency capped to protect downstream systems</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Non-idempotent workers:</strong> At-least-once delivery means duplicates will happen. Guard each stage with conditional writes and write outputs to deterministic keys.</li>
+          <li><strong>Visibility timeout shorter than processing time:</strong> The message reappears while the first worker is still running, causing duplicate processing and wasted CPU.</li>
+          <li><strong>Unmonitored DLQ:</strong> A DLQ nobody watches is a silent failure channel. Alarm on depth, and keep a tested redrive procedure.</li>
+          <li><strong>Gap between 'save job' and 'enqueue':</strong> A crash between the two leaves an orphaned job. Write the job as RECEIVED first and run a sweeper that re-enqueues old RECEIVED jobs.</li>
+          <li><strong>Unbounded worker concurrency:</strong> A spike can overwhelm a downstream model endpoint or database. Set maximum concurrency on the event-source mapping.</li>
+          <li><strong>Scope creep in the preview path:</strong> Adding 'just a little' face detection to the synchronous Lambda quietly breaks the 500 ms SLO.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams keep the user-facing contract tiny and make everything expensive <strong>retryable and observable</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define SLOs:</strong> Preview p99 under 500 ms, and a job-completion target (for example 95% within two minutes) with an error budget.</li>
+          <li><strong>Step 1 — Keep the API payload small:</strong> Use presigned S3 uploads for large images and generate the preview from the stored object or a bounded in-request thumbnail.</li>
+          <li><strong>Step 2 — Fast path:</strong> Validate, produce the preview, write the job record, enqueue with an idempotency key, and return 202 with a job ID.</li>
+          <li><strong>Step 3 — Async path:</strong> SQS to Lambda workers (or a Step Functions workflow per job for fan-out), idempotent stages, partial batch responses, DLQ with a documented redrive runbook.</li>
+          <li><strong>Step 4 — Status delivery:</strong> Polling endpoint, WebSocket/SSE push, or webhook so the UI can show progress without blocking.</li>
+          <li><strong>Step 5 — Protect and observe:</strong> Reserved or maximum concurrency, separate queues per priority or tenant, tracing across the message hop, and alarms on queue age and DLQ depth.</li>
+        </ul>
+        <p>Return a fast preview, persist the job, and let queue-driven workers do the rest.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Never make the user wait for work that can be made durable and asynchronous. Return a preview in the synchronous path, persist a job, and let queue-driven workers run the heavy tasks with retries, a DLQ, and visible status. An orchestrator such as Step Functions is a good upgrade <strong>behind</strong> the queue, not a reason to block the request.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

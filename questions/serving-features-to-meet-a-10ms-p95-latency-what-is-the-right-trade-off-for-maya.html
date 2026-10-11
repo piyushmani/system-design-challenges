@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Serving features to meet a 10ms p95 latency: What is the right trade-off for Maya? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">10 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Feature Store</span>
+      <span class="tag tag--green">Low Latency</span>
+      <span class="tag tag--amber">Training-Serving Skew</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Serving features to meet a 10ms p95 latency: What is the right trade-off for Maya?</h1>
+      <p class="q-scenario"><strong>Maya</strong>, a senior backend engineer, is designing the inference pipeline for a <strong>real-time recommendation system</strong> that must sustain <strong>5,000 transactions per second</strong> with a <strong>p95 end-to-end latency under 10 ms</strong>. Feature freshness SLOs differ by feature: <strong>high-cardinality user counters</strong> need sub-second staleness, <strong>session aggregates</strong> update within seconds, and <strong>daily profile attributes</strong> can be hours old. Models are trained from an <strong>offline feature store</strong>, so she must minimize <strong>training-serving skew</strong>, keep the system observable, and <strong>degrade gracefully</strong> when a component fails. Feature reads can only consume a small slice of the 10 ms budget. She needs to choose the architecture that satisfies latency and freshness while controlling skew and operational risk.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Read every feature synchronously from a central OLTP/SQL database at inference time, treating it as the single source of truth and scaling with read replicas and connection pooling.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Embed precomputed features directly into the model artifact (feature values baked into the weights) and redeploy a new model whenever frequently updated features change, removing runtime lookups.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Use an event-driven pipeline (CDC, Kafka, workers) to update an online Redis cache asynchronously, always serve reads from Redis, accept eventual consistency, rely on TTL eviction, and never fall back synchronously to the offline store.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Adopt a hybrid: classify features by freshness tier, precompute batch features in the offline store (for training) and backfill the online store, stream real-time features via CDC into a fast key-value store (Redis or an online feature store) read through a small local cache, and fall back synchronously to the offline store or default values on cold misses. Version features and models, track per-feature staleness, and add health checks for graceful degradation.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Tiered Hybrid Feature Serving</h3>
+        <p>Maya's requirements pull in opposite directions: a ~10 ms p95 budget at 5,000 TPS rules out anything heavy on the request path, while three different freshness tiers rule out a one-size-fits-all pipeline. A <strong>tiered hybrid</strong> design (offline store for training and batch backfill, a streaming path into a low-latency online store for fresh features, and a thin local cache on the hot path) is the only option that treats freshness as a per-feature SLO, shares feature definitions between training and serving, and has an explicit story for failure. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Latency fits the budget:</strong> A single pipelined or batched read (MGET or a hash fetch) from an in-region Redis typically costs about 0.3 to 1 ms, leaving room for network hops, feature assembly, and model inference inside 10 ms. 5,000 TPS is modest for an in-memory store, so the real risk is tail latency, not throughput.</li>
+          <li><strong>Freshness per tier:</strong> Counters and session aggregates flow through streaming (sub-second to seconds), while daily attributes are batch-materialized. Each tier pays only for the freshness it needs, and the local-cache TTL is set per tier (none or very short for counters, minutes for profile attributes).</li>
+          <li><strong>Skew mitigation:</strong> The offline and online stores are populated from the same feature definitions and registry (the pattern used by Feast, Tecton, and similar platforms). Point-in-time-correct training joins plus feature versioning make the model see the same semantics online as in training, and logging served feature vectors lets you diff online against offline.</li>
+          <li><strong>Graceful degradation:</strong> Per-feature staleness metrics, health checks, and defined defaults mean a Redis hiccup or a stalled stream lowers recommendation quality (defaults or last-known values) instead of failing requests.</li>
+          <li><strong>Why not just Redis with TTLs (Option C)?</strong> It gets the streaming idea right, but TTL eviction turns slow-changing features into misses, and with no fallback and no versioning those misses become silent missing values, which is itself a skew problem. Option D keeps the streaming path and adds backfill, versioning, and a defined miss path.</li>
+        </ul>
+        <p>A production-ready design includes <strong>per-feature freshness SLOs and TTLs</strong>, a <strong>feature registry with versioned definitions</strong>, <strong>request-time timeouts with batched reads</strong>, <strong>online/offline parity checks</strong> on logged feature vectors, and a <strong>kill switch to fall back to a simpler batch-features-only model</strong>. Track p95/p99 feature-fetch latency, staleness per feature, default/miss rate, and skew drift before and after rollout.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🗄️</div>
+          <h4>A — Synchronous OLTP Reads</h4>
+          <p>Synchronous OLTP reads give the best raw freshness, but a 10 ms p95 budget leaves almost no room for connection acquisition, a database round trip, and queueing at 5,000 TPS with several features per request (each inference fans out into many reads). It also ties recommendation availability to the transactional database, and the SQL that computes features online is usually a separate code path from the offline training logic, which is the classic source of <strong>training-serving skew</strong>. <strong>Caveat:</strong> for low-traffic internal tools with relaxed latency, this is the simplest option and perfectly acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📦</div>
+          <h4>B — Features Baked into the Model</h4>
+          <p>Per-user counters and session aggregates are <em>inputs</em>, not parameters, and baking high-cardinality per-entity data into a model artifact is not feasible: the artifact would be enormous and stale the moment it ships. Redeploying a model whenever a counter changes is operationally absurd and breaks sub-second freshness. Bundling is legitimate only for small static reference data (vocabularies, embedding tables, calibration constants) that changes when the model changes.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">⚡</div>
+          <h4>C — Redis-Only Event-Driven Cache</h4>
+          <p>Close to the right idea, and it gets the streaming-to-Redis path right, but it stops short on failure and skew: TTL eviction creates misses for slow-changing features, the 'never fall back' rule leaves no defined behavior on a miss (missing values at inference are themselves a skew source), and there is no feature or model versioning and no per-feature staleness tracking. It is a good <em>component</em> of Option D, not a complete architecture.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>D — Tiered Hybrid Feature Serving ✓</h4>
+          <p>Adopt a hybrid: classify features by freshness tier, precompute batch features in the offline store (for training) and backfill the online store, stream real-time features via CDC into a fast key-valu</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Meets 10 ms p95 at 5k TPS</th><th>Freshness Control</th><th>Training-Serving Skew Risk</th><th>Graceful Degradation</th><th>Operational Complexity</th><th>Handles High-Cardinality Features</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Sync OLTP Reads</td><td>Unlikely under load ❌</td><td>Excellent ✅</td><td>High ❌</td><td>Poor ❌ (DB outage = inference outage)</td><td>Low ✅</td><td>Poor ❌ (read amplification)</td></tr>
+            <tr><td class="tt-option">B — Features in Model</td><td>Yes (no lookup) ✅</td><td>Poor ❌ (stale until redeploy)</td><td>Low in theory ✅</td><td>Poor ❌ (redeploy to change)</td><td>High ❌ (redeploy per change)</td><td>Not feasible ❌</td></tr>
+            <tr><td class="tt-option">C — Redis-Only Cache</td><td>Yes ✅</td><td>Good ✅ (seconds)</td><td>Medium ⚠ (misses, no versioning)</td><td>Weak ❌ (no defined miss path)</td><td>Medium ⚠</td><td>Good ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Tiered Hybrid ✓</td><td>Yes ✅ (with bounded fallback)</td><td>Per-feature ✅</td><td>Low ✅ (shared definitions)</td><td>Strong ✅</td><td>High ⚠</td><td>Good ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Sync OLTP Reads</h4>
+          <p>Low-traffic or internal use cases with relaxed latency (tens to hundreds of ms), few features, and a need for read-your-writes freshness without extra infrastructure.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Features in Model</h4>
+          <p>Small, static, non-entity data (vocabularies, embedding tables, calibration constants) that changes only when the model itself changes.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Redis-Only Cache</h4>
+          <p>A single freshness tier where everything is streamed, defaults are acceptable on a miss, and the team wants the fewest moving parts.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Tiered Hybrid</h4>
+          <p>Real-time ML with mixed freshness requirements, tight latency budgets, and a need for reproducibility between training and serving; the standard feature-store architecture.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Online Serving Read Path with Bounded Fallback</h3>
+        <p>One pipelined read per request with a hard timeout; the request degrades to defaults instead of waiting on a slow dependency:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant S as Inference Service
+    participant L as Local Cache
+    participant R as Online Store Redis
+    participant M as Model
+    C-&gt;&gt;S: Recommend request
+    S-&gt;&gt;L: 1. Lookup slow tier features
+    L--&gt;&gt;S: Hit or miss
+    S-&gt;&gt;R: 2. Pipelined MGET for fresh features with 3 ms timeout
+    alt Online store responds
+        R--&gt;&gt;S: Feature values with event time and version
+    else Timeout or miss
+        S-&gt;&gt;S: 3. Use defaults or last known values and count a degraded request
+    end
+    S-&gt;&gt;M: 4. Score with versioned feature vector
+    M--&gt;&gt;S: Scores
+    S--&gt;&gt;C: Response">sequenceDiagram
+    participant C as Client
+    participant S as Inference Service
+    participant L as Local Cache
+    participant R as Online Store Redis
+    participant M as Model
+    C-&gt;&gt;S: Recommend request
+    S-&gt;&gt;L: 1. Lookup slow tier features
+    L--&gt;&gt;S: Hit or miss
+    S-&gt;&gt;R: 2. Pipelined MGET for fresh features with 3 ms timeout
+    alt Online store responds
+        R--&gt;&gt;S: Feature values with event time and version
+    else Timeout or miss
+        S-&gt;&gt;S: 3. Use defaults or last known values and count a degraded request
+    end
+    S-&gt;&gt;M: 4. Score with versioned feature vector
+    M--&gt;&gt;S: Scores
+    S--&gt;&gt;C: Response</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Tiered Feature Fetch with Deadline, Defaults, and Staleness Metrics</h3>
+        <p>A serving helper that reads fresh features in one pipelined call, uses a local cache only for slow tiers, never waits past the deadline, and records staleness; the streaming updater writes the same values to the offline log:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">FEATURE_SPECS <span class="tk-op">=</span> {</span>
+<span class="line">    <span class="tk-str">&#x27;click_count_1m&#x27;</span>: {tier: <span class="tk-str">&#x27;stream&#x27;</span>, localTtl: <span class="tk-num">0</span>,    <span class="tk-kw">default</span>: <span class="tk-num">0</span>,         maxAge: <span class="tk-num">2s</span>},</span>
+<span class="line">    <span class="tk-str">&#x27;session_depth&#x27;</span>:  {tier: <span class="tk-str">&#x27;stream&#x27;</span>, localTtl: <span class="tk-num">0</span>,    <span class="tk-kw">default</span>: <span class="tk-num">0</span>,         maxAge: <span class="tk-num">10s</span>},</span>
+<span class="line">    <span class="tk-str">&#x27;age_bucket&#x27;</span>:     {tier: <span class="tk-str">&#x27;batch&#x27;</span>,  localTtl: <span class="tk-num">600s</span>, <span class="tk-kw">default</span>: <span class="tk-str">&#x27;unknown&#x27;</span>, maxAge: <span class="tk-num">36h</span>}</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getFeatures</span>(userId, sessionId):</span>
+<span class="line">    deadline <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">+</span> <span class="tk-num">4ms</span>                              <span class="tk-com">// hard budget for the feature fetch</span></span>
+<span class="line">    vector <span class="tk-op">=</span> {}</span>
+<span class="line">    toFetch <span class="tk-op">=</span> []</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">for</span> name, spec <span class="tk-kw">in</span> FEATURE_SPECS:</span>
+<span class="line">        cached <span class="tk-op">=</span> (spec.localTtl <span class="tk-op">&gt;</span> <span class="tk-num">0</span>) ? localCache.<span class="tk-fn">get</span>(name <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> userId) : <span class="tk-lit">null</span></span>
+<span class="line">        <span class="tk-kw">if</span> cached <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">            vector[name] <span class="tk-op">=</span> cached</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            toFetch.<span class="tk-fn">add</span>(name)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        <span class="tk-com">// one round trip for everything that is still missing</span></span>
+<span class="line">        rows <span class="tk-op">=</span> redis.<span class="tk-fn">pipelineGet</span>(keys <span class="tk-op">=</span> <span class="tk-fn">versionedKeys</span>(toFetch, userId, sessionId), timeout <span class="tk-op">=</span> deadline <span class="tk-op">-</span> <span class="tk-fn">now</span>())</span>
+<span class="line">    <span class="tk-kw">catch</span> Timeout, ConnectionError:</span>
+<span class="line">        rows <span class="tk-op">=</span> {}                                       <span class="tk-com">// degrade, do not wait or call the offline store</span></span>
+<span class="line">        metrics.<span class="tk-fn">increment</span>(<span class="tk-str">&#x27;feature_fetch_degraded&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">for</span> name <span class="tk-kw">in</span> toFetch:</span>
+<span class="line">        row <span class="tk-op">=</span> rows[name]</span>
+<span class="line">        spec <span class="tk-op">=</span> FEATURE_SPECS[name]</span>
+<span class="line">        <span class="tk-kw">if</span> row <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> (<span class="tk-fn">now</span>() <span class="tk-op">-</span> row.eventTime) <span class="tk-op">&gt;</span> spec.maxAge:</span>
+<span class="line">            vector[name] <span class="tk-op">=</span> spec.<span class="tk-kw">default</span>                 <span class="tk-com">// defined miss policy, same default used in training</span></span>
+<span class="line">            metrics.<span class="tk-fn">increment</span>(<span class="tk-str">&#x27;feature_default_used&#x27;</span>, tag <span class="tk-op">=</span> name)</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            vector[name] <span class="tk-op">=</span> row.value</span>
+<span class="line">            metrics.<span class="tk-fn">observe</span>(<span class="tk-str">&#x27;feature_staleness_seconds&#x27;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> row.eventTime, tag <span class="tk-op">=</span> name)</span>
+<span class="line">            <span class="tk-kw">if</span> spec.localTtl <span class="tk-op">&gt;</span> <span class="tk-num">0</span>:  localCache.<span class="tk-fn">put</span>(name <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> userId, row.value, ttl <span class="tk-op">=</span> spec.localTtl)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-fn">logServedVector</span>(userId, vector, featureSetVersion <span class="tk-op">=</span> <span class="tk-str">&#x27;v3&#x27;</span>)   <span class="tk-com">// sampled, used for online vs offline parity checks</span></span>
+<span class="line">    <span class="tk-kw">return</span> vector</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Stream processor: same definition feeds online and offline stores</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onClickEvent</span>(evt):</span>
+<span class="line">    count <span class="tk-op">=</span> window.<span class="tk-fn">increment</span>(evt.userId, <span class="tk-str">&#x27;click_count_1m&#x27;</span>, evt.ts)</span>
+<span class="line">    redis.<span class="tk-fn">hset</span>(<span class="tk-str">&#x27;f:v3:user:&#x27;</span> <span class="tk-op">+</span> evt.userId, {click_count_1m: count, ts: evt.ts})</span>
+<span class="line">    offlineLog.<span class="tk-fn">append</span>(evt.userId, <span class="tk-str">&#x27;click_count_1m&#x27;</span>, count, evt.ts)   <span class="tk-com">// identical value is used for training</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Unbounded fallback to the offline store:</strong> A cold-miss read to a warehouse or lake can take seconds and cascades into timeouts. Use defaults, last-known values, or a bounded online-replica read instead.</li>
+          <li><strong>Duplicating feature logic:</strong> Re-implementing transformations in serving code (SQL for training, Java for serving) is the main source of skew. Generate both paths from one definition.</li>
+          <li><strong>Ignoring point-in-time correctness:</strong> Training joins that use the latest feature values leak future information and inflate offline metrics that never materialize online.</li>
+          <li><strong>Treating 'real-time' as one tier:</strong> Streaming every feature raises cost and complexity for features that only change daily.</li>
+          <li><strong>No staleness or default-rate monitoring:</strong> A stalled stream silently serves old counters and recommendation quality drops without a single error. Alert on per-feature age and default rate.</li>
+          <li><strong>Hot keys and oversized values:</strong> Popular users or large feature blobs create tail latency on one Redis shard. Cap value sizes, pipeline reads, and replicate or shard hot keys.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams don't pick a single store; they <strong>tier features by freshness and failure impact</strong> and roll the design out incrementally:</p>
+        <ul>
+          <li><strong>Step 0 — Classify features:</strong> Give each feature a freshness SLO, a cardinality estimate, and a failure policy (default, last-known, or fail the request). Most 'real-time' requirements turn out to be weaker than first stated.</li>
+          <li><strong>Step 1 — Single feature definition:</strong> Define transformations once in a registry (Feast, Tecton, or an in-house equivalent) and generate both the offline training dataset and the online materialization from it.</li>
+          <li><strong>Step 2 — Batch tier:</strong> Materialize daily profile attributes from the offline store to the online store on a schedule, with versioned keys and validation checks.</li>
+          <li><strong>Step 3 — Streaming tier:</strong> Compute counters and session aggregates in a stream processor and write them to Redis (or an online feature store) with an event timestamp and feature version.</li>
+          <li><strong>Step 4 — Serving path:</strong> One pipelined read per request, a hard timeout, a small local cache for slow tiers, and defaults or last-known values on timeout.</li>
+          <li><strong>Step 5 — Observability and drills:</strong> Log served feature vectors, compare them with offline recomputation, alert on staleness, and rehearse Redis and stream failures.</li>
+        </ul>
+        <p>Measure p95 feature-fetch latency and per-feature staleness before widening the real-time tier.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Treat <strong>freshness as a per-feature SLO</strong>, not a global property. Put only what must be fresh on a streaming path, serve everything from a low-latency online store with a bounded miss policy, and use one feature definition for both training and serving to keep skew in check. Never put an unbounded offline-store read on a 10 ms path.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diego&#x27;s quorum decision: keeping user profiles fresh and fast — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">07 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Quorum</span>
+      <span class="tag tag--green">Read Freshness</span>
+      <span class="tag tag--amber">Data Replication</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Diego&#x27;s quorum decision: keeping user profiles fresh and fast</h1>
+      <p class="q-scenario"><strong>Diego</strong>, a backend architect, is building a <strong>global user-profile service</strong> used by millions. Profiles are small (a few KB), and <strong>reads outnumber writes about 100 to 1</strong>. Requirements: users must see their <strong>own updates immediately (read-after-write)</strong>, <strong>global read latency</strong> should stay <strong>under 50 ms</strong>, the system must <strong>survive the loss of an entire region</strong>, and <strong>operational overhead</strong> should stay manageable. Using <strong>quorum-based replication across regions</strong>, he must choose the approach that best balances consistency, latency, availability and cost.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Place 3 replicas in different regions and require a majority quorum for both reads and writes (N=3, W=2, R=2), guaranteeing every successful read sees the latest write at the cost of the higher latency of querying two replicas.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Deploy 5 replicas globally (N=5) with majority-quorum writes (W=3) but single-node reads (R=1) from the nearest replica, relying on background anti-entropy and read repair to limit staleness while keeping read latency minimal.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Use leader-based replication per partition (Raft-style): writes commit on majority acknowledgment, the leader serves linearizable reads via leases or read-index so local reads are very fast, followers may optionally serve stale reads, a majority vote elects a new leader after failure, and replicas are placed across regions to tolerate the loss of a single region.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Use fully asynchronous replication with CRDTs and W=1, R=1, relying on conflict-free merges for maximum availability and lowest latency, avoiding majority quorums in favor of eventual convergence.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Leader-Based Consensus with Fast Local Reads</h3>
+        <p>Diego's requirements are really three different guarantees: <strong>safe, ordered writes</strong> (rare, so they can afford a cross-region quorum), <strong>fresh reads for the writing user</strong> (read-your-writes, not global linearizability for everyone) and <strong>fast reads for everyone</strong> (the 100x majority). A leader-based consensus group handles the first cleanly, and its leases, read-index and follower-read mechanisms provide the other two without paying a cross-region round trip on every read. Because a profile belongs to a single user, leaders can be <strong>homed in the user's nearest region</strong>, which makes both writes and linearizable reads local for most traffic. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Write safety with region-loss tolerance:</strong> A write commits on a majority of replicas spread over at least 3 regions, so losing a whole region still leaves a majority, and a new leader is elected automatically without data loss or split-brain.</li>
+          <li><strong>Reads are cheap where it counts:</strong> The leader (or leaseholder) can answer linearizable reads from local state without contacting other replicas (leases) or after one lightweight heartbeat check (read-index). With the leader placed near the user's home region, reads stay well under 50 ms.</li>
+          <li><strong>Read-your-writes is explicit rather than probabilistic:</strong> The write returns a commit index or timestamp. A later read from a nearby follower is served only if that follower has applied at least that index; otherwise it waits briefly or forwards to the leader. Compare this with R=1 quorums, where freshness is hope, not a guarantee.</li>
+          <li><strong>Tunable staleness for the 100x majority:</strong> Reads of other users' profiles can use follower or non-voting replicas in any region with bounded staleness, delivering local latency with no effect on write quorums.</li>
+          <li><strong>Lower operational risk than hand-rolled quorums:</strong> Consensus libraries and databases (etcd, CockroachDB, Spanner, TiKV and similar) already implement election, log repair, membership change and snapshotting, so the team does not maintain read-repair or anti-entropy for correctness.</li>
+        </ul>
+        <p>A practical configuration is <strong>3 or 5 voting replicas across at least 3 regions</strong>, <strong>per-partition leaders homed near each user group</strong>, <strong>non-voting learner replicas</strong> in additional regions for local follower reads, and a <strong>session token</strong> (commit index or timestamp) that the client sends on subsequent reads. Monitor commit latency, leader distribution, follower apply lag and the fraction of reads that fall back to the leader; if too many fall back, add learners or re-home leaders.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🗳️</div>
+          <h4>A — Majority Quorum Reads and Writes (N=3, W=2, R=2)</h4>
+          <p>R + W > N does guarantee that a read overlaps the latest successful write, and losing one region still leaves two replicas, so correctness is fine. The problem is <strong>latency</strong>: every read must wait for the second-fastest replica, which is usually in another region, and inter-region round trips commonly exceed 50 ms for distant pairs. That penalizes the 100x read majority to protect the rare write. Overlap also does not equal linearizability in leaderless systems (concurrent writes, sloppy quorums, partial failures). <strong>Caveat:</strong> acceptable if all three regions are close together or if reads are rare.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">⚡</div>
+          <h4>B — Write Quorum 3 of 5, Read One (W=3, R=1)</h4>
+          <p>With N=5, W=3 and R=1, <strong>R + W = 4, which does not exceed N</strong>, so a read can hit a replica that missed the latest write. Anti-entropy and read repair only reduce staleness over time; they do not provide the immediate read-after-write the requirement states. It trades the one hard consistency requirement for latency. <strong>Caveat:</strong> a fine setup where bounded staleness is acceptable, or when combined with session tokens that route a user's reads to a fresh replica.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🌱</div>
+          <h4>D — Async CRDTs (W=1, R=1)</h4>
+          <p>CRDTs give excellent availability and converge without coordination, but with W=1 and R=1 a user who writes in one region and reads from another can <strong>miss their own update</strong> until replication catches up, which violates the stated read-after-write need. Many profile fields (display name, bio) are last-writer-wins registers rather than natural CRDT merges, so concurrent edits can silently drop data. <strong>Caveat:</strong> excellent for commutative data (counters, sets, presence) and collaborative editing.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Leader-Based Consensus with Fast Local Reads ✓</h4>
+          <p>Use leader-based replication per partition (Raft-style): writes commit on majority acknowledgment, the leader serves linearizable reads via leases or read-index so local reads are very fast, followers</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read-After-Write Guarantee</th><th>Global Read Latency</th><th>Write Latency</th><th>Region-Failure Tolerance</th><th>Staleness for Other Users&#x27; Reads</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — N=3, W=2, R=2</td><td>Yes ✅</td><td>Cross-region on every read ❌</td><td>Cross-region quorum ⚠</td><td>Yes (2 of 3 remain) ✅</td><td>None ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — N=5, W=3, R=1</td><td>No (R+W ≤ N) ❌</td><td>Local ✅</td><td>Cross-region quorum ⚠</td><td>Yes ✅</td><td>Unbounded until repair ⚠</td><td>Medium–High (repair, anti-entropy) ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Leader-Based Consensus ✓</td><td>Yes (leader or token) ✅</td><td>Local with homed leaders and follower reads ✅</td><td>Cross-region majority ⚠</td><td>Yes, automatic failover ✅</td><td>Bounded and tunable ✅</td><td>Medium (mature tooling) ⚠</td></tr>
+            <tr><td class="tt-option">D — Async CRDTs</td><td>No ❌</td><td>Local ✅</td><td>Local ✅</td><td>Yes ✅</td><td>Eventual ⚠</td><td>Medium (CRDT design) ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — N=3, W=2, R=2</h4>
+          <p>Small clusters where replicas are close together (same continent or metro), reads are not the dominant cost, and the simplicity of a leaderless quorum is attractive.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — N=5, W=3, R=1</h4>
+          <p>Workloads that tolerate bounded staleness (feeds, counters, recommendations), or setups that pair R=1 with session routing so a user's reads hit an up-to-date replica.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Leader-Based Consensus</h4>
+          <p>Globally distributed, read-heavy data with per-user ownership, a read-your-writes requirement, strict latency targets and a need for automatic regional failover.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Async CRDTs</h4>
+          <p>Commutative, collaboration-style data (counters, sets, presence, collaborative text) where concurrent updates must always merge and availability beats immediate freshness.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Read Path with Read-Your-Writes Token</h3>
+        <p>The client presents the commit index from its last write; a nearby follower serves the read locally when it has caught up, and otherwise waits briefly or forwards to the leader:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U as User
+    participant F as Nearest Follower
+    participant L as Leader in home region
+    U-&gt;&gt;F: Read profile with min_index 1042 from last write
+    alt Follower applied index 1042 or higher
+        F--&gt;&gt;U: Profile served locally
+    else Follower is behind
+        F-&gt;&gt;F: Wait up to 20 ms for apply
+        alt Caught up
+            F--&gt;&gt;U: Profile served locally
+        else Still behind
+            F-&gt;&gt;L: Forward read using ReadIndex
+            L--&gt;&gt;F: Linearizable result
+            F--&gt;&gt;U: Profile
+        end
+    end">sequenceDiagram
+    participant U as User
+    participant F as Nearest Follower
+    participant L as Leader in home region
+    U-&gt;&gt;F: Read profile with min_index 1042 from last write
+    alt Follower applied index 1042 or higher
+        F--&gt;&gt;U: Profile served locally
+    else Follower is behind
+        F-&gt;&gt;F: Wait up to 20 ms for apply
+        alt Caught up
+            F--&gt;&gt;U: Profile served locally
+        else Still behind
+            F-&gt;&gt;L: Forward read using ReadIndex
+            L--&gt;&gt;F: Linearizable result
+            F--&gt;&gt;U: Profile
+        end
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Consensus-Backed Profile Service with Follower Reads</h3>
+        <p>Writes return a commit index, reads are served locally when the replica is fresh enough for the caller, and the leader is used only as a fallback or for explicitly linearizable reads:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Topology: 3 voting replicas (one per region A, B, C) + non-voting learners in extra regions</span></span>
+<span class="line"><span class="tk-com">// Each partition&#x27;s leader is homed in the user&#x27;s nearest voting region (leader preference by user home region)</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Write path (leader) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">updateProfile</span>(userId, patch):</span>
+<span class="line">    index <span class="tk-op">=</span> raft.<span class="tk-fn">propose</span>(<span class="tk-fn">UpdateProfile</span>(userId, patch))        <span class="tk-com">// commits on majority (2 of 3 voters)</span></span>
+<span class="line">    wait raft.<span class="tk-fn">committed</span>(index)</span>
+<span class="line">    <span class="tk-kw">return</span> { ok: <span class="tk-lit">true</span>, minIndex: index }                      <span class="tk-com">// client keeps this as its session token</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Read path (any replica) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">readProfile</span>(userId, minIndex <span class="tk-op">=</span> <span class="tk-num">0</span>, consistency <span class="tk-op">=</span> BOUNDED_STALE):</span>
+<span class="line">    <span class="tk-kw">if</span> consistency <span class="tk-op">==</span> LINEARIZABLE:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">leaderRead</span>(userId)                             <span class="tk-com">// lease or ReadIndex, served by the leader</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> localReplica.appliedIndex <span class="tk-op">&gt;=</span> minIndex <span class="tk-kw">and</span> localReplica.lagMs <span class="tk-op">&lt;=</span> MAX_STALENESS_MS:</span>
+<span class="line">        <span class="tk-kw">return</span> localReplica.<span class="tk-fn">get</span>(userId)                       <span class="tk-com">// fast path: local, a few ms</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> minIndex <span class="tk-op">&gt;</span> <span class="tk-num">0</span>:</span>
+<span class="line">        <span class="tk-fn">waitUpTo</span>(<span class="tk-num">20ms</span>, <span class="tk-kw">until</span> <span class="tk-op">=</span> localReplica.appliedIndex <span class="tk-op">&gt;=</span> minIndex)</span>
+<span class="line">        <span class="tk-kw">if</span> localReplica.appliedIndex <span class="tk-op">&gt;=</span> minIndex:</span>
+<span class="line">            <span class="tk-kw">return</span> localReplica.<span class="tk-fn">get</span>(userId)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">forwardToLeader</span>(userId, readIndex <span class="tk-op">=</span> <span class="tk-lit">true</span>)          <span class="tk-com">// correct but slower fallback; count this metric</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Client rules ----</span></span>
+<span class="line"><span class="tk-com">// own profile:     readProfile(me, minIndex = lastWriteIndex)           // read-your-writes</span></span>
+<span class="line"><span class="tk-com">// someone else&#x27;s:  readProfile(other, consistency = BOUNDED_STALE)      // e.g. up to 2-5 s stale</span></span>
+<span class="line"><span class="tk-com">// session token:   store minIndex per user session; discard once MAX_STALENESS_MS has passed</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Assuming R + W > N means linearizable:</strong> It guarantees overlap, not a single global order. Concurrent writes, sloppy quorums and clock-based conflict resolution can still return surprising results.</li>
+          <li><strong>Ignoring physical latency:</strong> A quorum across continents costs a real round trip. Compute commit and read latency from actual inter-region RTTs before choosing N, W and R.</li>
+          <li><strong>Using R=1 and expecting freshness:</strong> Read repair and anti-entropy converge eventually; they do not give read-after-write. Use session tokens or quorum reads for the writing user.</li>
+          <li><strong>Poor region placement:</strong> Placing replicas so that one region holds a majority makes that region a single point of failure. Spread voters so no single region holds a majority.</li>
+          <li><strong>Forcing every read to be linearizable:</strong> The 100:1 read majority rarely needs it. Serve bounded-stale follower reads and reserve strong reads for the writing user.</li>
+          <li><strong>Not monitoring lag and fallbacks:</strong> Follower apply lag and the share of reads that fall back to the leader reveal when placement or capacity is wrong.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In production, teams <strong>match the consistency level to the access pattern</strong> instead of applying one setting to everything. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Classify reads:</strong> Separate 'read my own writes' (must be fresh) from 'read someone else's profile' (staleness-tolerant).</li>
+          <li><strong>Step 1 — Establish a consensus core:</strong> Use 3 or 5 voting replicas across 3+ regions so a region failure keeps a majority, and home leaders near users.</li>
+          <li><strong>Step 2 — Add local read capacity:</strong> Place non-voting learners in extra regions and serve bounded-stale follower reads for the majority of traffic.</li>
+          <li><strong>Step 3 — Provide read-your-writes tokens:</strong> Return a commit index or timestamp on writes; route follow-up reads accordingly or pin the user to their home region for a short window.</li>
+          <li><strong>Step 4 — Cache in front:</strong> Layer a regional cache with short TTL and version-based invalidation for the hottest profiles.</li>
+          <li><strong>Step 5 — Rehearse failure:</strong> Test region loss, leader failover time and replica catch-up, and watch p99 read and write latency.</li>
+        </ul>
+        <p>Pay for strong consistency only where users can notice it.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Use <strong>leader-based consensus</strong> with replicas spread over at least three regions for safe writes and region-failure tolerance, then deliver speed with <strong>leader leases, follower reads and read-your-writes tokens</strong>. Raw R=1 quorums and async CRDTs sacrifice the read-after-write requirement, while R=2 across regions sacrifices the 50 ms read target.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

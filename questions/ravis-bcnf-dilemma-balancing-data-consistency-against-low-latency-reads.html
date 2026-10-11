@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ravi&#x27;s BCNF dilemma: balancing data consistency against low-latency reads — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">07 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Database Normalization</span>
+      <span class="tag tag--green">Consistency</span>
+      <span class="tag tag--amber">Read Latency</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Ravi&#x27;s BCNF dilemma: balancing data consistency against low-latency reads</h1>
+      <p class="q-scenario"><strong>Ravi</strong>, a backend architect, owns the order-management service of a <strong>global e-commerce site</strong>. The transactional schema is <strong>BCNF-normalized</strong> (customers, addresses, orders, order_items) to prevent update anomalies. As traffic grows, reads that join these tables (customer details with the latest address and summarized order totals) have become <strong>slow</strong>, because data is <strong>sharded by customer region</strong> and many joins <strong>span multiple shards</strong>. He must keep the <strong>strong transactional integrity</strong> of the normalized model while meeting strict <strong>read-latency SLAs</strong>, considering scalability, availability, observability and cost.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep the BCNF schema on all shards and run distributed, synchronous cross-shard transactions and joins using a two-phase commit (2PC) coordinator, so reads always return strongly consistent, fully joined data.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Denormalize aggressively by copying customer address and order-aggregate data into the order_items table, updating all duplicates synchronously on every write so no joins are needed, trading extra storage and write cost for maximum read speed.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Keep the BCNF schema in the primary transactional database and build denormalized, read-optimized materialized views maintained asynchronously through change-data-capture and streaming (for example CDC to Kafka to a consumer). Serve low-latency reads from those views while writes stay strongly consistent in the core database.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Migrate the whole dataset to a distributed SQL database (such as Google Spanner or CockroachDB) that supports global transactions and distributed joins natively, keeping the normalized schema and relying on the engine for cross-node consistency and query execution.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: CQRS-Style Read Models via CDC</h3>
+        <p>Ravi's constraints conflict only if one schema has to do both jobs. <strong>Normalization optimizes writes</strong> (one fact stored once, no anomalies) while <strong>read latency wants pre-joined, co-located data</strong>. The cleanest resolution is to stop forcing one model to serve both: keep the BCNF database as the single <strong>source of truth</strong> for writes, and derive <strong>read-optimized projections</strong> from its change stream, keyed so that each read touches exactly one partition. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Preserves transactional integrity:</strong> All writes still go through the normalized, strongly consistent core, so constraints, foreign keys and ACID guarantees are untouched. The projection can be rebuilt at any time from the source of truth.</li>
+          <li><strong>Eliminates cross-shard joins on the read path:</strong> A read model keyed by <code>customer_id</code> holds the customer, latest address and order summary together, so a profile or order-history read is a single-partition lookup, typically a few milliseconds from a key-value or cache-backed store.</li>
+          <li><strong>Scales reads independently:</strong> The read store can be a different technology (Redis, DynamoDB, Elasticsearch, a document or columnar store), scaled and replicated per region without adding load to the transactional shards.</li>
+          <li><strong>Decoupled and observable:</strong> Log-based CDC reads the write-ahead log, so the application does not dual-write. Consumer lag, event age and reconciliation drift are concrete metrics for operations and SLAs.</li>
+          <li><strong>Incremental adoption:</strong> Start with the one or two slowest queries, prove the lag and cost, then expand. The write path does not have to change on day one.</li>
+        </ul>
+        <p>A solid design uses a <strong>transactional outbox or log-based CDC</strong> (never application dual-writes), <strong>events partitioned by customer_id</strong>, <strong>idempotent versioned upserts</strong>, a <strong>read-your-writes escape hatch</strong> and a <strong>rebuild-from-snapshot path</strong>. Alert on consumer lag and event age, and periodically reconcile the projection against the source; if lag cannot meet the freshness SLA for a given screen, route that one screen to the primary.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔗</div>
+          <h4>A — 2PC and Cross-Shard Joins</h4>
+          <p>Two-phase commit coordinates <em>writes</em> across participants; it does not make joins fast. Pushing every read through distributed coordination adds multiple network round trips, holds locks, and makes tail latency depend on the slowest shard, which is the opposite of the SLA goal. The coordinator is also a blocking failure point: if it fails between prepare and commit, participants hold locks until recovery, hurting availability. <strong>Caveat:</strong> reserve 2PC (or sagas) for the few write paths that truly span shards.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📋</div>
+          <h4>B — Aggressive Denormalization</h4>
+          <p>Copying addresses and aggregates into order_items <strong>reintroduces the update anomalies BCNF removed</strong>, and synchronous updates multiply write cost (one address change can touch every item of every order). It also blurs a useful distinction: an order's <em>shipping address at order time</em> is a legitimate historical snapshot, whereas the customer's <em>current</em> address is mutable state, and the two must not be conflated. <strong>Caveat:</strong> a narrow, deliberate snapshot (shipping address on the order) is good modeling, not denormalization to avoid.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🌐</div>
+          <h4>D — Distributed SQL Migration</h4>
+          <p>Spanner and CockroachDB provide distributed transactions, but <strong>cross-node joins still pay cross-node latency</strong>, and globally consistent commits cost cross-region round trips (consensus and, on Spanner, commit-wait). They perform best when data is co-located by key (interleaving or locality settings), which is a data-modeling effort, not a free lunch. A full migration is also costly and high-risk compared with adding a read model. <strong>Caveat:</strong> a sound long-term platform choice if the team wants global transactions broadly and can fund the migration.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — CQRS-Style Read Models via CDC ✓</h4>
+          <p>Keep the BCNF schema in the primary transactional database and build denormalized, read-optimized materialized views maintained asynchronously through change-data-capture and streaming (for example CD</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read Latency</th><th>Write Integrity</th><th>Read Freshness</th><th>Write Overhead</th><th>Implementation Complexity</th><th>Reversibility</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — 2PC + Distributed Joins</td><td>Poor, multiple round trips ❌</td><td>Strong ✅</td><td>Strongly consistent ✅</td><td>High (locks, coordinator) ❌</td><td>Medium ⚠</td><td>Easy ✅</td></tr>
+            <tr><td class="tt-option">B — Aggressive Denormalization</td><td>Very high ✅</td><td>Weak, anomaly risk ❌</td><td>Immediate ✅</td><td>Very high ❌</td><td>High ❌</td><td>Very hard ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — CDC Read Models ✓</td><td>Very high (single partition) ✅</td><td>Strong, core unchanged ✅</td><td>Bounded lag ⚠</td><td>Low (async, off the write path) ✅</td><td>Medium–High ⚠</td><td>Easy (drop and rebuild) ✅</td></tr>
+            <tr><td class="tt-option">D — Distributed SQL Migration</td><td>Moderate ⚠</td><td>Strong ✅</td><td>Strongly consistent ✅</td><td>Medium ⚠</td><td>Very high ❌</td><td>Very hard ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — 2PC + Distributed Joins</h4>
+          <p>Rare, low-volume write paths that must be atomic across shards (for example a one-off account merge) and can tolerate higher latency. Rarely appropriate for hot read paths.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Aggressive Denormalization</h4>
+          <p>A small, specific piece of data that is genuinely historical (such as the shipping address captured at order time), or a hot path where joins are proven to dominate and write volume is low.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — CDC Read Models</h4>
+          <p>Read-heavy services with a normalized, strongly consistent core, sharded data, strict read SLAs and tolerance for sub-second to few-second staleness (with read-your-writes where it matters).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Distributed SQL Migration</h4>
+          <p>Greenfield or replatforming efforts that need global ACID transactions broadly across the product, with budget for migration and careful key and locality design.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Read Path with Read-Your-Writes Fallback</h3>
+        <p>Reads hit a single-partition read model first and fall back to the primary only when the required version has not arrived yet:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    U[&quot;Client&quot;] --&gt; API[&quot;Read API&quot;]
+    API --&gt;|&quot;1. lookup by customer_id&quot;| RM[(&quot;Read model store - customer_view&quot;)]
+    RM --&gt;|&quot;2a. version meets requirement&quot;| API
+    RM -. &quot;2b. version too old or missing&quot; .-&gt; API
+    API -. &quot;3. fallback for fresh reads&quot; .-&gt; PG[(&quot;Primary shard - BCNF&quot;)]
+    API --&gt; U">flowchart LR
+    U[&quot;Client&quot;] --&gt; API[&quot;Read API&quot;]
+    API --&gt;|&quot;1. lookup by customer_id&quot;| RM[(&quot;Read model store - customer_view&quot;)]
+    RM --&gt;|&quot;2a. version meets requirement&quot;| API
+    RM -. &quot;2b. version too old or missing&quot; .-&gt; API
+    API -. &quot;3. fallback for fresh reads&quot; .-&gt; PG[(&quot;Primary shard - BCNF&quot;)]
+    API --&gt; U</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent Projection and Read-Your-Writes</h3>
+        <p>A version-checked projection consumer, a read path that can wait for or fall back past a required version, and a write path that returns a token:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Projection consumer: idempotent, version-checked upsert keyed by customer_id</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleChange</span>(event):                              <span class="tk-com">// from CDC topic, partitioned by customer_id</span></span>
+<span class="line">    key <span class="tk-op">=</span> <span class="tk-str">&#x27;customer_view:&#x27;</span> <span class="tk-op">+</span> event.customerId</span>
+<span class="line">    view <span class="tk-op">=</span> readStore.<span class="tk-fn">get</span>(key) ?? <span class="tk-fn">emptyView</span>(event.customerId)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> event.sourceVersion <span class="tk-op">&lt;=</span> view.appliedVersion:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">ack</span>(event)                                   <span class="tk-com">// duplicate or replay: safe to skip</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">switch</span> event.table:</span>
+<span class="line">        <span class="tk-kw">case</span> <span class="tk-str">&#x27;customers&#x27;</span>:    view.name <span class="tk-op">=</span> event.after.name; view.email <span class="tk-op">=</span> event.after.email</span>
+<span class="line">        <span class="tk-kw">case</span> <span class="tk-str">&#x27;addresses&#x27;</span>:    <span class="tk-kw">if</span> event.after.isCurrent: view.latestAddress <span class="tk-op">=</span> event.after</span>
+<span class="line">        <span class="tk-kw">case</span> <span class="tk-str">&#x27;orders&#x27;</span>:       view.orders[event.after.id] <span class="tk-op">=</span> <span class="tk-fn">summarize</span>(event.after)</span>
+<span class="line">        <span class="tk-kw">case</span> <span class="tk-str">&#x27;order_items&#x27;</span>:  view.orders[event.after.orderId].total <span class="tk-op">+</span><span class="tk-op">=</span> <span class="tk-fn">itemDelta</span>(event)   <span class="tk-com">// maintained incrementally</span></span>
+<span class="line"></span>
+<span class="line">    view.appliedVersion <span class="tk-op">=</span> event.sourceVersion               <span class="tk-com">// e.g. WAL LSN or per-customer sequence</span></span>
+<span class="line">    readStore.<span class="tk-fn">put</span>(key, view)                                <span class="tk-com">// single-partition write</span></span>
+<span class="line">    <span class="tk-fn">ack</span>(event)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Read path with read-your-writes</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getCustomerView</span>(customerId, minVersion <span class="tk-op">=</span> <span class="tk-lit">null</span>):</span>
+<span class="line">    view <span class="tk-op">=</span> readStore.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;customer_view:&#x27;</span> <span class="tk-op">+</span> customerId)</span>
+<span class="line">    <span class="tk-kw">if</span> view <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> (minVersion <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> view.appliedVersion <span class="tk-op">&gt;=</span> minVersion):</span>
+<span class="line">        <span class="tk-kw">return</span> view                                         <span class="tk-com">// fast path: single-partition lookup</span></span>
+<span class="line">    <span class="tk-kw">if</span> minVersion <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-fn">waitUpTo</span>(<span class="tk-num">150ms</span>, <span class="tk-kw">until</span> <span class="tk-op">=</span> readStore.<span class="tk-fn">version</span>(customerId) <span class="tk-op">&gt;=</span> minVersion)</span>
+<span class="line">        view <span class="tk-op">=</span> readStore.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;customer_view:&#x27;</span> <span class="tk-op">+</span> customerId)</span>
+<span class="line">        <span class="tk-kw">if</span> view <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> view.appliedVersion <span class="tk-op">&gt;=</span> minVersion: <span class="tk-kw">return</span> view</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">buildFromPrimary</span>(customerId)                     <span class="tk-com">// fallback: correct but slower, rate-limited</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Write path: returns a token the client sends back on its next read</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">updateAddress</span>(customerId, newAddress):</span>
+<span class="line">    tx <span class="tk-op">=</span> primary.<span class="tk-kw">begin</span>()</span>
+<span class="line">    tx.<span class="tk-fn">update</span>(<span class="tk-str">&#x27;addresses&#x27;</span>, customerId, newAddress)</span>
+<span class="line">    version <span class="tk-op">=</span> tx.<span class="tk-fn">commitAndReturnVersion</span>()                   <span class="tk-com">// e.g. pg_current_wal_lsn() at commit</span></span>
+<span class="line">    <span class="tk-kw">return</span> { ok: <span class="tk-lit">true</span>, readAfter: version }</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Dual-writing from the application:</strong> Writing to the database and the read store (or broker) in one request leaves them inconsistent when either call fails. Use log-based CDC or a transactional outbox.</li>
+          <li><strong>Ignoring read-your-writes:</strong> A user who updates an address and still sees the old one will assume the system is broken. Return a version token and wait for it, or read from the primary for that session.</li>
+          <li><strong>Wrong partition key for events:</strong> If events for one customer land on different partitions, updates apply out of order. Partition by the entity key the read model uses.</li>
+          <li><strong>Non-idempotent consumers:</strong> At-least-once delivery means duplicates and replays. Upsert with a version or LSN check so reprocessing is safe.</li>
+          <li><strong>No rebuild or reconciliation path:</strong> Projections drift over time through bugs and schema changes. Keep snapshot-plus-replay tooling and periodic drift checks.</li>
+          <li><strong>Not monitoring lag:</strong> Consumer lag and event age are the freshness SLA. Alert on them and define a fallback to the primary.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams rarely abandon normalization; they <strong>separate the write model from the read models</strong>. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Find the hot reads:</strong> Rank queries by frequency × p99 latency, and confirm that cross-shard joins, not missing indexes, are the cause.</li>
+          <li><strong>Step 1 — Fix the cheap things:</strong> Co-locate related tables on the same shard key (customer_id) where possible, add covering indexes, and cache stable lookups.</li>
+          <li><strong>Step 2 — Build a read model for the worst offenders:</strong> Use log-based CDC or a transactional outbox, partition events by customer_id and upsert into a key-value or document store.</li>
+          <li><strong>Step 3 — Add freshness controls:</strong> Return version tokens for read-your-writes, expose lag metrics and fall back to the primary for flows that cannot tolerate staleness.</li>
+          <li><strong>Step 4 — Make it rebuildable:</strong> Keep snapshot-plus-replay tooling and a reconciliation job so projections can be repaired and schemas can evolve safely.</li>
+          <li><strong>Step 5 — Consider platform changes last:</strong> Revisit distributed SQL or selective denormalization only if read models cannot meet the SLA.</li>
+        </ul>
+        <p>Keep one source of truth for writes and as many purpose-built views as the reads require.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Do not make one schema serve two opposing goals. Keep the <strong>BCNF database as the strongly consistent source of truth</strong> and serve latency-sensitive reads from <strong>CDC-fed, single-partition read models</strong>. You accept bounded staleness (with read-your-writes where it matters) in exchange for fast reads without compromising write integrity.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -38,114 +38,881 @@
       </div>
       <div class="stats-bar">
         <div class="stat">
-          <div class="stat-num" id="visibleCount">45</div>
+          <div class="stat-num" id="visibleCount">108</div>
           <div class="stat-label">Challenges</div>
         </div>
         <div class="stat-divider"></div>
         <div class="stat">
-          <div class="stat-num">84</div>
+          <div class="stat-num">217</div>
           <div class="stat-label">Topics</div>
         </div>
       </div>
     </div>
 
     <div class="home-controls">
-      <div class="filter-bar">
-        <button class="filter-tag active" data-tag="all">All topics</button>
-      <button class="filter-tag" data-tag="Scalability">Scalability</button>
-      <button class="filter-tag" data-tag="Performance">Performance</button>
-      <button class="filter-tag" data-tag="System Design">System Design</button>
-      <button class="filter-tag" data-tag="Consistency">Consistency</button>
-      <button class="filter-tag" data-tag="Databases">Databases</button>
-      <button class="filter-tag hidden-tag" data-tag="Microservices">Microservices</button>
-      <button class="filter-tag hidden-tag" data-tag="Distributed Systems">Distributed Systems</button>
-      <button class="filter-tag hidden-tag" data-tag="Event-Driven">Event-Driven</button>
-      <button class="filter-tag hidden-tag" data-tag="Multi-Region">Multi-Region</button>
-      <button class="filter-tag hidden-tag" data-tag="Security">Security</button>
-      <button class="filter-tag hidden-tag" data-tag="Concurrency">Concurrency</button>
-      <button class="filter-tag hidden-tag" data-tag="Data Tiering">Data Tiering</button>
-      <button class="filter-tag hidden-tag" data-tag="Deployment">Deployment</button>
-      <button class="filter-tag hidden-tag" data-tag="Flash Sales">Flash Sales</button>
-      <button class="filter-tag hidden-tag" data-tag="Inventory Management">Inventory Management</button>
-      <button class="filter-tag hidden-tag" data-tag="Latency">Latency</button>
-      <button class="filter-tag hidden-tag" data-tag="Leader Election">Leader Election</button>
-      <button class="filter-tag hidden-tag" data-tag="Replication">Replication</button>
-      <button class="filter-tag hidden-tag" data-tag="Resilience">Resilience</button>
-      <button class="filter-tag hidden-tag" data-tag="Storage">Storage</button>
-      <button class="filter-tag hidden-tag" data-tag="Strangler Fig">Strangler Fig</button>
-      <button class="filter-tag hidden-tag" data-tag="API Design">API Design</button>
-      <button class="filter-tag hidden-tag" data-tag="API Gateway">API Gateway</button>
-      <button class="filter-tag hidden-tag" data-tag="Architecture">Architecture</button>
-      <button class="filter-tag hidden-tag" data-tag="CORS">CORS</button>
-      <button class="filter-tag hidden-tag" data-tag="CRDTs">CRDTs</button>
-      <button class="filter-tag hidden-tag" data-tag="CSRF">CSRF</button>
-      <button class="filter-tag hidden-tag" data-tag="Checkout">Checkout</button>
-      <button class="filter-tag hidden-tag" data-tag="Cold Starts">Cold Starts</button>
-      <button class="filter-tag hidden-tag" data-tag="Collaborative Systems">Collaborative Systems</button>
-      <button class="filter-tag hidden-tag" data-tag="Configuration Management">Configuration Management</button>
-      <button class="filter-tag hidden-tag" data-tag="Conflict Resolution">Conflict Resolution</button>
-      <button class="filter-tag hidden-tag" data-tag="Connection Management">Connection Management</button>
-      <button class="filter-tag hidden-tag" data-tag="Consensus">Consensus</button>
-      <button class="filter-tag hidden-tag" data-tag="Consensus Algorithms">Consensus Algorithms</button>
-      <button class="filter-tag hidden-tag" data-tag="Consistent Hashing">Consistent Hashing</button>
-      <button class="filter-tag hidden-tag" data-tag="Container Isolation">Container Isolation</button>
-      <button class="filter-tag hidden-tag" data-tag="Containerization">Containerization</button>
-      <button class="filter-tag hidden-tag" data-tag="Cost Optimization">Cost Optimization</button>
-      <button class="filter-tag hidden-tag" data-tag="Data Archival">Data Archival</button>
-      <button class="filter-tag hidden-tag" data-tag="Data Migration">Data Migration</button>
-      <button class="filter-tag hidden-tag" data-tag="Database Migration">Database Migration</button>
-      <button class="filter-tag hidden-tag" data-tag="Database Pooling">Database Pooling</button>
-      <button class="filter-tag hidden-tag" data-tag="Fanout">Fanout</button>
-      <button class="filter-tag hidden-tag" data-tag="Feature Flags">Feature Flags</button>
-      <button class="filter-tag hidden-tag" data-tag="Graceful Degradation">Graceful Degradation</button>
-      <button class="filter-tag hidden-tag" data-tag="Graph Databases">Graph Databases</button>
-      <button class="filter-tag hidden-tag" data-tag="Health Checks">Health Checks</button>
-      <button class="filter-tag hidden-tag" data-tag="Heartbeats">Heartbeats</button>
-      <button class="filter-tag hidden-tag" data-tag="High Concurrency">High Concurrency</button>
-      <button class="filter-tag hidden-tag" data-tag="High Throughput">High Throughput</button>
-      <button class="filter-tag hidden-tag" data-tag="Idempotency">Idempotency</button>
-      <button class="filter-tag hidden-tag" data-tag="Infrastructure as Code">Infrastructure as Code</button>
-      <button class="filter-tag hidden-tag" data-tag="Live Updates">Live Updates</button>
-      <button class="filter-tag hidden-tag" data-tag="Load Balancing">Load Balancing</button>
-      <button class="filter-tag hidden-tag" data-tag="Long Polling">Long Polling</button>
-      <button class="filter-tag hidden-tag" data-tag="Memory Management">Memory Management</button>
-      <button class="filter-tag hidden-tag" data-tag="Microservices Migration">Microservices Migration</button>
-      <button class="filter-tag hidden-tag" data-tag="Monolith Decomposition">Monolith Decomposition</button>
-      <button class="filter-tag hidden-tag" data-tag="Multi-tenancy">Multi-tenancy</button>
-      <button class="filter-tag hidden-tag" data-tag="Operational Transformation">Operational Transformation</button>
-      <button class="filter-tag hidden-tag" data-tag="Paxos vs Raft">Paxos vs Raft</button>
-      <button class="filter-tag hidden-tag" data-tag="Payments">Payments</button>
-      <button class="filter-tag hidden-tag" data-tag="Platform Engineering">Platform Engineering</button>
-      <button class="filter-tag hidden-tag" data-tag="Production Debugging">Production Debugging</button>
-      <button class="filter-tag hidden-tag" data-tag="Production Safety">Production Safety</button>
-      <button class="filter-tag hidden-tag" data-tag="Pub/Sub">Pub/Sub</button>
-      <button class="filter-tag hidden-tag" data-tag="Race Conditions">Race Conditions</button>
-      <button class="filter-tag hidden-tag" data-tag="Rate Limiting">Rate Limiting</button>
-      <button class="filter-tag hidden-tag" data-tag="Read Performance">Read Performance</button>
-      <button class="filter-tag hidden-tag" data-tag="Real-time">Real-time</button>
-      <button class="filter-tag hidden-tag" data-tag="Real-time Analytics">Real-time Analytics</button>
-      <button class="filter-tag hidden-tag" data-tag="Real-time Processing">Real-time Processing</button>
-      <button class="filter-tag hidden-tag" data-tag="Recommendations">Recommendations</button>
-      <button class="filter-tag hidden-tag" data-tag="Resiliency">Resiliency</button>
-      <button class="filter-tag hidden-tag" data-tag="Serverless">Serverless</button>
-      <button class="filter-tag hidden-tag" data-tag="Session Management">Session Management</button>
-      <button class="filter-tag hidden-tag" data-tag="Split-Brain">Split-Brain</button>
-      <button class="filter-tag hidden-tag" data-tag="Stability">Stability</button>
-      <button class="filter-tag hidden-tag" data-tag="Storage Costs">Storage Costs</button>
-      <button class="filter-tag hidden-tag" data-tag="System Monitoring">System Monitoring</button>
-      <button class="filter-tag hidden-tag" data-tag="System Scaling">System Scaling</button>
-      <button class="filter-tag hidden-tag" data-tag="Thread Safety">Thread Safety</button>
-      <button class="filter-tag hidden-tag" data-tag="WebSockets">WebSockets</button>
-      <button class="filter-more-btn" id="filterMoreBtn">+79 more topics</button>
+      <div class="home-controls-row">
+        <div class="filter-bar">
+          <button class="filter-tag active" data-tag="all">All topics</button>
+          <button class="filter-tag" data-tag="Scalability">Scalability</button>
+          <button class="filter-tag" data-tag="Concurrency">Concurrency</button>
+          <button class="filter-tag" data-tag="Consistency">Consistency</button>
+          <button class="filter-tag" data-tag="Performance">Performance</button>
+          <button class="filter-tag" data-tag="Latency">Latency</button>
+          <button class="filter-more-btn" id="filterMoreBtn">+212 more topics</button>
+        </div>
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" class="search-input" id="searchInput"
+                 placeholder="Search by title or tag" autocomplete="off" />
+        </div>
       </div>
-      <div class="search-wrap">
-        <span class="search-icon">🔍</span>
-        <input type="text" class="search-input" id="searchInput"
-               placeholder="Search by title or tag" autocomplete="off" />
+      <div class="tags-drawer" id="tagsDrawer">
+        <button class="filter-tag" data-tag="Microservices">Microservices</button>
+        <button class="filter-tag" data-tag="System Design">System Design</button>
+        <button class="filter-tag" data-tag="Databases">Databases</button>
+        <button class="filter-tag" data-tag="Distributed Systems">Distributed Systems</button>
+        <button class="filter-tag" data-tag="Leader Election">Leader Election</button>
+        <button class="filter-tag" data-tag="Multi-Region">Multi-Region</button>
+        <button class="filter-tag" data-tag="Architecture">Architecture</button>
+        <button class="filter-tag" data-tag="Deployment">Deployment</button>
+        <button class="filter-tag" data-tag="Event-Driven">Event-Driven</button>
+        <button class="filter-tag" data-tag="Immutability">Immutability</button>
+        <button class="filter-tag" data-tag="Inventory">Inventory</button>
+        <button class="filter-tag" data-tag="Inventory Management">Inventory Management</button>
+        <button class="filter-tag" data-tag="Low Latency">Low Latency</button>
+        <button class="filter-tag" data-tag="Observability">Observability</button>
+        <button class="filter-tag" data-tag="Race Conditions">Race Conditions</button>
+        <button class="filter-tag" data-tag="Security">Security</button>
+        <button class="filter-tag" data-tag="CDN">CDN</button>
+        <button class="filter-tag" data-tag="Cache Invalidation">Cache Invalidation</button>
+        <button class="filter-tag" data-tag="Consensus">Consensus</button>
+        <button class="filter-tag" data-tag="Data Tiering">Data Tiering</button>
+        <button class="filter-tag" data-tag="Distributed Databases">Distributed Databases</button>
+        <button class="filter-tag" data-tag="Event Sourcing">Event Sourcing</button>
+        <button class="filter-tag" data-tag="Feature Flags">Feature Flags</button>
+        <button class="filter-tag" data-tag="Flash Sales">Flash Sales</button>
+        <button class="filter-tag" data-tag="High Throughput">High Throughput</button>
+        <button class="filter-tag" data-tag="Load Balancing">Load Balancing</button>
+        <button class="filter-tag" data-tag="Multi-tenancy">Multi-tenancy</button>
+        <button class="filter-tag" data-tag="Ordering Guarantees">Ordering Guarantees</button>
+        <button class="filter-tag" data-tag="Rate Limiting">Rate Limiting</button>
+        <button class="filter-tag" data-tag="Replication">Replication</button>
+        <button class="filter-tag" data-tag="Resilience">Resilience</button>
+        <button class="filter-tag" data-tag="Resiliency">Resiliency</button>
+        <button class="filter-tag" data-tag="Semantic Search">Semantic Search</button>
+        <button class="filter-tag" data-tag="Sidecars">Sidecars</button>
+        <button class="filter-tag" data-tag="Split-Brain">Split-Brain</button>
+        <button class="filter-tag" data-tag="Storage">Storage</button>
+        <button class="filter-tag" data-tag="Strangler Fig">Strangler Fig</button>
+        <button class="filter-tag" data-tag="Time-Series">Time-Series</button>
+        <button class="filter-tag" data-tag="2PC">2PC</button>
+        <button class="filter-tag" data-tag="API Design">API Design</button>
+        <button class="filter-tag" data-tag="API Gateway">API Gateway</button>
+        <button class="filter-tag" data-tag="API Performance">API Performance</button>
+        <button class="filter-tag" data-tag="API Versioning">API Versioning</button>
+        <button class="filter-tag" data-tag="Ad-hoc Queries">Ad-hoc Queries</button>
+        <button class="filter-tag" data-tag="Analytics">Analytics</button>
+        <button class="filter-tag" data-tag="Asynchronous Jobs">Asynchronous Jobs</button>
+        <button class="filter-tag" data-tag="Auditability">Auditability</button>
+        <button class="filter-tag" data-tag="Authentication">Authentication</button>
+        <button class="filter-tag" data-tag="Availability">Availability</button>
+        <button class="filter-tag" data-tag="B-Trees">B-Trees</button>
+        <button class="filter-tag" data-tag="Background Processing">Background Processing</button>
+        <button class="filter-tag" data-tag="Backward Compatibility">Backward Compatibility</button>
+        <button class="filter-tag" data-tag="Bloom Filters">Bloom Filters</button>
+        <button class="filter-tag" data-tag="Blue-Green Deployment">Blue-Green Deployment</button>
+        <button class="filter-tag" data-tag="Bottlenecks">Bottlenecks</button>
+        <button class="filter-tag" data-tag="CORS">CORS</button>
+        <button class="filter-tag" data-tag="CRDTs">CRDTs</button>
+        <button class="filter-tag" data-tag="CSRF">CSRF</button>
+        <button class="filter-tag" data-tag="Caching">Caching</button>
+        <button class="filter-tag" data-tag="Checkout">Checkout</button>
+        <button class="filter-tag" data-tag="Checkout Performance">Checkout Performance</button>
+        <button class="filter-tag" data-tag="Cluster State">Cluster State</button>
+        <button class="filter-tag" data-tag="Cold Starts">Cold Starts</button>
+        <button class="filter-tag" data-tag="Collaborative Systems">Collaborative Systems</button>
+        <button class="filter-tag" data-tag="Configuration Management">Configuration Management</button>
+        <button class="filter-tag" data-tag="Conflict Resolution">Conflict Resolution</button>
+        <button class="filter-tag" data-tag="Connection Management">Connection Management</button>
+        <button class="filter-tag" data-tag="Connection Pooling">Connection Pooling</button>
+        <button class="filter-tag" data-tag="Consensus Algorithms">Consensus Algorithms</button>
+        <button class="filter-tag" data-tag="Consistent Hashing">Consistent Hashing</button>
+        <button class="filter-tag" data-tag="Container Isolation">Container Isolation</button>
+        <button class="filter-tag" data-tag="Containerization">Containerization</button>
+        <button class="filter-tag" data-tag="Cost Optimization">Cost Optimization</button>
+        <button class="filter-tag" data-tag="Counters">Counters</button>
+        <button class="filter-tag" data-tag="Cursor vs Offset">Cursor vs Offset</button>
+        <button class="filter-tag" data-tag="DNS vs Gossip">DNS vs Gossip</button>
+        <button class="filter-tag" data-tag="Dashboards">Dashboards</button>
+        <button class="filter-tag" data-tag="Data Archival">Data Archival</button>
+        <button class="filter-tag" data-tag="Data Freshness">Data Freshness</button>
+        <button class="filter-tag" data-tag="Data History">Data History</button>
+        <button class="filter-tag" data-tag="Data Integrity">Data Integrity</button>
+        <button class="filter-tag" data-tag="Data Migration">Data Migration</button>
+        <button class="filter-tag" data-tag="Data Pipelines">Data Pipelines</button>
+        <button class="filter-tag" data-tag="Data Replication">Data Replication</button>
+        <button class="filter-tag" data-tag="Data Sharing">Data Sharing</button>
+        <button class="filter-tag" data-tag="Data Staleness">Data Staleness</button>
+        <button class="filter-tag" data-tag="Data Storage">Data Storage</button>
+        <button class="filter-tag" data-tag="Data Structures">Data Structures</button>
+        <button class="filter-tag" data-tag="Data Volume">Data Volume</button>
+        <button class="filter-tag" data-tag="Database Compaction">Database Compaction</button>
+        <button class="filter-tag" data-tag="Database Indexing">Database Indexing</button>
+        <button class="filter-tag" data-tag="Database Load">Database Load</button>
+        <button class="filter-tag" data-tag="Database Migration">Database Migration</button>
+        <button class="filter-tag" data-tag="Database Normalization">Database Normalization</button>
+        <button class="filter-tag" data-tag="Database Performance">Database Performance</button>
+        <button class="filter-tag" data-tag="Database Pooling">Database Pooling</button>
+        <button class="filter-tag" data-tag="Database Protection">Database Protection</button>
+        <button class="filter-tag" data-tag="Database Scaling">Database Scaling</button>
+        <button class="filter-tag" data-tag="Database Schema">Database Schema</button>
+        <button class="filter-tag" data-tag="Dependency Injection">Dependency Injection</button>
+        <button class="filter-tag" data-tag="Dependency Management">Dependency Management</button>
+        <button class="filter-tag" data-tag="Distributed Consensus">Distributed Consensus</button>
+        <button class="filter-tag" data-tag="Domain Driven Design">Domain Driven Design</button>
+        <button class="filter-tag" data-tag="Edge Computing">Edge Computing</button>
+        <button class="filter-tag" data-tag="Event Driven">Event Driven</button>
+        <button class="filter-tag" data-tag="Event Processing">Event Processing</button>
+        <button class="filter-tag" data-tag="Event Streams">Event Streams</button>
+        <button class="filter-tag" data-tag="Fail Fast">Fail Fast</button>
+        <button class="filter-tag" data-tag="Fanout">Fanout</button>
+        <button class="filter-tag" data-tag="Feature Store">Feature Store</button>
+        <button class="filter-tag" data-tag="Financial Systems">Financial Systems</button>
+        <button class="filter-tag" data-tag="Foreign Keys">Foreign Keys</button>
+        <button class="filter-tag" data-tag="Global Store">Global Store</button>
+        <button class="filter-tag" data-tag="Global Systems">Global Systems</button>
+        <button class="filter-tag" data-tag="Gossip Protocol">Gossip Protocol</button>
+        <button class="filter-tag" data-tag="Graceful Degradation">Graceful Degradation</button>
+        <button class="filter-tag" data-tag="Graph Databases">Graph Databases</button>
+        <button class="filter-tag" data-tag="Hash vs Tree">Hash vs Tree</button>
+        <button class="filter-tag" data-tag="Health Checks">Health Checks</button>
+        <button class="filter-tag" data-tag="Heartbeats">Heartbeats</button>
+        <button class="filter-tag" data-tag="High Cardinality">High Cardinality</button>
+        <button class="filter-tag" data-tag="High Concurrency">High Concurrency</button>
+        <button class="filter-tag" data-tag="High Scale">High Scale</button>
+        <button class="filter-tag" data-tag="High TPS">High TPS</button>
+        <button class="filter-tag" data-tag="Hot Keys">Hot Keys</button>
+        <button class="filter-tag" data-tag="Hotspots">Hotspots</button>
+        <button class="filter-tag" data-tag="Idempotency">Idempotency</button>
+        <button class="filter-tag" data-tag="Indexing">Indexing</button>
+        <button class="filter-tag" data-tag="Infrastructure as Code">Infrastructure as Code</button>
+        <button class="filter-tag" data-tag="LSM Trees">LSM Trees</button>
+        <button class="filter-tag" data-tag="Leaderboards">Leaderboards</button>
+        <button class="filter-tag" data-tag="Live Updates">Live Updates</button>
+        <button class="filter-tag" data-tag="Long Polling">Long Polling</button>
+        <button class="filter-tag" data-tag="Maintenance">Maintenance</button>
+        <button class="filter-tag" data-tag="Materialized Views">Materialized Views</button>
+        <button class="filter-tag" data-tag="Memory Management">Memory Management</button>
+        <button class="filter-tag" data-tag="Message Queues">Message Queues</button>
+        <button class="filter-tag" data-tag="Metadata Tracking">Metadata Tracking</button>
+        <button class="filter-tag" data-tag="Metrics">Metrics</button>
+        <button class="filter-tag" data-tag="Metrics Storage">Metrics Storage</button>
+        <button class="filter-tag" data-tag="Microservices Migration">Microservices Migration</button>
+        <button class="filter-tag" data-tag="Migrations">Migrations</button>
+        <button class="filter-tag" data-tag="Mocking">Mocking</button>
+        <button class="filter-tag" data-tag="Monolith Decomposition">Monolith Decomposition</button>
+        <button class="filter-tag" data-tag="Monolith to Microservices">Monolith to Microservices</button>
+        <button class="filter-tag" data-tag="Networking">Networking</button>
+        <button class="filter-tag" data-tag="OLTP vs OLAP">OLTP vs OLAP</button>
+        <button class="filter-tag" data-tag="Object Storage">Object Storage</button>
+        <button class="filter-tag" data-tag="Operational Transformation">Operational Transformation</button>
+        <button class="filter-tag" data-tag="Order Management">Order Management</button>
+        <button class="filter-tag" data-tag="Order Processing">Order Processing</button>
+        <button class="filter-tag" data-tag="Pagination">Pagination</button>
+        <button class="filter-tag" data-tag="Paxos vs Raft">Paxos vs Raft</button>
+        <button class="filter-tag" data-tag="Payments">Payments</button>
+        <button class="filter-tag" data-tag="Performance Optimization">Performance Optimization</button>
+        <button class="filter-tag" data-tag="Permissions">Permissions</button>
+        <button class="filter-tag" data-tag="Platform Engineering">Platform Engineering</button>
+        <button class="filter-tag" data-tag="Postgres">Postgres</button>
+        <button class="filter-tag" data-tag="Production Debugging">Production Debugging</button>
+        <button class="filter-tag" data-tag="Production Safety">Production Safety</button>
+        <button class="filter-tag" data-tag="Pub/Sub">Pub/Sub</button>
+        <button class="filter-tag" data-tag="Queues vs Streams">Queues vs Streams</button>
+        <button class="filter-tag" data-tag="Quorum">Quorum</button>
+        <button class="filter-tag" data-tag="REST API">REST API</button>
+        <button class="filter-tag" data-tag="Read Freshness">Read Freshness</button>
+        <button class="filter-tag" data-tag="Read Latency">Read Latency</button>
+        <button class="filter-tag" data-tag="Read Performance">Read Performance</button>
+        <button class="filter-tag" data-tag="Real-time">Real-time</button>
+        <button class="filter-tag" data-tag="Real-time Analytics">Real-time Analytics</button>
+        <button class="filter-tag" data-tag="Real-time Content">Real-time Content</button>
+        <button class="filter-tag" data-tag="Real-time Dashboards">Real-time Dashboards</button>
+        <button class="filter-tag" data-tag="Real-time Leaderboards">Real-time Leaderboards</button>
+        <button class="filter-tag" data-tag="Real-time Processing">Real-time Processing</button>
+        <button class="filter-tag" data-tag="Recommendations">Recommendations</button>
+        <button class="filter-tag" data-tag="Recursion">Recursion</button>
+        <button class="filter-tag" data-tag="Recursion vs Iteration">Recursion vs Iteration</button>
+        <button class="filter-tag" data-tag="Refactoring">Refactoring</button>
+        <button class="filter-tag" data-tag="Reliability">Reliability</button>
+        <button class="filter-tag" data-tag="Replayability">Replayability</button>
+        <button class="filter-tag" data-tag="Rollbacks">Rollbacks</button>
+        <button class="filter-tag" data-tag="SaaS Architecture">SaaS Architecture</button>
+        <button class="filter-tag" data-tag="Saga Pattern">Saga Pattern</button>
+        <button class="filter-tag" data-tag="Serverless">Serverless</button>
+        <button class="filter-tag" data-tag="Service Discovery">Service Discovery</button>
+        <button class="filter-tag" data-tag="Service Mesh">Service Mesh</button>
+        <button class="filter-tag" data-tag="Session Management">Session Management</button>
+        <button class="filter-tag" data-tag="Source of Truth">Source of Truth</button>
+        <button class="filter-tag" data-tag="Stability">Stability</button>
+        <button class="filter-tag" data-tag="Stale Data">Stale Data</button>
+        <button class="filter-tag" data-tag="Storage Costs">Storage Costs</button>
+        <button class="filter-tag" data-tag="Stream Processing">Stream Processing</button>
+        <button class="filter-tag" data-tag="System Monitoring">System Monitoring</button>
+        <button class="filter-tag" data-tag="System Scaling">System Scaling</button>
+        <button class="filter-tag" data-tag="TCP vs UDP">TCP vs UDP</button>
+        <button class="filter-tag" data-tag="Tail Latency">Tail Latency</button>
+        <button class="filter-tag" data-tag="Telemetry">Telemetry</button>
+        <button class="filter-tag" data-tag="Testing">Testing</button>
+        <button class="filter-tag" data-tag="Thread Safety">Thread Safety</button>
+        <button class="filter-tag" data-tag="Throughput">Throughput</button>
+        <button class="filter-tag" data-tag="Time Sync">Time Sync</button>
+        <button class="filter-tag" data-tag="Time-Series Data">Time-Series Data</button>
+        <button class="filter-tag" data-tag="Token Revocation">Token Revocation</button>
+        <button class="filter-tag" data-tag="Tracing">Tracing</button>
+        <button class="filter-tag" data-tag="Traffic Routing">Traffic Routing</button>
+        <button class="filter-tag" data-tag="Training-Serving Skew">Training-Serving Skew</button>
+        <button class="filter-tag" data-tag="Upload Pipelines">Upload Pipelines</button>
+        <button class="filter-tag" data-tag="User Experience">User Experience</button>
+        <button class="filter-tag" data-tag="Viral Traffic">Viral Traffic</button>
+        <button class="filter-tag" data-tag="WebSockets">WebSockets</button>
+        <button class="filter-tag" data-tag="Window Functions">Window Functions</button>
+        <button class="filter-tag" data-tag="Write-Ahead Logging">Write-Ahead Logging</button>
+        <button class="filter-tag" data-tag="Zero Downtime">Zero Downtime</button>
       </div>
     </div>
 
     <div class="problem-grid" id="problemGrid">
+      <a href="questions/distributed-transactions-for-cross-service-booking-2pc-vs-saga.html" class="problem-card"
+         data-title="distributed transactions for cross-service booking: 2pc vs saga"
+         data-tags="saga pattern,2pc,microservices">
+        <span class="card-title">Distributed Transactions for Cross-Service Booking: 2PC vs SAGA</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Saga Pattern</span> <span class="tag tag--green">2PC</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">15 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/observability-without-sacrificing-p99-latency.html" class="problem-card"
+         data-title="observability without sacrificing p99 latency"
+         data-tags="observability,latency,data volume">
+        <span class="card-title">Observability Without Sacrificing p99 Latency</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Observability</span> <span class="tag tag--green">Latency</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">15 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/monolith-to-microservices-choosing-the-right-migration-strategy.html" class="problem-card"
+         data-title="monolith to microservices: choosing the right migration strategy"
+         data-tags="monolith to microservices,architecture,refactoring">
+        <span class="card-title">Monolith to Microservices: Choosing the Right Migration Strategy</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Monolith to Microservices</span> <span class="tag tag--green">Architecture</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">15 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/sidecar-deployment-strategy-for-a-high-throughput-service-mesh.html" class="problem-card"
+         data-title="sidecar deployment strategy for a high-throughput service mesh"
+         data-tags="service mesh,sidecars,high throughput">
+        <span class="card-title">Sidecar Deployment Strategy for a High-Throughput Service Mesh</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Service Mesh</span> <span class="tag tag--green">Sidecars</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">15 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/keeping-cdn-edge-caches-fresh-without-overloading-the-origin.html" class="problem-card"
+         data-title="keeping cdn edge caches fresh without overloading the origin"
+         data-tags="cache invalidation,stale data,race conditions">
+        <span class="card-title">Keeping CDN Edge Caches Fresh Without Overloading the Origin</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Cache Invalidation</span> <span class="tag tag--green">Stale Data</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">15 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/service-discovery-for-globally-distributed-autoscaling-microservices.html" class="problem-card"
+         data-title="service discovery for globally distributed, autoscaling microservices"
+         data-tags="service discovery,dns vs gossip,sidecars">
+        <span class="card-title">Service Discovery for Globally Distributed, Autoscaling Microservices</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Service Discovery</span> <span class="tag tag--green">DNS vs Gossip</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">15 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/ingestion-and-storage-architecture-for-1m-events-per-second-telemetry.html" class="problem-card"
+         data-title="ingestion and storage architecture for 1m events per second telemetry"
+         data-tags="metrics storage,high tps,time-series">
+        <span class="card-title">Ingestion and Storage Architecture for 1M Events per Second Telemetry</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Metrics Storage</span> <span class="tag tag--green">High TPS</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">15 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/designing-for-immutability-which-pattern-scales-while-remaining-auditable.html" class="problem-card"
+         data-title="designing for immutability: which pattern scales while remaining auditable?"
+         data-tags="immutability,auditability,scalability">
+        <span class="card-title">Designing for Immutability: Which pattern scales while remaining auditable?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Immutability</span> <span class="tag tag--green">Auditability</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">14 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/scaling-real-time-leaderboards-where-should-window-functions-be-executed.html" class="problem-card"
+         data-title="scaling real-time leaderboards: where should window functions be executed?"
+         data-tags="real-time leaderboards,window functions,stream processing">
+        <span class="card-title">Scaling Real-Time Leaderboards: Where should window functions be executed?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Real-time Leaderboards</span> <span class="tag tag--green">Window Functions</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">14 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/when-one-user-overwhelms-the-cluster-how-to-prevent-a-hot-key-from-melting-your-.html" class="problem-card"
+         data-title="when one user overwhelms the cluster: how to prevent a hot key from melting your database?"
+         data-tags="hot keys,database protection,rate limiting">
+        <span class="card-title">When One User Overwhelms the Cluster: How to prevent a hot key from melting your database?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Hot Keys</span> <span class="tag tag--green">Database Protection</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">14 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/aishas-choice-selecting-an-indexing-pattern-for-low-latency-semantic-search.html" class="problem-card"
+         data-title="aisha&#x27;s choice: selecting an indexing pattern for low-latency semantic search"
+         data-tags="semantic search,indexing,low latency">
+        <span class="card-title">Aisha&#x27;s Choice: Selecting an indexing pattern for low-latency semantic search</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Semantic Search</span> <span class="tag tag--green">Indexing</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">14 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/diegos-architectural-choice-low-latency-semantic-search-at-scale.html" class="problem-card"
+         data-title="diego&#x27;s architectural choice: low-latency semantic search at scale"
+         data-tags="semantic search,scalability,architecture">
+        <span class="card-title">Diego&#x27;s Architectural Choice: Low-latency semantic search at scale</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Semantic Search</span> <span class="tag tag--green">Scalability</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">14 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/carloss-concurrency-challenge-preventing-oversell-during-flash-sales.html" class="problem-card"
+         data-title="carlos&#x27;s concurrency challenge: preventing oversell during flash sales"
+         data-tags="race conditions,concurrency,inventory">
+        <span class="card-title">Carlos&#x27;s Concurrency Challenge: Preventing oversell during flash sales</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Race Conditions</span> <span class="tag tag--green">Concurrency</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">14 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/diegos-bloom-filter-dilemma-scaling-fast-versus-staying-consistent.html" class="problem-card"
+         data-title="diego’s bloom filter dilemma: scaling fast versus staying consistent"
+         data-tags="bloom filters,consistency,scalability">
+        <span class="card-title">Diego’s Bloom Filter Dilemma: Scaling fast versus staying consistent</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Bloom Filters</span> <span class="tag tag--green">Consistency</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">14 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/how-sam-can-prevent-oversells-without-sacrificing-throughput.html" class="problem-card"
+         data-title="how sam can prevent oversells without sacrificing throughput"
+         data-tags="inventory management,throughput,concurrency">
+        <span class="card-title">How Sam can prevent oversells without sacrificing throughput</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Inventory Management</span> <span class="tag tag--green">Throughput</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">13 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/can-you-order-this-selecting-the-right-ordering-guarantee-for-inventory-updates.html" class="problem-card"
+         data-title="can you order this? selecting the right ordering guarantee for inventory updates"
+         data-tags="ordering guarantees,inventory,event driven">
+        <span class="card-title">Can you order this? Selecting the right ordering guarantee for inventory updates</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Ordering Guarantees</span> <span class="tag tag--green">Inventory</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">13 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/how-can-nadia-avoid-overselling-across-microservices.html" class="problem-card"
+         data-title="how can nadia avoid overselling across microservices?"
+         data-tags="microservices,concurrency,inventory">
+        <span class="card-title">How can Nadia avoid overselling across microservices?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Microservices</span> <span class="tag tag--green">Concurrency</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">13 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/ravi-needs-to-prevent-ad-hoc-queries-from-spiking-tail-latency-what-should-he-bu.html" class="problem-card"
+         data-title="ravi needs to prevent ad-hoc queries from spiking tail latency; what should he build?"
+         data-tags="tail latency,ad-hoc queries,database performance">
+        <span class="card-title">Ravi needs to prevent ad-hoc queries from spiking tail latency; what should he build?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Tail Latency</span> <span class="tag tag--green">Ad-hoc Queries</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">13 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/queue-or-stream-which-to-choose-when-events-must-scale-remain-ordered-and-be-rep.html" class="problem-card"
+         data-title="queue or stream: which to choose when events must scale, remain ordered, and be replayable?"
+         data-tags="queues vs streams,replayability,event processing">
+        <span class="card-title">Queue or stream: which to choose when events must scale, remain ordered, and be replayable?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Queues vs Streams</span> <span class="tag tag--green">Replayability</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">13 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/ravis-di-dilemma-should-he-mock-stub-contract-test-or-virtualize.html" class="problem-card"
+         data-title="ravi’s di dilemma: should he mock, stub, contract test, or virtualize?"
+         data-tags="dependency injection,testing,mocking">
+        <span class="card-title">Ravi’s DI dilemma: should he mock, stub, contract test, or virtualize?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Dependency Injection</span> <span class="tag tag--green">Testing</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">13 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/orders-dashboard-is-overwhelming-the-oltp-database-whats-the-fix.html" class="problem-card"
+         data-title="orders dashboard is overwhelming the oltp database; what&#x27;s the fix?"
+         data-tags="oltp vs olap,dashboards,database load">
+        <span class="card-title">Orders dashboard is overwhelming the OLTP database; what&#x27;s the fix?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">OLTP vs OLAP</span> <span class="tag tag--green">Dashboards</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">13 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/zero-downtime-blue-green-deployment-with-a-database-schema-change.html" class="problem-card"
+         data-title="zero-downtime blue-green deployment with a database schema change"
+         data-tags="blue-green deployment,zero downtime,rollbacks">
+        <span class="card-title">Zero-Downtime Blue-Green Deployment with a Database Schema Change</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Blue-Green Deployment</span> <span class="tag tag--green">Zero Downtime</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">11 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/architecting-time-series-ingestion-and-querying-for-5-million-edge-devices.html" class="problem-card"
+         data-title="architecting time-series ingestion and querying for 5 million edge devices"
+         data-tags="time-series data,metrics,data storage">
+        <span class="card-title">Architecting Time-Series Ingestion and Querying for 5 Million Edge Devices</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Time-Series Data</span> <span class="tag tag--green">Metrics</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">11 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/high-cardinality-telemetry-at-50k-writes-per-second-with-12-month-retention.html" class="problem-card"
+         data-title="high-cardinality telemetry at 50k writes per second with 12-month retention"
+         data-tags="high cardinality,time-series,observability">
+        <span class="card-title">High-Cardinality Telemetry at 50K Writes per Second with 12-Month Retention</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">High Cardinality</span> <span class="tag tag--green">Time-Series</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">11 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/fast-permission-checks-over-a-million-node-hierarchy-recursion-vs-iteration-vs-p.html" class="problem-card"
+         data-title="fast permission checks over a million-node hierarchy: recursion vs iteration vs precomputation"
+         data-tags="recursion vs iteration,permissions,performance">
+        <span class="card-title">Fast Permission Checks over a Million-Node Hierarchy: Recursion vs Iteration vs Precomputation</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Recursion vs Iteration</span> <span class="tag tag--green">Permissions</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">11 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/primary-keys-and-referential-integrity-across-microservice-databases.html" class="problem-card"
+         data-title="primary keys and referential integrity across microservice databases"
+         data-tags="foreign keys,distributed databases,data integrity">
+        <span class="card-title">Primary Keys and Referential Integrity Across Microservice Databases</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Foreign Keys</span> <span class="tag tag--green">Distributed Databases</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">11 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/hash-vs-ordered-partitioning-for-a-global-session-and-leaderboard-store.html" class="problem-card"
+         data-title="hash vs ordered partitioning for a global session and leaderboard store"
+         data-tags="data structures,hash vs tree,global store">
+        <span class="card-title">Hash vs Ordered Partitioning for a Global Session and Leaderboard Store</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Data Structures</span> <span class="tag tag--green">Hash vs Tree</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">11 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/eliminating-the-viral-post-hotspot-in-a-real-time-trending-leaderboard.html" class="problem-card"
+         data-title="eliminating the viral-post hotspot in a real-time trending leaderboard"
+         data-tags="hotspots,leaderboards,viral traffic">
+        <span class="card-title">Eliminating the Viral-Post Hotspot in a Real-Time Trending Leaderboard</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Hotspots</span> <span class="tag tag--green">Leaderboards</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">11 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/serving-features-to-meet-a-10ms-p95-latency-what-is-the-right-trade-off-for-maya.html" class="problem-card"
+         data-title="serving features to meet a 10ms p95 latency: what is the right trade-off for maya?"
+         data-tags="feature store,low latency,training-serving skew">
+        <span class="card-title">Serving features to meet a 10ms p95 latency: What is the right trade-off for Maya?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Feature Store</span> <span class="tag tag--green">Low Latency</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">10 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/instant-rollouts-vs-low-latency-where-should-feature-flags-be-evaluated.html" class="problem-card"
+         data-title="instant rollouts vs. low latency: where should feature flags be evaluated?"
+         data-tags="feature flags,deployment,edge computing">
+        <span class="card-title">Instant rollouts vs. low latency: Where should feature flags be evaluated?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Feature Flags</span> <span class="tag tag--green">Deployment</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">10 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/immutable-order-trail-balancing-scalability-against-consistency.html" class="problem-card"
+         data-title="immutable order trail: balancing scalability against consistency"
+         data-tags="immutability,event sourcing,scalability">
+        <span class="card-title">Immutable order trail: Balancing scalability against consistency</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Immutability</span> <span class="tag tag--green">Event Sourcing</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">10 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/ravis-index-dilemma-scaling-postgres-vs-adopting-a-dedicated-analytics-store.html" class="problem-card"
+         data-title="ravi’s index dilemma: scaling postgres vs. adopting a dedicated analytics store"
+         data-tags="database indexing,analytics,postgres">
+        <span class="card-title">Ravi’s index dilemma: Scaling Postgres vs. adopting a dedicated analytics store</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Database Indexing</span> <span class="tag tag--green">Analytics</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">10 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/ravis-recursive-trap-synchronous-service-calls-or-iterative-asynchronous-jobs.html" class="problem-card"
+         data-title="ravi&#x27;s recursive trap: synchronous service calls or iterative asynchronous jobs?"
+         data-tags="recursion,asynchronous jobs,system design">
+        <span class="card-title">Ravi&#x27;s recursive trap: Synchronous service calls or iterative asynchronous jobs?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Recursion</span> <span class="tag tag--green">Asynchronous Jobs</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">10 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/order-pipeline-architecture-should-aiden-choose-a-message-queue-or-an-event-stre.html" class="problem-card"
+         data-title="order pipeline architecture: should aiden choose a message queue or an event stream?"
+         data-tags="message queues,event streams,order processing">
+        <span class="card-title">Order pipeline architecture: Should Aiden choose a message queue or an event stream?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Message Queues</span> <span class="tag tag--green">Event Streams</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">10 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/selecting-an-immutable-source-of-truth-for-order-history-what-is-the-right-patte.html" class="problem-card"
+         data-title="selecting an immutable source of truth for order history: what is the right pattern for jordan?"
+         data-tags="source of truth,immutability,data history">
+        <span class="card-title">Selecting an immutable source of truth for order history: What is the right pattern for Jordan?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Source of Truth</span> <span class="tag tag--green">Immutability</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">10 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/aishas-near-real-time-dashboard-how-to-efficiently-maintain-the-materialized-vie.html" class="problem-card"
+         data-title="aisha&#x27;s near-real-time dashboard: how to efficiently maintain the materialized view?"
+         data-tags="materialized views,real-time dashboards,data pipelines">
+        <span class="card-title">Aisha&#x27;s Near-Real-Time Dashboard: How to Efficiently Maintain the Materialized View?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Materialized Views</span> <span class="tag tag--green">Real-time Dashboards</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">09 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/multi-tenancy-architecture-shared-schema-db-per-tenant-or-a-middle-ground.html" class="problem-card"
+         data-title="multi-tenancy architecture: shared schema, db-per-tenant, or a middle ground?"
+         data-tags="multi-tenancy,database schema,saas architecture">
+        <span class="card-title">Multi-Tenancy Architecture: Shared Schema, DB-per-Tenant, or a Middle Ground?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Multi-tenancy</span> <span class="tag tag--green">Database Schema</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">09 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/noras-order-api-fast-ux-vs-preventing-overselling-which-rest-pattern-wins.html" class="problem-card"
+         data-title="nora&#x27;s order api: fast ux vs. preventing overselling; which rest pattern wins?"
+         data-tags="rest api,order management,concurrency">
+        <span class="card-title">Nora&#x27;s Order API: Fast UX vs. Preventing Overselling; Which REST Pattern Wins?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">REST API</span> <span class="tag tag--green">Order Management</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">09 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/jordans-cdn-trade-off-content-freshness-vs-scale.html" class="problem-card"
+         data-title="jordan&#x27;s cdn trade-off: content freshness vs. scale"
+         data-tags="cdn,data freshness,scalability">
+        <span class="card-title">Jordan&#x27;s CDN Trade-off: Content Freshness vs. Scale</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">CDN</span> <span class="tag tag--green">Data Freshness</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">09 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/mayas-api-versioning-crossroads-launching-v2-without-breaking-existing-clients.html" class="problem-card"
+         data-title="maya&#x27;s api versioning crossroads: launching v2 without breaking existing clients"
+         data-tags="api versioning,backward compatibility,migrations">
+        <span class="card-title">Maya&#x27;s API Versioning Crossroads: Launching v2 Without Breaking Existing Clients</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">API Versioning</span> <span class="tag tag--green">Backward Compatibility</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">09 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/ordering-across-regions-which-timestamp-scheme-should-lena-select.html" class="problem-card"
+         data-title="ordering across regions: which timestamp scheme should lena select?"
+         data-tags="ordering guarantees,time sync,distributed systems">
+        <span class="card-title">Ordering Across Regions: Which Timestamp Scheme Should Lena Select?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Ordering Guarantees</span> <span class="tag tag--green">Time Sync</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">09 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/mayas-wallet-service-balance-accuracy-vs-millisecond-latency.html" class="problem-card"
+         data-title="maya&#x27;s wallet service: balance accuracy vs. millisecond latency"
+         data-tags="consistency,latency,financial systems">
+        <span class="card-title">Maya&#x27;s Wallet Service: Balance Accuracy vs. Millisecond Latency</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Consistency</span> <span class="tag tag--green">Latency</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">09 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/rileys-dilemma-fast-user-previews-or-dependable-background-processing.html" class="problem-card"
+         data-title="riley&#x27;s dilemma: fast user previews or dependable background processing?"
+         data-tags="background processing,user experience,reliability">
+        <span class="card-title">Riley&#x27;s dilemma: fast user previews or dependable background processing?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Background Processing</span> <span class="tag tag--green">User Experience</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">08 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/deciding-between-tcp-and-udp-for-a-high-volume-telemetry-pipeline.html" class="problem-card"
+         data-title="deciding between tcp and udp for a high-volume telemetry pipeline"
+         data-tags="networking,tcp vs udp,telemetry">
+        <span class="card-title">Deciding between TCP and UDP for a high-volume telemetry pipeline</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Networking</span> <span class="tag tag--green">TCP vs UDP</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">08 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/mayas-wal-trade-off-write-speed-vs-safety-in-a-distributed-db.html" class="problem-card"
+         data-title="maya&#x27;s wal trade-off: write speed vs safety in a distributed db"
+         data-tags="write-ahead logging,distributed databases,performance">
+        <span class="card-title">Maya&#x27;s WAL trade-off: write speed vs safety in a distributed DB</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Write-Ahead Logging</span> <span class="tag tag--green">Distributed Databases</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">08 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/should-maya-fail-fast-or-accept-the-order-when-downstream-services-lag.html" class="problem-card"
+         data-title="should maya fail fast or accept the order when downstream services lag?"
+         data-tags="resiliency,fail fast,dependency management">
+        <span class="card-title">Should Maya fail fast or accept the order when downstream services lag?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Resiliency</span> <span class="tag tag--green">Fail Fast</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">08 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/maya-needs-observability-that-wont-degrade-checkout-performance.html" class="problem-card"
+         data-title="maya needs observability that won&#x27;t degrade checkout performance"
+         data-tags="observability,checkout performance,tracing">
+        <span class="card-title">Maya needs observability that won&#x27;t degrade checkout performance</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Observability</span> <span class="tag tag--green">Checkout Performance</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">08 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/ethans-token-trade-off-rapid-validation-vs-immediate-revocation.html" class="problem-card"
+         data-title="ethan&#x27;s token trade-off: rapid validation vs immediate revocation"
+         data-tags="authentication,token revocation,latency">
+        <span class="card-title">Ethan&#x27;s token trade-off: rapid validation vs immediate revocation</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Authentication</span> <span class="tag tag--green">Token Revocation</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">08 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/how-should-priya-architect-cdn-caching-and-invalidation-for-near-real-time-conte.html" class="problem-card"
+         data-title="how should priya architect cdn caching and invalidation for near-real-time content?"
+         data-tags="cdn,cache invalidation,real-time content">
+        <span class="card-title">How should Priya architect CDN caching and invalidation for near-real-time content?</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">CDN</span> <span class="tag tag--green">Cache Invalidation</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">08 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/when-connection-poolers-become-the-bottleneck-resolving-database-connection-exha.html" class="problem-card"
+         data-title="when connection poolers become the bottleneck: resolving database connection exhaustion"
+         data-tags="connection pooling,database scaling,bottlenecks">
+        <span class="card-title">When connection poolers become the bottleneck: resolving database connection exhaustion</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Connection Pooling</span> <span class="tag tag--green">Database Scaling</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">07 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/resolving-mayas-split-brain-dilemma-choosing-an-effective-leader-strategy.html" class="problem-card"
+         data-title="resolving maya&#x27;s split-brain dilemma: choosing an effective leader strategy"
+         data-tags="split-brain,leader election,distributed consensus">
+        <span class="card-title">Resolving Maya&#x27;s split-brain dilemma: choosing an effective leader strategy</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Split-Brain</span> <span class="tag tag--green">Leader Election</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">07 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/ravis-bcnf-dilemma-balancing-data-consistency-against-low-latency-reads.html" class="problem-card"
+         data-title="ravi&#x27;s bcnf dilemma: balancing data consistency against low-latency reads"
+         data-tags="database normalization,consistency,read latency">
+        <span class="card-title">Ravi&#x27;s BCNF dilemma: balancing data consistency against low-latency reads</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Database Normalization</span> <span class="tag tag--green">Consistency</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">07 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/ashas-storage-engine-decision-lsm-vs-b-tree-for-a-global-high-ingest-event-store.html" class="problem-card"
+         data-title="asha&#x27;s storage engine decision: lsm vs b-tree for a global, high-ingest event store"
+         data-tags="lsm trees,b-trees,event sourcing">
+        <span class="card-title">Asha&#x27;s storage engine decision: LSM vs B-tree for a global, high-ingest event store</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">LSM Trees</span> <span class="tag tag--green">B-Trees</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">07 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/diegos-quorum-decision-keeping-user-profiles-fresh-and-fast.html" class="problem-card"
+         data-title="diego&#x27;s quorum decision: keeping user profiles fresh and fast"
+         data-tags="quorum,read freshness,data replication">
+        <span class="card-title">Diego&#x27;s quorum decision: keeping user profiles fresh and fast</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Quorum</span> <span class="tag tag--green">Read Freshness</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">07 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/amirs-global-profile-cache-maintaining-low-latency-without-serving-stale-data.html" class="problem-card"
+         data-title="amir&#x27;s global profile cache: maintaining low latency without serving stale data"
+         data-tags="caching,data staleness,global systems">
+        <span class="card-title">Amir&#x27;s global profile cache: maintaining low latency without serving stale data</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Caching</span> <span class="tag tag--green">Data Staleness</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">07 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/liams-upload-pipeline-deciding-how-to-track-millions-of-objects.html" class="problem-card"
+         data-title="liam&#x27;s upload pipeline: deciding how to track millions of objects"
+         data-tags="object storage,upload pipelines,metadata tracking">
+        <span class="card-title">Liam&#x27;s upload pipeline: deciding how to track millions of objects</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Object Storage</span> <span class="tag tag--green">Upload Pipelines</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">07 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/preventing-performance-meltdowns-during-nightly-compaction.html" class="problem-card"
+         data-title="preventing performance meltdowns during nightly compaction"
+         data-tags="database compaction,performance optimization,maintenance">
+        <span class="card-title">Preventing Performance Meltdowns During Nightly Compaction</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Database Compaction</span> <span class="tag tag--green">Performance Optimization</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">06 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/maya-deciding-how-domains-share-low-latency-product-data.html" class="problem-card"
+         data-title="maya deciding how domains share low-latency product data"
+         data-tags="domain driven design,data sharing,low latency">
+        <span class="card-title">Maya Deciding How Domains Share Low-Latency Product Data</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Domain Driven Design</span> <span class="tag tag--green">Data Sharing</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">06 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/gossip-vs-consensus-determining-cluster-state-ownership.html" class="problem-card"
+         data-title="gossip vs. consensus: determining cluster state ownership"
+         data-tags="gossip protocol,consensus,cluster state">
+        <span class="card-title">Gossip vs. Consensus: Determining Cluster State Ownership</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Gossip Protocol</span> <span class="tag tag--green">Consensus</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">06 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/maya-preventing-counter-race-conditions-without-slowing-the-api.html" class="problem-card"
+         data-title="maya preventing counter race conditions without slowing the api"
+         data-tags="concurrency,counters,api performance">
+        <span class="card-title">Maya Preventing Counter Race Conditions Without Slowing the API</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Concurrency</span> <span class="tag tag--green">Counters</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">06 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/cart-chaos-selecting-the-optimal-load-balancer-for-multi-region-traffic.html" class="problem-card"
+         data-title="cart chaos: selecting the optimal load balancer for multi-region traffic"
+         data-tags="load balancing,multi-region,traffic routing">
+        <span class="card-title">Cart Chaos: Selecting the Optimal Load Balancer for Multi-Region Traffic</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Load Balancing</span> <span class="tag tag--green">Multi-Region</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">06 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/ravis-multi-region-leader-election-trade-off-latency-vs-availability.html" class="problem-card"
+         data-title="ravi&#x27;s multi-region leader-election trade-off: latency vs. availability"
+         data-tags="leader election,availability,latency">
+        <span class="card-title">Ravi&#x27;s Multi-Region Leader-Election Trade-off: Latency vs. Availability</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Leader Election</span> <span class="tag tag--green">Availability</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">06 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
+      <a href="questions/mayas-pagination-dilemma-choosing-between-cursor-and-offset-for-a-high-scale-fee.html" class="problem-card"
+         data-title="maya&#x27;s pagination dilemma: choosing between cursor and offset for a high-scale feed"
+         data-tags="pagination,cursor vs offset,high scale">
+        <span class="card-title">Maya&#x27;s Pagination Dilemma: Choosing Between Cursor and Offset for a High-Scale Feed</span>
+        <div class="card-tags">
+          <span class="tag tag--purple">Pagination</span> <span class="tag tag--green">Cursor vs Offset</span> <span class="tag tag--more">+1</span>
+          <span class="card-date">06 MAR 2026</span>
+        </div>
+        <span class="card-arrow">→</span>
+      </a>
       <a href="questions/mayas-flash-sale-hot-path-how-to-mitigate-inventory-contention.html" class="problem-card"
          data-title="maya’s flash-sale hot path: how to mitigate inventory contention?"
          data-tags="inventory management,high concurrency,flash sales">

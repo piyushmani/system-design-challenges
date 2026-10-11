@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>High-Cardinality Telemetry at 50K Writes per Second with 12-Month Retention — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">11 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">High Cardinality</span>
+      <span class="tag tag--green">Time-Series</span>
+      <span class="tag tag--amber">Observability</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">High-Cardinality Telemetry at 50K Writes per Second with 12-Month Retention</h1>
+      <p class="q-scenario"><strong>Priya</strong> is architecting telemetry for a large network of <strong>smart meters</strong>. Traffic is about <strong>50,000 writes per second</strong> with roughly <strong>200,000 unique metric-and-tag combinations per minute</strong> (high cardinality that will keep growing). Data must be kept for <strong>12 months</strong>. The SLO requires <strong>sub-100 ms queries on the last hour</strong>, while older data needs <strong>flexible ad-hoc querying</strong>. The design must also provide <strong>durable ingestion</strong>, the ability to <strong>reprocess data after pipeline bugs</strong>, <strong>cost-effective long-term storage</strong>, and costs that stay manageable as <strong>cardinality grows</strong>. Which architecture fits best?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Save time-series data directly into a distributed wide-column database (like Scylla or Cassandra). Structure rows using (metric_id, time_bucket) with a clustered write strategy, manage data lifecycle with TTLs, and create secondary indexes to handle tag filtering. Optimize compaction and consistency settings for each write operation.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Adopt a stream-first approach: capture raw events in a durable log (such as Kafka). Utilize stream processing frameworks (Materialize/ksql/Flink) to calculate real-time aggregations and maintain materialized views in an OLAP database tuned for rapid querying (like ClickHouse). Store raw events in object storage (e.g., S3) to support long-term analysis and data reprocessing.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Depend on a managed time-series database (such as Timescale Cloud or InfluxDB Cloud) as the comprehensive solution for ingestion, querying, data retention, and downsampling. Trust the provider to handle scaling, replication, and complex query operations.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Implement a relational database (like Postgres) utilizing time-partitioned tables (hourly or daily), storing tags within a JSONB column indexed via GIN. Ensure strong consistency using synchronous replication, and run background processes to summarize older partitions into aggregate tables.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Stream-First: Log, Real-Time Aggregation, OLAP and Raw Lake</h3>
+        <p>Option B makes the <strong>immutable raw event log the source of truth</strong> and treats every queryable store as a <em>derived, rebuildable</em> view. That one decision satisfies the hardest requirements together: durable ingestion, reprocessing after bugs, cheap long-term storage, and cardinality that does not break the serving layer. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Columnar OLAP tolerates high cardinality:</strong> engines like ClickHouse store rows sorted by (metric, series, time) and do not keep a per-series in-memory index the way inverted-index TSDBs do, so adding series grows storage roughly linearly instead of blowing up memory.</li>
+          <li><strong>Fast recent queries:</strong> pre-aggregated views and a sort key matching the access pattern keep last-hour reads comfortably under 100 ms.</li>
+          <li><strong>Reprocessing is a first-class operation:</strong> raw events live in object storage (Parquet), so fixing a unit-conversion or aggregation bug means replaying history into a new table and swapping it in, instead of hand-patching production data.</li>
+          <li><strong>Durable and burst-safe ingestion:</strong> the log absorbs meter bursts and downstream outages, and consumers catch up from stored offsets.</li>
+          <li><strong>Cost scales gently:</strong> hot data sits on fast disks for a couple of weeks, then tiers to object storage for the rest of the 12 months, while ad-hoc history queries read Parquet or the tiered table.</li>
+          <li><strong>Sizing check:</strong> 50,000 writes per second is about 4.3 billion points per day and roughly 1.6 trillion per year. That is manageable for a compressed columnar store but impractical for a row store with secondary indexes.</li>
+        </ul>
+        <p>Treat <strong>raw events as the ledger</strong> and everything else as a cache of it. Version your aggregation logic, keep Kafka retention long enough to cover your slowest recovery, and rehearse a full replay periodically so reprocessing is a drill, not a hope.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🧱</div>
+          <h4>A — Wide-Column Store with Secondary Indexes</h4>
+          <p>Cassandra and Scylla ingest 50,000 writes per second easily, but the hard requirements are on the <em>query side</em>. Secondary indexes on high-cardinality tags are a known anti-pattern, scan-heavy ad-hoc queries are not the model's strength, and rollups and downsampling must be built elsewhere. Reprocessing also needs raw data kept outside the database. <strong>Caveat:</strong> a good write-optimized serving store for known access patterns, but a poor single store for ad-hoc analytics.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">☁️</div>
+          <h4>C — Managed TSDB as the Whole Solution</h4>
+          <p>A managed TSDB is the fastest way to start and can be right at lower cardinality. But cardinality is the stated pressure here: many TSDBs build per-series indexes held in memory, so cost and latency can climb steeply as series grow. Raw data lives only inside the vendor's store, which makes bug-fix reprocessing and portability harder, and trusting the provider hides pricing, limits and lock-in. <strong>Caveat:</strong> verify cardinality limits and pricing against projected series growth before committing.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🐘</div>
+          <h4>D — Postgres with JSONB and GIN</h4>
+          <p>At about 4.3 billion rows per day, a single relational primary cannot keep GIN-indexed JSONB tags up with the write rate: GIN has heavy write amplification, and tag-heavy filters bloat indexes as cardinality grows. Synchronous replication adds commit latency to every write. Twelve months is well over a trillion rows, so partition maintenance, vacuum and storage cost become the main workload. <strong>Caveat:</strong> works well for much smaller meter fleets.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — Stream-First: Log, Real-Time Aggregation, OLAP and Raw Lake ✓</h4>
+          <p>Adopt a stream-first approach: capture raw events in a durable log (such as Kafka). Utilize stream processing frameworks (Materialize/ksql/Flink) to calculate real-time aggregations and maintain mater</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Ingest Durability</th><th>Recent-Query Latency</th><th>High-Cardinality Tolerance</th><th>Reprocessing Ability</th><th>Long-Term Cost</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Wide-Column + Secondary Indexes</td><td>High ✅</td><td>Good for known keys ⚠</td><td>Poor for tag filters ❌</td><td>Hard ❌</td><td>Medium ⚠</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Stream-First + OLAP + Lake ✓</td><td>High ✅</td><td>Sub-100 ms ✅</td><td>Good ✅</td><td>Easy, replay ✅</td><td>Low ✅</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">C — Managed TSDB Only</td><td>Provider-dependent ⚠</td><td>Good ✅</td><td>Cost and limits grow ❌</td><td>Hard ❌</td><td>Grows with series ⚠</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">D — Postgres + JSONB + GIN</td><td>High, sync replication ✅</td><td>Good at small scale ⚠</td><td>Poor ❌</td><td>Moderate ⚠</td><td>High ❌</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Wide-Column + Secondary Indexes</h4>
+          <p>Known, key-based access patterns (fetch one meter's latest readings) at very high write rates, with ad-hoc analytics handled elsewhere.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Stream-First + OLAP + Lake</h4>
+          <p>High and growing cardinality, long retention, a need to reprocess history, and a mix of real-time and ad-hoc analytics.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Managed TSDB Only</h4>
+          <p>Small to medium cardinality, a small team and fast time to market, where vendor limits and pricing have been verified and lock-in is acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Postgres + JSONB + GIN</h4>
+          <p>Modest fleets (millions, not trillions, of rows) with strong relational needs, where the simplicity of one database outweighs its scale limits.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Stream-First Telemetry Architecture</h3>
+        <p>The log feeds both the serving store and the raw lake, and the lake can rebuild the serving store at any time:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    M[Smart meters] --&gt; G[Ingest gateway]
+    G --&gt; K[Kafka durable log]
+    K --&gt; S[Stream or SQL aggregation]
+    K --&gt; L[Raw Parquet in object storage]
+    S --&gt; O[ClickHouse serving store]
+    L --&gt;|replay and backfill| O
+    O --&gt; Q[Dashboards and ad hoc queries]
+    L --&gt; R[Trino for deep history]
+    R --&gt; Q">flowchart LR
+    M[Smart meters] --&gt; G[Ingest gateway]
+    G --&gt; K[Kafka durable log]
+    K --&gt; S[Stream or SQL aggregation]
+    K --&gt; L[Raw Parquet in object storage]
+    S --&gt; O[ClickHouse serving store]
+    L --&gt;|replay and backfill| O
+    O --&gt; Q[Dashboards and ad hoc queries]
+    L --&gt; R[Trino for deep history]
+    R --&gt; Q</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> ClickHouse Raw Table, Tiering, Rollup and Replay Rule</h3>
+        <p>A sort key aligned with per-series time scans, TTL-based tiering to object storage, and a 1-minute rollup maintained as data arrives:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">sql</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">-- Raw readings: sorted for per-series time-range scans, tiered to object storage, expired at 12 months</span></span>
+<span class="line">CREATE TABLE <span class="tk-fn">readings</span> (</span>
+<span class="line">    ts <span class="tk-fn">DateTime64</span>(<span class="tk-num">3</span>),</span>
+<span class="line">    metric_id UInt32,</span>
+<span class="line">    series_id UInt64,                                   <span class="tk-com">-- hash of metric plus allowed tags</span></span>
+<span class="line">    value Float64</span>
+<span class="line">) ENGINE <span class="tk-op">=</span> MergeTree</span>
+<span class="line">PARTITION BY <span class="tk-fn">toYYYYMMDD</span>(ts)</span>
+<span class="line">ORDER <span class="tk-fn">BY</span> (metric_id, series_id, ts)</span>
+<span class="line">TTL <span class="tk-fn">toDateTime</span>(ts) <span class="tk-op">+</span> INTERVAL <span class="tk-num">14</span> DAY TO VOLUME <span class="tk-str">&#x27;cold&#x27;</span>,</span>
+<span class="line">    <span class="tk-fn">toDateTime</span>(ts) <span class="tk-op">+</span> INTERVAL <span class="tk-num">12</span> MONTH DELETE</span>
+<span class="line">SETTINGS storage_policy <span class="tk-op">=</span> <span class="tk-str">&#x27;hot_cold&#x27;</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- One-minute rollup maintained as data arrives</span></span>
+<span class="line">CREATE TABLE <span class="tk-fn">readings_1m</span> (</span>
+<span class="line">    minute DateTime,</span>
+<span class="line">    metric_id UInt32,</span>
+<span class="line">    series_id UInt64,</span>
+<span class="line">    avg_state <span class="tk-fn">AggregateFunction</span>(avg, Float64),</span>
+<span class="line">    max_state <span class="tk-fn">AggregateFunction</span>(max, Float64),</span>
+<span class="line">    cnt_state <span class="tk-fn">AggregateFunction</span>(count)</span>
+<span class="line">) ENGINE <span class="tk-op">=</span> AggregatingMergeTree</span>
+<span class="line">PARTITION BY <span class="tk-fn">toYYYYMM</span>(minute)</span>
+<span class="line">ORDER <span class="tk-fn">BY</span> (metric_id, series_id, minute);</span>
+<span class="line"></span>
+<span class="line">CREATE MATERIALIZED VIEW readings_1m_mv TO readings_1m AS</span>
+<span class="line">SELECT <span class="tk-fn">toStartOfMinute</span>(ts) AS minute, metric_id, series_id,</span>
+<span class="line">       <span class="tk-fn">avgState</span>(value) AS avg_state, <span class="tk-fn">maxState</span>(value) AS max_state, <span class="tk-fn">countState</span>() AS cnt_state</span>
+<span class="line">FROM readings</span>
+<span class="line">GROUP BY minute, metric_id, series_id;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Last-hour dashboard query: reads only the rollup, so it stays well under 100 ms</span></span>
+<span class="line">SELECT minute, <span class="tk-fn">avgMerge</span>(avg_state) AS avg_v, <span class="tk-fn">maxMerge</span>(max_state) AS max_v</span>
+<span class="line">FROM readings_1m</span>
+<span class="line">WHERE metric_id <span class="tk-op">=</span> <span class="tk-num">42</span> AND series_id <span class="tk-op">=</span> <span class="tk-num">987654321</span> AND minute <span class="tk-op">&gt;=</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> INTERVAL <span class="tk-num">1</span> HOUR</span>
+<span class="line">GROUP BY minute ORDER BY minute;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Replay rule: never replay raw events into the live tables (aggregates would double count).</span></span>
+<span class="line"><span class="tk-com">-- Rebuild readings_v2 and readings_1m_v2 from the Parquet lake, verify against v1, then swap.</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Letting tags run free:</strong> request IDs, timestamps or free text in tags create unbounded series. Define an allow-list and a cardinality budget.</li>
+          <li><strong>Row-at-a-time inserts into OLAP:</strong> this creates thousands of tiny parts and slows merges. Batch inserts or use async inserts.</li>
+          <li><strong>Replaying into live aggregates:</strong> this double counts. Rebuild into a new table and swap, or use idempotent keys.</li>
+          <li><strong>Short log retention:</strong> if Kafka retention is shorter than your recovery time, the raw lake becomes the only replay source. Know which one you depend on.</li>
+          <li><strong>Sort key not matching the queries:</strong> an OLAP sort order that ignores the filter columns forces full scans. Design it from the real queries.</li>
+          <li><strong>No pipeline observability:</strong> watch consumer lag, insert errors, series growth and part counts so problems surface before the SLO breaks.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>A pragmatic rollout <strong>starts simple and adds stages only when measurements demand them</strong>:</p>
+        <ul>
+          <li><strong>Step 0 — Define the access patterns:</strong> list the dashboards, alerts and ad-hoc queries, plus the allowed tag keys and a cardinality budget.</li>
+          <li><strong>Step 1 — Ingest to a durable log:</strong> partition by meter or metric, enforce a schema registry, and reject unbounded tag values.</li>
+          <li><strong>Step 2 — Land raw data in object storage:</strong> write immutable Parquet partitioned by date. This is the system of record for replay.</li>
+          <li><strong>Step 3 — Serve from OLAP:</strong> load into ClickHouse with a sort key aligned to the queries and materialized views for 1-minute and 1-hour rollups.</li>
+          <li><strong>Step 4 — Tier and expire:</strong> move older parts to object storage and apply a TTL at 12 months.</li>
+          <li><strong>Step 5 — Add stream processing only if needed:</strong> for windowed joins, anomaly detection or enrichment.</li>
+          <li><strong>Step 6 — Rehearse reprocessing:</strong> replay into a shadow table, compare results, then swap.</li>
+        </ul>
+        <p>Observability on the pipeline itself (consumer lag, insert latency, series growth) is part of the design.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Keep an <strong>immutable raw log</strong> as the source of truth and build serving stores as rebuildable views. A columnar OLAP engine handles high-cardinality queries without per-series memory costs, and object storage keeps long retention and reprocessing cheap.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

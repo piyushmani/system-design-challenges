@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ravi’s index dilemma: Scaling Postgres vs. adopting a dedicated analytics store — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">10 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Database Indexing</span>
+      <span class="tag tag--green">Analytics</span>
+      <span class="tag tag--amber">Postgres</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Ravi’s index dilemma: Scaling Postgres vs. adopting a dedicated analytics store</h1>
+      <p class="q-scenario"><strong>Ravi</strong> is building a <strong>multi-tenant analytics API</strong> that handles <strong>5,000 write QPS</strong> and <strong>1,000 read QPS</strong> across tenants. Reads filter by <strong>tenant_id</strong>, a <strong>time window</strong>, and several <strong>dimensions</strong>, then group and aggregate (counts and sums), sometimes with ordering and pagination. The targets are <strong>200 ms read latency</strong> and roughly <strong>5 seconds of data freshness</strong>. On a single <strong>PostgreSQL</strong> cluster, <strong>write latency is rising</strong> and <strong>planning and scan times</strong> for analytics queries are growing. He needs a strategy that meets latency and freshness while keeping <strong>operational complexity and cost</strong> manageable.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep everything in PostgreSQL and add narrow composite B-tree and covering (INCLUDE) indexes matched to the filter and sort columns on the tenant tables, relying on strong consistency and the primary for both reads and writes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Shard by tenant and create many partial or per-tenant indexes (a partial index per tenant, or per-tenant schemas and tables), routing queries to the right shard to keep indexes small and selective, with strong read consistency within each shard.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Keep data in PostgreSQL but add near-real-time materialized views or pre-aggregated tables refreshed every few seconds by background jobs or triggers, accepting eventual consistency, and route reads to them.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Move analytics reads to a dedicated OLAP database (ClickHouse or a managed analytics service) fed by asynchronous CDC or streaming (such as Debezium), keep PostgreSQL for OLTP writes, and serve analytics from the OLAP cluster with eventual consistency.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Dedicated OLAP Store via CDC</h3>
+        <p>The symptoms point to a <strong>workload mismatch</strong>, not a tuning problem. PostgreSQL is a row-oriented OLTP engine, and it is being asked to absorb 5,000 writes per second <em>and</em> run scan-and-aggregate queries over time windows on the same primary. Splitting the workloads (OLTP keeps the writes, a columnar OLAP engine serves the aggregates) fixes both pain points at once, and a 5-second freshness target is well within what CDC plus streaming ingestion can deliver. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Columnar scans are the right tool:</strong> Aggregations over filtered time ranges read only the needed columns and benefit from compression and vectorized execution, often running orders of magnitude faster than row-store scans. Ordering the table by (tenant_id, time) means a query reads only that tenant's slice of data.</li>
+          <li><strong>Isolates the workloads:</strong> Analytics queries stop competing with OLTP writes for CPU, I/O, buffer cache, and locks, so write latency improves without adding indexes that would slow writes further.</li>
+          <li><strong>Freshness is achievable:</strong> Debezium reading the Postgres WAL, a Kafka topic, and batched inserts into ClickHouse typically land data within a second or a few seconds; a 5-second goal is realistic with tuned batch intervals (depends on volume and batch size).</li>
+          <li><strong>Flexible dimensions:</strong> Because aggregation happens at query time over raw or lightly pre-aggregated data, new filters and group-bys need no new indexes or views, unlike pre-aggregation.</li>
+          <li><strong>Why not materialized views in Postgres (Option C)?</strong> They keep the load on the primary and only help for the aggregates you precompute, and native <code>REFRESH MATERIALIZED VIEW</code> recomputes everything rather than updating incrementally.</li>
+        </ul>
+        <p>A solid rollout includes a <strong>sort key that starts with tenant_id</strong>, <strong>time-based partitioning with TTL</strong>, <strong>idempotent or deduplicating ingestion</strong>, <strong>per-tenant quotas</strong>, and <strong>freshness monitoring</strong> (end-to-end lag from Postgres commit to queryable result). Before adopting a new system, check whether PostgreSQL-native steps (time partitioning, dropping unused indexes, a read replica) buy enough runway for your actual data volume.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📇</div>
+          <h4>A — Composite and Covering Indexes</h4>
+          <p>Indexes help read paths but hurt the write path: every index adds write amplification, and with 5,000 writes per second and write latency already rising, more indexes make the root problem worse. Aggregating a time window still reads and groups many rows whatever the index shape, and covering indexes duplicate data. Indexing shines for selective queries; these queries aggregate large ranges. <strong>Caveat:</strong> a modest, targeted index plus time partitioning is the right first step for a small tenant base with limited data volume.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧩</div>
+          <h4>B — Tenant Sharding with Per-Tenant Indexes</h4>
+          <p>Per-tenant partial indexes or schemas don't scale operationally: thousands of tenants produce thousands of indexes or tables, which slows planning, bloats the catalog, complicates migrations and vacuum, and turns onboarding into a DDL operation. Tenant sharding itself is legitimate (Citus, for instance, distributes tables by tenant_id), but it spreads the same row-store scan costs across more nodes at much higher operational cost and does not change the OLTP/OLAP mismatch. Large tenants also become hot shards.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔄</div>
+          <h4>C — Postgres Materialized Views / Pre-Aggregates</h4>
+          <p>Pre-aggregation serves known dashboards quickly, but the query pattern includes <strong>various dimensions</strong> with filtering and grouping, so each new dimension combination needs another rollup and the number of rollups explodes. Refresh strategies are costly: full refreshes are heavy, and triggers or incremental maintenance (such as pg_ivm) add write overhead to a system whose writes are already slow. Everything stays on the primary, so reads and writes keep competing. <strong>Caveat:</strong> for a small, fixed set of dashboards, rollups can be enough and cheap.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>D — Dedicated OLAP Store via CDC ✓</h4>
+          <p>Move analytics reads to a dedicated OLAP database (ClickHouse or a managed analytics service) fed by asynchronous CDC or streaming (such as Debezium), keep PostgreSQL for OLTP writes, and serve analyt</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Meets 200 ms Read SLO</th><th>Meets 5 s Freshness</th><th>Write-Path Impact</th><th>Ad-hoc Dimension Flexibility</th><th>Operational Complexity</th><th>Cost at Scale</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Composite / Covering Indexes</td><td>Unlikely for large ranges ⚠</td><td>Yes ✅ (same DB)</td><td>Worse ❌ (more indexes)</td><td>Poor ❌ (index per pattern)</td><td>Low ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — Tenant Sharding + Per-Tenant Indexes</td><td>Likely for small tenants ⚠</td><td>Yes ✅</td><td>Mixed ⚠</td><td>Poor ❌</td><td>Very high ❌</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">C — Materialized Views / Pre-Aggregates</td><td>Yes for fixed aggregates ⚠</td><td>Depends on refresh ⚠</td><td>Worse ❌ (refresh or triggers)</td><td>Poor ❌ (rollup per combination)</td><td>Medium ⚠</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — OLAP Store via CDC ✓</td><td>Yes ✅</td><td>Yes ✅ (seconds)</td><td>Improved ✅ (offloaded)</td><td>Strong ✅</td><td>High ⚠</td><td>Medium ⚠ (extra cluster)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Composite / Covering Indexes</h4>
+          <p>Small to moderate data volumes, selective queries, and profiling that shows missing or ineffective indexes; the cheapest first step.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Tenant Sharding + Per-Tenant Indexes</h4>
+          <p>Very large multi-tenant OLTP workloads where tenants are isolated and mostly queried by point lookups and row-level operations (for example with Citus), not heavy aggregation.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Materialized Views / Pre-Aggregates</h4>
+          <p>A fixed, small set of dashboards or KPIs where query shapes are known in advance and a few seconds of staleness is fine.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — OLAP Store via CDC</h4>
+          <p>High write rates with time-window aggregation across flexible dimensions, strict latency SLOs, and a team able to run (or buy) an analytics store.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Analytics Read Path with Tenant Guard and Result Cache</h3>
+        <p>Every query is forced through a tenant filter and quota check, then served from cache or the OLAP cluster with a strict timeout:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U as Tenant User
+    participant API as Analytics API
+    participant Cache as Result Cache
+    participant CH as ClickHouse
+    U-&gt;&gt;API: Query tenant 42 for last 24h grouped by region
+    API-&gt;&gt;API: 1. Enforce tenant filter and quotas
+    API-&gt;&gt;Cache: 2. Lookup normalized query
+    alt Cache hit
+        Cache--&gt;&gt;API: Cached result
+    else Cache miss
+        API-&gt;&gt;CH: 3. Aggregate query with 150 ms timeout
+        CH--&gt;&gt;API: Result
+        API-&gt;&gt;Cache: 4. Store with short TTL
+    end
+    API--&gt;&gt;U: Response">sequenceDiagram
+    participant U as Tenant User
+    participant API as Analytics API
+    participant Cache as Result Cache
+    participant CH as ClickHouse
+    U-&gt;&gt;API: Query tenant 42 for last 24h grouped by region
+    API-&gt;&gt;API: 1. Enforce tenant filter and quotas
+    API-&gt;&gt;Cache: 2. Lookup normalized query
+    alt Cache hit
+        Cache--&gt;&gt;API: Cached result
+    else Cache miss
+        API-&gt;&gt;CH: 3. Aggregate query with 150 ms timeout
+        CH--&gt;&gt;API: Result
+        API-&gt;&gt;Cache: 4. Store with short TTL
+    end
+    API--&gt;&gt;U: Response</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> ClickHouse Table Design and a Typical Tenant Query</h3>
+        <p>Putting tenant_id first in the sort key keeps each tenant's data contiguous, monthly partitions bound scans and enable TTL, and ReplacingMergeTree absorbs duplicate CDC deliveries (use FINAL or argMax when exact dedupe is required before merges complete):</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">sql</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">-- Target table: tenant first in the sort key, monthly partitions, version column for dedupe</span></span>
+<span class="line">CREATE TABLE events</span>
+<span class="line">(</span>
+<span class="line">    tenant_id   UInt64,</span>
+<span class="line">    event_time  <span class="tk-fn">DateTime64</span>(<span class="tk-num">3</span>),</span>
+<span class="line">    event_id    UUID,</span>
+<span class="line">    region      <span class="tk-fn">LowCardinality</span>(String),</span>
+<span class="line">    plan        <span class="tk-fn">LowCardinality</span>(String),</span>
+<span class="line">    amount      <span class="tk-fn">Decimal</span>(<span class="tk-num">18</span>, <span class="tk-num">2</span>),</span>
+<span class="line">    version     UInt64              <span class="tk-com">-- source LSN or row version; the highest version wins on merge</span></span>
+<span class="line">)</span>
+<span class="line">ENGINE <span class="tk-op">=</span> <span class="tk-fn">ReplacingMergeTree</span>(version)</span>
+<span class="line">PARTITION BY <span class="tk-fn">toYYYYMM</span>(event_time)</span>
+<span class="line">ORDER <span class="tk-fn">BY</span> (tenant_id, event_time, event_id)</span>
+<span class="line">TTL <span class="tk-fn">toDateTime</span>(event_time) <span class="tk-op">+</span> INTERVAL <span class="tk-num">13</span> MONTH;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Ingestion note: write from Kafka in batches (for example 10k to 100k rows, or async_insert),</span></span>
+<span class="line"><span class="tk-com">-- never row by row, and target a 1 to 2 second flush interval to stay inside the 5 s freshness goal.</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Typical tenant query: filter by tenant and time window, group by dimensions</span></span>
+<span class="line">SELECT region, plan, <span class="tk-fn">count</span>() AS events, <span class="tk-fn">sum</span>(amount) AS revenue</span>
+<span class="line">FROM events</span>
+<span class="line">WHERE tenant_id <span class="tk-op">=</span> <span class="tk-num">42</span></span>
+<span class="line">  AND event_time <span class="tk-op">&gt;=</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> INTERVAL <span class="tk-num">24</span> HOUR</span>
+<span class="line">GROUP BY region, plan</span>
+<span class="line">ORDER BY revenue DESC</span>
+<span class="line">LIMIT <span class="tk-num">50</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Hot aggregate: a projection or materialized view keeps repeated dashboards well under 200 ms</span></span>
+<span class="line"><span class="tk-com">-- (for example hourly sums per tenant, region, and plan) without changing the base table.</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Row-by-row inserts into the OLAP store:</strong> Columnar engines such as ClickHouse expect large batches. Thousands of tiny inserts create too many parts and hurt performance. Batch by size or time, or use async inserts.</li>
+          <li><strong>Sort key without tenant_id first:</strong> Queries then scan other tenants' data and tenant-level performance isolation disappears.</li>
+          <li><strong>Ignoring replication-slot lag:</strong> A stuck CDC consumer makes Postgres retain WAL and can take down the source database.</li>
+          <li><strong>No plan for updates and deletes:</strong> CDC streams mutations, and append-only OLAP tables need dedupe or versioning to represent them correctly.</li>
+          <li><strong>No per-tenant limits:</strong> One tenant's heavy query can consume the shared cluster. Apply quotas, timeouts, and concurrency caps.</li>
+          <li><strong>Measuring freshness only at ingest:</strong> Track end-to-end lag from Postgres commit to queryable result, not just Kafka consumer lag.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams typically stage the move rather than jump, measuring at each stage:</p>
+        <ul>
+          <li><strong>Step 0 — Profile:</strong> Use <code>EXPLAIN (ANALYZE, BUFFERS)</code>, pg_stat_statements, and write-latency breakdowns to confirm whether the primary is bound by index maintenance, I/O, or CPU.</li>
+          <li><strong>Step 1 — Cheap Postgres wins:</strong> Drop unused indexes, partition by time, add a read replica for analytics, and tune autovacuum.</li>
+          <li><strong>Step 2 — Separate the workloads:</strong> Stream changes through CDC into an OLAP store and shift the analytics API to read from it.</li>
+          <li><strong>Step 3 — Model the OLAP tables:</strong> Order by (tenant_id, time), partition by month, use low-cardinality types, and add projections for common aggregates.</li>
+          <li><strong>Step 4 — Protect the cluster:</strong> Per-tenant limits, query timeouts, and result caches.</li>
+          <li><strong>Step 5 — Retire the old path:</strong> Remove heavy analytics indexes from OLTP once reads have moved, which also improves write latency.</li>
+        </ul>
+        <p>Move to a dedicated analytics store when the aggregation workload, not just data size, is what hurts the OLTP system.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When one database is asked to be both an <strong>OLTP write engine</strong> and an <strong>aggregation engine</strong>, stop tuning and <strong>separate the workloads</strong>. Feed a columnar OLAP store from the OLTP system through CDC or streaming, accept seconds of lag, and protect it with tenant-aware ordering, quotas, and end-to-end freshness monitoring.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

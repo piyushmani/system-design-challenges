@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Amir&#x27;s global profile cache: maintaining low latency without serving stale data — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">07 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Caching</span>
+      <span class="tag tag--green">Data Staleness</span>
+      <span class="tag tag--amber">Global Systems</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Amir&#x27;s global profile cache: maintaining low latency without serving stale data</h1>
+      <p class="q-scenario"><strong>Amir</strong>, a backend engineer at a <strong>globally distributed social app</strong>, serves extremely frequent profile reads (display names, bios, avatars, minor settings) with a <strong>P95 target of about 50 ms worldwide</strong>. Profile updates are rare (<strong>under 1% of read volume</strong>) but must <strong>propagate within seconds</strong>. Today every app server queries <strong>one Redis cluster in a primary region</strong>, which produces high latency for distant users and a <strong>large blast radius</strong> when that region has problems. He needs a caching architecture that keeps reads fast, <strong>survives regional outages</strong> and <strong>limits stale data after updates</strong>, without excessive operational complexity.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep the single global Redis cluster as the only primary with a cache-aside pattern: app servers worldwide read from and warm it, synchronously invalidate the key on update, and use a long TTL to reduce database load.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Move to a multi-master, write-through cache: on update, write synchronously to both the primary database and the cache layer, which handles its own cross-region replication, and serve all reads from the replicated cache to get strong consistency globally.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Add local caches in each region (regional Redis clusters or in-memory near-caches) using cache-aside for reads. On every profile update, publish an invalidation or update event to a reliable broker (Kafka or Redis Streams) that every region consumes to refresh or evict its keys, using versioned cache entries and a short TTL fallback to prevent prolonged stale reads.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Put profile JSON responses behind a global CDN or edge cache with edge workers serving payloads directly, call the CDN purge API on updates, and rely on long TTLs and the CDN&#x27;s built-in edge replication to cut origin load.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Regional Caches with Event-Driven Invalidation</h3>
+        <p>Two problems must be solved at once: <strong>distance</strong> (reads must be served close to the user) and <strong>coherence</strong> (every regional copy must learn about a change quickly). Regional caches fix distance, and a <strong>reliable, ordered invalidation stream</strong> fixes coherence. Because updates are under 1% of reads, the stream is low-volume and cheap, while versioned entries and a short TTL make the design robust to lost, duplicated or reordered messages. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Local reads meet the latency target:</strong> A hit in an in-process (L1) or regional Redis (L2) cache is typically sub-millisecond to a few milliseconds, leaving ample room under a 50 ms P95 even with a database fallback on a miss.</li>
+          <li><strong>Smaller blast radius:</strong> Each region can keep serving cached profiles when the primary region or the broker is degraded, because reads no longer depend on a single remote cluster. Regional failures stay regional.</li>
+          <li><strong>Bounded staleness by design:</strong> Events typically arrive in well under a second, so updates become visible within seconds. If an event is lost or delayed, the short TTL (for example 30 to 60 seconds) caps how long a stale copy can live.</li>
+          <li><strong>Safe against reordering and duplicates:</strong> Entries carry a monotonically increasing version from the database row. Consumers apply an event only if it is newer than what the cache holds, so out-of-order or replayed events do no harm.</li>
+          <li><strong>Cheap at this read/write ratio:</strong> With writes under 1% of reads, event volume is tiny compared with read traffic, so the pub/sub or stream cost is negligible next to the latency and resilience gains.</li>
+        </ul>
+        <p>A robust implementation combines a <strong>transactional outbox</strong>, <strong>versioned entries</strong>, <strong>short TTLs with jitter</strong>, <strong>single-flight loading</strong> to avoid stampedes, and <strong>read-your-writes for the editor</strong> (update the local cache synchronously and return the version). Track invalidation lag (commit time to eviction time per region), hit rate, stale-read rate and consumer lag; if invalidation lag creeps toward the TTL, fix the pipeline before lengthening any TTL.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🌍</div>
+          <h4>A — Single Global Redis (Cache-Aside)</h4>
+          <p>This keeps the exact architecture that created the problem: <strong>every distant user still pays an intercontinental round trip</strong> on every read, the primary region remains a single point of failure with a large blast radius, and a long TTL directly lengthens how long stale data can persist if an invalidation is missed. It is simple, but it fails both the latency and the resilience goals. <strong>Caveat:</strong> fine for single-region products.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">✍️</div>
+          <h4>B — Multi-Master Write-Through</h4>
+          <p>Writing synchronously to both the database and a cache is a <strong>dual-write</strong>: if one succeeds and the other fails, they diverge, and failures leave stale or missing entries. Cross-region cache replication (for example active-active Redis) is generally <strong>asynchronous</strong>, so the claim of 'strong consistency globally' does not hold, and concurrent updates in different regions need conflict resolution. It also makes writes wait on the slowest cache region. <strong>Caveat:</strong> write-through within a single region is a useful local optimization.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🛰️</div>
+          <h4>D — Global CDN / Edge Cache</h4>
+          <p>A CDN gives excellent global latency, but with <strong>long TTLs the staleness window is only as short as the purge is reliable</strong>: a missed or slow purge leaves stale profiles at the edge for the full TTL, and purge propagation times vary by provider. Profile data with per-user settings may also be private, which makes shared edge caching unsafe unless responses are carefully keyed and authorized. <strong>Caveat:</strong> an excellent complement for public, immutable assets such as content-addressed avatar images, with short TTLs for public profile fields.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Regional Caches with Event-Driven Invalidation ✓</h4>
+          <p>Add local caches in each region (regional Redis clusters or in-memory near-caches) using cache-aside for reads. On every profile update, publish an invalidation or update event to a reliable broker (K</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Global Read Latency</th><th>Staleness After Update</th><th>Regional Outage Resilience</th><th>Consistency Risk</th><th>Implementation Complexity</th><th>Operational Overhead</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Single Global Redis</td><td>Poor for distant users ❌</td><td>Low, but long TTL widens misses ⚠</td><td>Single-region blast radius ❌</td><td>Low ✅</td><td>Low ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Multi-Master Write-Through</td><td>Good ✅</td><td>Async replication lag ⚠</td><td>Good ✅</td><td>Dual-write divergence ❌</td><td>High ❌</td><td>High ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Regional Caches + Events ✓</td><td>Excellent ✅</td><td>Seconds, bounded by TTL ✅</td><td>Good, regional isolation ✅</td><td>Low with versioning ✅</td><td>Medium ⚠</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — CDN with Purge</td><td>Excellent ✅</td><td>Depends on purge reliability and TTL ⚠</td><td>Good ✅</td><td>Stale if purge fails ⚠</td><td>Low–Medium ✅</td><td>Low ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Single Global Redis</h4>
+          <p>Single-region or low-traffic applications where all users are near the cache and a regional outage is acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Multi-Master Write-Through</h4>
+          <p>A single region (or tightly clustered regions) where write-through simplifies local read-after-write, paired with a message-based fix for cross-region propagation.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Regional Caches + Events</h4>
+          <p>Read-heavy, rarely updated data served worldwide, with a seconds-level freshness target and resilience requirements per region.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — CDN with Purge</h4>
+          <p>Public, cacheable content (static assets, content-addressed images, public profile fields) with short TTLs or immutable URLs.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Regional Cache-Aside Read Path</h3>
+        <p>A read checks the in-process cache, then the regional Redis, and only then loads once per key from the database with a version check:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TD
+    U[&quot;User request&quot;] --&gt; L1{&quot;In-process L1 cache?&quot;}
+    L1 --&gt;|&quot;Hit&quot;| R[&quot;Return profile&quot;]
+    L1 --&gt;|&quot;Miss&quot;| L2{&quot;Regional Redis L2?&quot;}
+    L2 --&gt;|&quot;Hit&quot;| R
+    L2 --&gt;|&quot;Miss&quot;| SF[&quot;Single-flight loader&quot;]
+    SF --&gt; DB[(&quot;Profile database - replica with version check&quot;)]
+    DB --&gt; SF
+    SF --&gt;|&quot;Fill L2 and L1 with version and short TTL&quot;| R">flowchart TD
+    U[&quot;User request&quot;] --&gt; L1{&quot;In-process L1 cache?&quot;}
+    L1 --&gt;|&quot;Hit&quot;| R[&quot;Return profile&quot;]
+    L1 --&gt;|&quot;Miss&quot;| L2{&quot;Regional Redis L2?&quot;}
+    L2 --&gt;|&quot;Hit&quot;| R
+    L2 --&gt;|&quot;Miss&quot;| SF[&quot;Single-flight loader&quot;]
+    SF --&gt; DB[(&quot;Profile database - replica with version check&quot;)]
+    DB --&gt; SF
+    SF --&gt;|&quot;Fill L2 and L1 with version and short TTL&quot;| R</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Versioned Regional Cache with Outbox-Driven Invalidation</h3>
+        <p>Single-flight cache-aside reads with a minimum-version refill guard, a transactional outbox on writes, and an idempotent regional consumer:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Read path (per region) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getProfile</span>(userId, minVersion <span class="tk-op">=</span> <span class="tk-num">0</span>):</span>
+<span class="line">    key <span class="tk-op">=</span> <span class="tk-str">&#x27;profile:&#x27;</span> <span class="tk-op">+</span> userId</span>
+<span class="line">    minVersion <span class="tk-op">=</span> <span class="tk-fn">max</span>(minVersion, l2.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;minver:&#x27;</span> <span class="tk-op">+</span> key) ?? <span class="tk-num">0</span>)     <span class="tk-com">// guard set by invalidation events</span></span>
+<span class="line">    entry <span class="tk-op">=</span> l1.<span class="tk-fn">get</span>(key) ?? l2.<span class="tk-fn">get</span>(key)                             <span class="tk-com">// in-process, then regional Redis</span></span>
+<span class="line">    <span class="tk-kw">if</span> entry <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> entry.version <span class="tk-op">&gt;=</span> minVersion:</span>
+<span class="line">        <span class="tk-kw">return</span> entry.value</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">singleFlight</span>(key, () <span class="tk-op">=&gt;</span>                                 <span class="tk-com">// one loader per key per process</span></span>
+<span class="line">        row <span class="tk-op">=</span> db.<span class="tk-fn">readReplicaOrPrimary</span>(userId, minVersion)          <span class="tk-com">// refill must satisfy the minimum version</span></span>
+<span class="line">        entry <span class="tk-op">=</span> { value: row.data, version: row.version }</span>
+<span class="line">        ttl <span class="tk-op">=</span> <span class="tk-num">60s</span> <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-num">10s</span>)                                 <span class="tk-com">// short TTL with jitter as the backstop</span></span>
+<span class="line">        l2.<span class="tk-fn">set</span>(key, entry, ttl)</span>
+<span class="line">        l1.<span class="tk-fn">set</span>(key, entry, ttl <span class="tk-op">=</span> <span class="tk-num">5s</span>)                               <span class="tk-com">// tiny L1 TTL for hot keys</span></span>
+<span class="line">        <span class="tk-kw">return</span> entry.value</span>
+<span class="line">    )</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Write path ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">updateProfile</span>(userId, patch):</span>
+<span class="line">    tx <span class="tk-op">=</span> db.<span class="tk-kw">begin</span>()</span>
+<span class="line">    row <span class="tk-op">=</span> tx.<span class="tk-fn">update</span>(<span class="tk-str">&#x27;profiles&#x27;</span>, userId, patch)                     <span class="tk-com">// version = version + 1</span></span>
+<span class="line">    tx.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;outbox&#x27;</span>, { key: <span class="tk-str">&#x27;profile:&#x27;</span> <span class="tk-op">+</span> userId, version: row.version, op: <span class="tk-str">&#x27;INVALIDATE&#x27;</span> })</span>
+<span class="line">    tx.<span class="tk-fn">commit</span>()                                                    <span class="tk-com">// the event is durable if and only if the update is</span></span>
+<span class="line">    l2.<span class="tk-fn">set</span>(<span class="tk-str">&#x27;profile:&#x27;</span> <span class="tk-op">+</span> userId, row, ttl <span class="tk-op">=</span> <span class="tk-num">60s</span>)                    <span class="tk-com">// the editor&#x27;s region sees the new value at once</span></span>
+<span class="line">    <span class="tk-kw">return</span> { ok: <span class="tk-lit">true</span>, version: row.version }                      <span class="tk-com">// client passes this as minVersion on its next read</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Outbox relay (or CDC) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">relayOutbox</span>():</span>
+<span class="line">    <span class="tk-kw">for</span> rec <span class="tk-kw">in</span> outbox.<span class="tk-fn">pollUnpublished</span>():</span>
+<span class="line">        stream.<span class="tk-fn">publish</span>(topic <span class="tk-op">=</span> <span class="tk-str">&#x27;profile-events&#x27;</span>, key <span class="tk-op">=</span> rec.key, value <span class="tk-op">=</span> rec)   <span class="tk-com">// partitioning by key preserves order</span></span>
+<span class="line">        outbox.<span class="tk-fn">markPublished</span>(rec)                                  <span class="tk-com">// at-least-once: duplicates are harmless</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Regional consumer ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onProfileEvent</span>(evt):</span>
+<span class="line">    cached <span class="tk-op">=</span> l2.<span class="tk-fn">get</span>(evt.key)</span>
+<span class="line">    <span class="tk-kw">if</span> cached <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> cached.version <span class="tk-op">&gt;=</span> evt.version:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">ack</span>(evt)                                            <span class="tk-com">// duplicate or stale event</span></span>
+<span class="line">    l2.<span class="tk-fn">delete</span>(evt.key)                                             <span class="tk-com">// evict; the next read refills with version &gt;= evt.version</span></span>
+<span class="line">    l2.<span class="tk-fn">set</span>(<span class="tk-str">&#x27;minver:&#x27;</span> <span class="tk-op">+</span> evt.key, evt.version, ttl <span class="tk-op">=</span> <span class="tk-num">60s</span>)            <span class="tk-com">// refill guard: reject older rows</span></span>
+<span class="line">    l1.<span class="tk-fn">broadcastEvict</span>(evt.key)                                     <span class="tk-com">// pub/sub to local app servers</span></span>
+<span class="line">    <span class="tk-fn">ack</span>(evt)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Publishing events after commit without an outbox:</strong> A crash between commit and publish loses the invalidation. Use a transactional outbox or CDC so events are never lost.</li>
+          <li><strong>Applying events without versions:</strong> Out-of-order or replayed events can overwrite newer data with older data. Compare versions and apply only newer ones.</li>
+          <li><strong>Refilling from a lagging replica:</strong> An invalidated key refilled with an old row recreates the stale value. Enforce a minimum version on refill or read from the primary.</li>
+          <li><strong>Synchronized TTLs and cold starts:</strong> Identical TTLs expire together and stampede the database. Add jitter and single-flight loading.</li>
+          <li><strong>Treating TTL as the primary freshness mechanism:</strong> TTL is the backstop; the event stream provides freshness. Monitor invalidation lag.</li>
+          <li><strong>Caching private fields in shared layers:</strong> Settings tied to a user must not be served from shared CDN or public caches without keying by identity.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Global caching is built in layers, and teams <strong>measure staleness explicitly</strong>. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Define the staleness budget:</strong> Agree on how many seconds an update may take to appear, and which fields are public, private or user-specific.</li>
+          <li><strong>Step 1 — Regional caches:</strong> Deploy cache-aside Redis in each region (plus a small in-process L1 with a very short TTL for the hottest keys).</li>
+          <li><strong>Step 2 — Reliable invalidation:</strong> Emit events from a transactional outbox or CDC, publish them to a cross-region stream, and have each region consume and apply them by version.</li>
+          <li><strong>Step 3 — Harden against edge cases:</strong> Add jittered TTLs, single-flight loading, refill-version checks and a read-your-writes path for the editor.</li>
+          <li><strong>Step 4 — Offload assets to the edge:</strong> Serve avatars and other immutable assets from a CDN using content-addressed URLs that never need purging.</li>
+          <li><strong>Step 5 — Measure and drill:</strong> Track invalidation lag, hit rate and stale-read rate, and test regional failover and broker outages.</li>
+        </ul>
+        <p>Keep reads local, send small version-stamped events everywhere, and let short TTLs cover the gaps.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Serve profiles from <strong>regional caches</strong> so reads are local, propagate changes through a <strong>reliable, versioned invalidation stream</strong>, and keep a <strong>short TTL</strong> as the safety net. This meets the latency target, limits the blast radius of any one region and bounds staleness to seconds, without the pitfalls of dual-writes or long-lived edge copies.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sidecar Deployment Strategy for a High-Throughput Service Mesh — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">15 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Service Mesh</span>
+      <span class="tag tag--green">Sidecars</span>
+      <span class="tag tag--amber">High Throughput</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Sidecar Deployment Strategy for a High-Throughput Service Mesh</h1>
+      <p class="q-scenario"><strong>Ravi</strong>, a backend engineer, is planning networking and observability for <strong>high-throughput, low-latency microservices</strong> on Kubernetes. The platform needs <strong>per-request mTLS</strong>, detailed <strong>policy enforcement</strong>, full <strong>request and response tracing and metrics</strong>, <strong>tenant fault isolation</strong>, and <strong>stable latency at peak load</strong>. The environment is <strong>multi-tenant and cost-sensitive</strong>, but <strong>security and visibility take precedence</strong>. Where should the TLS, telemetry and policy logic run?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Implement a per-pod colocated sidecar proxy (deploying one sidecar container alongside each application container) designed to intercept all incoming and outgoing traffic to manage mTLS, metrics, tracing, and policies. These sidecars scale automatically with their associated application pods and are managed together.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Rely on a minimal number of centralized proxy gateway nodes: channel all ingress and egress traffic through a group of specialized gateway or proxy virtual machines/pods tasked with handling TLS, metrics, and policy enforcement. In this model, application pods communicate directly with the gateways rather than a local proxy.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Embed TLS handling, metrics collection, and policy enforcement directly within the application&#x27;s process using a shared library (an in-process client). Depend on language-specific SDKs and library updates to facilitate tracing and policy validation without the need for additional containers.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Deploy a single host-level daemon sidecar on each Kubernetes node to be shared among multiple resident application pods. This daemon will take charge of TLS termination, metrics aggregation, and policy enforcement for all pods running on that specific node.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Per-Pod Sidecar Proxy</h3>
+        <p>The requirements that dominate this decision are <strong>workload-level identity</strong>, <strong>per-tenant fault isolation</strong>, <strong>full L7 visibility</strong> and <strong>predictable latency</strong>. A per-pod sidecar gives each workload its own proxy with its own identity, resources and failure domain, enforced <em>outside</em> the application's trust boundary. Cost is the main trade-off, and the scenario explicitly ranks security and visibility above it. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Strong workload identity:</strong> Each pod receives its own short-lived certificate (for example a SPIFFE ID), so mTLS authenticates <em>which workload</em> is calling, not just which node. Policies such as 'tenant A pods may not call tenant B pods' become enforceable and auditable.</li>
+          <li><strong>Smallest blast radius:</strong> A proxy crash, bad config push or traffic spike affects one pod, not every pod on the node or every tenant behind a gateway. A noisy tenant exhausts its own sidecar's CPU limit, not its neighbours'.</li>
+          <li><strong>Full L7 visibility without app changes:</strong> Every inbound and outbound request passes through the proxy, which emits per-request metrics and traces, enforces retries, timeouts and circuit breaking, and evaluates authorization policy. It is language-agnostic.</li>
+          <li><strong>Predictable latency:</strong> The hop to the local proxy is over loopback and typically adds low single-digit milliseconds per proxy hop (measure for your workload). More importantly it is <em>stable</em>, because proxy capacity is dedicated per pod instead of shared with unrelated workloads.</li>
+          <li><strong>Operationally uniform:</strong> Proxies share the pod's lifecycle, scale automatically with the application, and are managed centrally by a control plane (xDS), so policy and certificate rotation are consistent across languages.</li>
+          <li><strong>Cost can be tuned:</strong> Right-size proxy resources, scope each proxy's config to only the services it talks to, and use native sidecar container support in recent Kubernetes versions to fix startup and shutdown ordering.</li>
+        </ul>
+        <p>Treat the mesh as a platform with its own SLOs: <strong>added p99 latency per hop</strong>, <strong>proxy CPU and memory per pod</strong>, <strong>certificate rotation health</strong>, and <strong>config push latency</strong>. Roll out incrementally, namespace by namespace, in permissive mode first, then strict mTLS.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🚪</div>
+          <h4>B — Centralized Gateway Proxies</h4>
+          <p>Hairpinning all east-west traffic through a few gateways adds hops and cross-zone traffic, creates a <strong>bottleneck and shared failure domain</strong> for all tenants, and moves identity from the workload to the gateway so service-to-service authentication is coarse. It also puts every tenant's load on the same proxies. <strong>Caveat:</strong> gateways are the right tool for north-south edge concerns (external ingress, egress control, WAF, rate limiting), not as the only enforcement point for internal traffic.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📚</div>
+          <h4>C — In-Process Library</h4>
+          <p>No extra hop gives the <strong>lowest latency</strong>, but policy enforcement lives <em>inside</em> the application's trust boundary, so a bug or compromised app can bypass it. It also forces per-language SDK maintenance, inconsistent upgrades across teams, and shares the app's crash and resource domain. <strong>Caveat:</strong> proxyless gRPC with xDS is a valid choice for homogeneous, latency-critical gRPC fleets with a strong platform team.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🖥️</div>
+          <h4>D — Node-Level Shared Daemon</h4>
+          <p>One daemon per node is cost-efficient, but it is shared by every tenant on that node: <strong>noisy neighbors</strong>, a node-wide blast radius when it fails, and harder per-pod identity and resource attribution. For a multi-tenant system with fault-isolation requirements, that is the wrong default. <strong>Caveat:</strong> node-level designs work when they preserve per-pod identity and keep L7 optional (as in ambient-style meshes), but a plain shared daemon does not provide tenant isolation.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>A — Per-Pod Sidecar Proxy ✓</h4>
+          <p>Implement a per-pod colocated sidecar proxy (deploying one sidecar container alongside each application container) designed to intercept all incoming and outgoing traffic to manage mTLS, metrics, trac</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Per-Workload Identity (mTLS)</th><th>Tenant Fault Isolation</th><th>L7 Visibility</th><th>Latency Predictability</th><th>Resource Cost</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Per-Pod Sidecar ✓</td><td>Strong ✅</td><td>Strong ✅</td><td>Full ✅</td><td>Predictable (dedicated per pod) ✅</td><td>High ❌</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — Central Gateways</td><td>Weak (gateway identity) ❌</td><td>Poor (shared) ❌</td><td>Edge only ⚠</td><td>Poor (hairpin, bottleneck) ❌</td><td>Low ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">C — In-Process Library</td><td>Depends on SDK ⚠</td><td>Weak (shares app process) ❌</td><td>Good per language ⚠</td><td>Best (no extra hop) ✅</td><td>Low ✅</td><td>High (per-language upgrades) ❌</td></tr>
+            <tr><td class="tt-option">D — Node-Level Daemon</td><td>Weaker ⚠</td><td>Poor (shared node) ❌</td><td>Partial ⚠</td><td>Variable (noisy neighbors) ⚠</td><td>Low–Medium ✅</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Per-Pod Sidecar</h4>
+          <p>Multi-tenant, zero-trust environments with polyglot services that need uniform L7 policy, per-workload identity, tenant isolation and rich telemetry.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Central Gateways</h4>
+          <p>North-south traffic: external ingress, egress control, WAF, rate limiting, and external TLS termination.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — In-Process Library</h4>
+          <p>Homogeneous, latency-critical fleets (for example gRPC) with a strong platform team and the ability to enforce library versions, including proxyless xDS setups.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Node-Level Daemon</h4>
+          <p>Cost-dominated, mostly L4 mTLS needs on trusted single-tenant nodes, or ambient-style designs that keep per-pod identity.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Per-Pod Sidecar Data Plane</h3>
+        <p>Each application talks to its local proxy over loopback. Proxies talk to each other over mTLS with workload identities, are configured by the control plane, and emit telemetry:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    subgraph PA[Pod A - Tenant 1]
+        AA[App A] --&gt;|localhost| SA[Sidecar proxy]
+    end
+    subgraph PB[Pod B - Tenant 1]
+        SB[Sidecar proxy] --&gt;|localhost| AB[App B]
+    end
+    SA ==&gt;|mTLS with SPIFFE identities| SB
+    CP[Control plane: CA and policy] -.-&gt;|certs and xDS config| SA
+    CP -.-&gt;|certs and xDS config| SB
+    SA -.-&gt;|metrics and traces| OBS[Telemetry backend]
+    SB -.-&gt;|metrics and traces| OBS">flowchart LR
+    subgraph PA[Pod A - Tenant 1]
+        AA[App A] --&gt;|localhost| SA[Sidecar proxy]
+    end
+    subgraph PB[Pod B - Tenant 1]
+        SB[Sidecar proxy] --&gt;|localhost| AB[App B]
+    end
+    SA ==&gt;|mTLS with SPIFFE identities| SB
+    CP[Control plane: CA and policy] -.-&gt;|certs and xDS config| SA
+    CP -.-&gt;|certs and xDS config| SB
+    SA -.-&gt;|metrics and traces| OBS[Telemetry backend]
+    SB -.-&gt;|metrics and traces| OBS</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Sidecar Request Handling with Identity, Policy and Budgeted Retries</h3>
+        <p>Outbound traffic uses this pod's own identity and bounded retries. Inbound traffic is authorized by the caller's verified identity before reaching the app over loopback:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleOutbound</span>(req, pod):</span>
+<span class="line">    route <span class="tk-op">=</span> routeTable.<span class="tk-fn">lookup</span>(req.host)                  <span class="tk-com">// config scoped to services this pod calls</span></span>
+<span class="line">    endpoint <span class="tk-op">=</span> loadBalancer.<span class="tk-fn">pick</span>(route, excluding <span class="tk-op">=</span> outlierEjected)</span>
+<span class="line">    span <span class="tk-op">=</span> tracer.<span class="tk-fn">startSpan</span>(<span class="tk-str">&#x27;outbound &#x27;</span> <span class="tk-op">+</span> route.name, parent <span class="tk-op">=</span> req.traceContext)</span>
+<span class="line"></span>
+<span class="line">    conn <span class="tk-op">=</span> pool.<span class="tk-fn">getOrConnect</span>(endpoint, tls <span class="tk-op">=</span> {</span>
+<span class="line">        clientCert: pod.identityCert,                    <span class="tk-com">// this workload&#x27;s SPIFFE identity, auto-rotated</span></span>
+<span class="line">        expectedPeerId: route.expectedIdentity,</span>
+<span class="line">        minVersion: TLS_1_3</span>
+<span class="line">    })                                                    <span class="tk-com">// handshake once per connection, not per request</span></span>
+<span class="line"></span>
+<span class="line">    resp <span class="tk-op">=</span> conn.<span class="tk-fn">send</span>(req, timeout <span class="tk-op">=</span> route.timeout, retryBudget <span class="tk-op">=</span> <span class="tk-num">10</span> percent)   <span class="tk-com">// budgeted retries prevent storms</span></span>
+<span class="line">    metrics.<span class="tk-fn">record</span>(route.name, resp.status, span.<span class="tk-fn">elapsed</span>())</span>
+<span class="line">    span.<span class="tk-kw">end</span>()</span>
+<span class="line">    <span class="tk-kw">return</span> resp</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleInbound</span>(req, peerIdentity, pod):</span>
+<span class="line">    decision <span class="tk-op">=</span> policy.<span class="tk-fn">evaluate</span>(source <span class="tk-op">=</span> peerIdentity,</span>
+<span class="line">                               action <span class="tk-op">=</span> req.method <span class="tk-op">+</span> <span class="tk-str">&#x27; &#x27;</span> <span class="tk-op">+</span> req.path,</span>
+<span class="line">                               tenant <span class="tk-op">=</span> pod.tenant)</span>
+<span class="line">    <span class="tk-kw">if</span> decision <span class="tk-op">==</span> DENY:</span>
+<span class="line">        metrics.<span class="tk-fn">increment</span>(<span class="tk-str">&#x27;policy_denied&#x27;</span>, labels <span class="tk-op">=</span> {source: peerIdentity.service})</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">403</span></span>
+<span class="line">    <span class="tk-kw">return</span> localApp.<span class="tk-fn">forward</span>(req)                         <span class="tk-com">// over loopback</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onCertExpiringSoon</span>(cert):                       <span class="tk-com">// runs at ~50 percent of cert lifetime</span></span>
+<span class="line">    newCert <span class="tk-op">=</span> controlPlane.<span class="tk-fn">requestCert</span>(pod.identity)</span>
+<span class="line">    <span class="tk-fn">swapAtomically</span>(pod.identityCert, newCert)            <span class="tk-com">// no connection resets for in-flight requests</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>No resource requests or limits on the proxy:</strong> CPU throttling shows up as unexplained p99 spikes. Size and monitor proxies like any other service.</li>
+          <li><strong>Pushing the full mesh config to every sidecar:</strong> Memory grows with mesh size. Scope each proxy's visible services and egress.</li>
+          <li><strong>Startup and shutdown races:</strong> If the app starts before the proxy is ready, early outbound calls fail. If the proxy exits first, in-flight requests drop, and job pods may never complete. Use native sidecar containers or explicit ordering.</li>
+          <li><strong>Default retries and timeouts:</strong> Stacked retries across hops amplify outages. Use retry budgets and consistent timeouts.</li>
+          <li><strong>Leaving mTLS in permissive mode forever:</strong> You get the overhead without the security benefit.</li>
+          <li><strong>Ignoring certificate rotation health:</strong> Expired or failed rotation becomes a sudden mesh-wide outage. Alert on cert age and issuance errors.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Platform teams usually adopt a mesh <strong>incrementally and measure the cost</strong>:</p>
+        <ul>
+          <li><strong>Step 0 — Baseline:</strong> Record current p50, p99, CPU and memory per service before adding anything.</li>
+          <li><strong>Step 1 — Pilot namespaces:</strong> Inject sidecars into a few services in permissive mTLS mode and compare against the baseline.</li>
+          <li><strong>Step 2 — Scope configuration:</strong> Limit each proxy to the services it actually calls to cut memory and push traffic.</li>
+          <li><strong>Step 3 — Enforce:</strong> Move to strict mTLS and default-deny authorization policies per tenant.</li>
+          <li><strong>Step 4 — Tune:</strong> Set resource requests and limits, retry budgets, outlier detection, and connection pools.</li>
+          <li><strong>Step 5 — Reduce cost where safe:</strong> Evaluate node-level or ambient options for workloads that need only L4 mTLS, while keeping sidecars where L7 policy and isolation matter.</li>
+        </ul>
+        <p>Spend the proxy budget where isolation and visibility pay for it, and measure instead of assuming.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When you need <strong>per-workload identity, tenant isolation and full L7 visibility</strong>, put the enforcement point <em>next to the workload but outside the application</em>: a per-pod sidecar. Accept the resource and hop overhead, then reduce it with scoping, tuning and selective use of node-level or proxyless techniques.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ordering Across Regions: Which Timestamp Scheme Should Lena Select? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">09 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Ordering Guarantees</span>
+      <span class="tag tag--green">Time Sync</span>
+      <span class="tag tag--amber">Distributed Systems</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Ordering Across Regions: Which Timestamp Scheme Should Lena Select?</h1>
+      <p class="q-scenario"><strong>Lena</strong> is the lead backend engineer building a <strong>geo-distributed key-value store</strong> for a global collaboration app. Users may update the <strong>same keys from different regions</strong> and sometimes work <strong>offline</strong>. The system needs <strong>low write latency</strong> (local commits must not wait on a remote leader), <strong>sensible causal ordering</strong> for debugging and conflict detection, <strong>small per-object metadata</strong> so overhead stays low at scale, and <strong>availability during network partitions</strong>. She must choose how replica updates are timestamped and how conflicts are detected and ordered.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Implement a centralized per-shard sequencer responsible for assigning monotonically increasing Lamport-style sequence numbers. All write operations are routed to the sequencer (or a small group forming a sequencer quorum). This establishes a comprehensive global order per shard and simplifies the process of resolving conflicts (e.g., using last-write-wins based on the sequence number).</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Attach comprehensive vector clocks (featuring one counter for each replica) to every update of an object, utilizing them for accurate causal detection. Concurrent updates are resolved through application-level merge logic after detecting concurrency via vector clock comparisons.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Implement Hybrid Logical Clocks (HLCs) or a similar timestamping method: each replica marks updates with an HLC (combining physical time with a small logical counter) and retains a single, concise timestamp for each version. Deduce likely causality from these timestamps, resorting to application-level causality metadata only when ambiguity arises. Combine this with per-shard background anti-entropy processes and a straightforward conflict-resolution strategy.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Overhaul the data model to incorporate either operation-based or state-based CRDTs, ensuring updates are commutative. Replicas share CRDT deltas through anti-entropy; global timestamps become unnecessary for ensuring correctness, and system convergence is guaranteed without requiring explicit conflict detection mechanisms.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Hybrid Logical Clocks (HLC)</h3>
+        <p>Lena's constraints are in tension: <strong>no coordination on the write path</strong>, <strong>causally meaningful order</strong>, and <strong>tiny per-key metadata</strong>. A <strong>Hybrid Logical Clock</strong> is built for exactly this trade-off. Each replica stamps a write locally with a timestamp that combines physical time with a small logical counter. The stamp is compact (often 8 to 16 bytes), stays close to wall-clock time (useful for debugging), is monotonic per node, and respects causality: if event e happened before f, then <code>hlc(e) &lt; hlc(f)</code>. Replicas converge through background anti-entropy using a deterministic comparison. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Local, coordination-free commits:</strong> Stamping a write is a local computation, so write latency equals local storage latency, and replicas keep accepting writes during partitions.</li>
+          <li><strong>Constant-size metadata:</strong> One HLC (for example 48 bits of milliseconds plus a 16-bit counter, with a node id for tie-breaking) per version, independent of the number of replicas or clients. Vector clocks grow with participants.</li>
+          <li><strong>Causality-consistent and human-readable:</strong> Timestamps track wall-clock time, so logs, traces, and TTL logic remain intuitive, while the logical counter preserves ordering even when clocks stall or step backward.</li>
+          <li><strong>Deterministic convergence:</strong> Comparing <code>(wall, counter, nodeId)</code> yields the same total order on every replica, so last-writer-wins resolution converges without a coordinator.</li>
+          <li><strong>Pairs well with targeted precision:</strong> Use HLC by default and add richer metadata (CRDT types, or small dotted version vectors) only for the keys where lost updates are unacceptable.</li>
+        </ul>
+        <p>A solid design uses <strong>HLC stamps with a node-id tiebreak</strong>, a <strong>bounded-drift check on receive</strong>, <strong>anti-entropy (Merkle-tree comparison, hinted handoff, read repair)</strong>, and <strong>per-field merge policy</strong>: LWW for simple overwrites, CRDTs for collaborative content, and version vectors only where concurrency must be surfaced.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🎟️</div>
+          <h4>A — Centralized Per-Shard Sequencer</h4>
+          <p>A sequencer gives a clean total order, but <strong>every write must reach it</strong>. Users in distant regions pay a cross-region round trip, and during a partition the side without the sequencer cannot commit, so both the low-latency and partition-availability requirements fail. Offline writes cannot be sequenced at all. Last-write-wins by sequence number also does not reflect true causality. <strong>Caveat:</strong> good when a single region owns the data and strict per-shard ordering matters more than availability.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🧭</div>
+          <h4>B — Full Vector Clocks per Object</h4>
+          <p>Vector clocks are the only option here that <strong>exactly detects concurrency</strong> and give precise causality, but each version carries one counter per replica (and per client if clients are identified), so metadata grows with participants and pruning breaks guarantees. Concurrent versions (siblings) must be resolved by the application, adding read-path complexity. With a handful of regions the overhead can be acceptable. <strong>Caveat:</strong> choose them (ideally dotted version vectors) for keys where concurrency must be detected and surfaced, and the number of replicas is small and bounded.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">🔀</div>
+          <h4>D — CRDT-Based Data Model</h4>
+          <p>CRDTs give automatic convergence with no coordination and are excellent for counters, sets, and collaborative text. As a blanket answer they are heavy: the data model must be redesigned, not every invariant is expressible as commutative operations (uniqueness, bounded counters), and state can grow through tombstones and per-replica metadata. Debugging merged state is harder, and many CRDTs still depend on causal context or timestamps internally (for example LWW registers). <strong>Caveat:</strong> apply them to the fields whose semantics fit, layered on top of HLC rather than instead of it.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>C — Hybrid Logical Clocks (HLC) ✓</h4>
+          <p>Implement Hybrid Logical Clocks (HLCs) or a similar timestamping method: each replica marks updates with an HLC (combining physical time with a small logical counter) and retains a single, concise tim</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Local Write Latency</th><th>Per-Object Metadata Size</th><th>Availability in Partitions</th><th>Detects True Concurrency</th><th>Debuggability (Readable Order)</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Central Sequencer</td><td>Poor for remote regions ❌</td><td>Small ✅</td><td>Poor (needs sequencer) ❌</td><td>No ❌</td><td>Good ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — Vector Clocks</td><td>Excellent ✅</td><td>Grows with replicas ❌</td><td>Excellent ✅</td><td>Yes, exact ✅</td><td>Moderate ⚠</td><td>Medium–High ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Hybrid Logical Clocks ✓</td><td>Excellent ✅</td><td>Small, constant ✅</td><td>Excellent ✅</td><td>No (orders only) ⚠</td><td>Excellent (near wall-clock) ✅</td><td>Low–Medium ✅</td></tr>
+            <tr><td class="tt-option">D — CRDT Data Model</td><td>Excellent ✅</td><td>Varies, can grow ⚠</td><td>Excellent ✅</td><td>Not needed (merges) ⚠</td><td>Harder (merged state) ❌</td><td>High (model redesign) ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Central Sequencer</h4>
+          <p>A single region or a strongly consistent system where a total order per shard is required and partition availability is secondary.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — Vector Clocks</h4>
+          <p>A small, bounded set of replicas where detecting concurrent writes and surfacing siblings to the application is valuable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Hybrid Logical Clocks</h4>
+          <p>Multi-region, latency-sensitive, partition-tolerant systems that want compact timestamps and readable, causality-consistent ordering, with simple conflict policies by default.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — CRDT Data Model</h4>
+          <p>Collaborative or offline-first data (text, sets, counters) where automatic merging matches the semantics, and a model redesign is acceptable.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Concurrent Writes Resolved with HLC and Anti-Entropy</h3>
+        <p>Both regions commit locally and acknowledge immediately. Later, anti-entropy exchanges versions and every replica deterministically selects the same winner:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U1 as User in EU
+    participant E as Replica EU
+    participant W as Replica US
+    participant U2 as User in US
+    U1-&gt;&gt;E: write K = blue
+    E-&gt;&gt;E: Stamp HLC (1000, 0, EU) and commit locally
+    E--&gt;&gt;U1: ack, no cross-region wait
+    U2-&gt;&gt;W: write K = green
+    W-&gt;&gt;W: Stamp HLC (1000, 0, US) and commit locally
+    W--&gt;&gt;U2: ack, no cross-region wait
+    E-&gt;&gt;W: anti-entropy: K = blue at (1000, 0, EU)
+    W-&gt;&gt;E: anti-entropy: K = green at (1000, 0, US)
+    Note over E,W: Same wall time and counter, so node id breaks the tie. Both replicas pick US
+    E-&gt;&gt;E: Keep green, advance local HLC on receive
+    W-&gt;&gt;W: Keep green, retain blue in audit history">sequenceDiagram
+    participant U1 as User in EU
+    participant E as Replica EU
+    participant W as Replica US
+    participant U2 as User in US
+    U1-&gt;&gt;E: write K = blue
+    E-&gt;&gt;E: Stamp HLC (1000, 0, EU) and commit locally
+    E--&gt;&gt;U1: ack, no cross-region wait
+    U2-&gt;&gt;W: write K = green
+    W-&gt;&gt;W: Stamp HLC (1000, 0, US) and commit locally
+    W--&gt;&gt;U2: ack, no cross-region wait
+    E-&gt;&gt;W: anti-entropy: K = blue at (1000, 0, EU)
+    W-&gt;&gt;E: anti-entropy: K = green at (1000, 0, US)
+    Note over E,W: Same wall time and counter, so node id breaks the tie. Both replicas pick US
+    E-&gt;&gt;E: Keep green, advance local HLC on receive
+    W-&gt;&gt;W: Keep green, retain blue in audit history</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Hybrid Logical Clock with Deterministic Merge</h3>
+        <p>A minimal HLC: stamp local events, update on receive with a drift guard, and merge versions using a total order that every replica computes identically:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">state: l <span class="tk-op">=</span> <span class="tk-num">0</span> (max physical time seen, ms), c <span class="tk-op">=</span> <span class="tk-num">0</span> (logical counter), nodeId</span>
+<span class="line">MAX_DRIFT <span class="tk-op">=</span> <span class="tk-num">1000</span> ms                                   <span class="tk-com">// reject timestamps too far ahead of the local clock</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">now</span>():                                       <span class="tk-com">// local event or send</span></span>
+<span class="line">    pt <span class="tk-op">=</span> <span class="tk-fn">physicalClock</span>()</span>
+<span class="line">    <span class="tk-kw">if</span> pt <span class="tk-op">&gt;</span> l:</span>
+<span class="line">        l <span class="tk-op">=</span> pt; c <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">    <span class="tk-kw">else</span>:</span>
+<span class="line">        c <span class="tk-op">=</span> c <span class="tk-op">+</span> <span class="tk-num">1</span>                                     <span class="tk-com">// wall clock stalled or stepped back: advance the logical part</span></span>
+<span class="line">    <span class="tk-kw">return</span> (l, c, nodeId)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">receive</span>(m):                                  <span class="tk-com">// m = (l_m, c_m, node_m) from a remote replica</span></span>
+<span class="line">    pt <span class="tk-op">=</span> <span class="tk-fn">physicalClock</span>()</span>
+<span class="line">    <span class="tk-kw">if</span> m.l <span class="tk-op">-</span> pt <span class="tk-op">&gt;</span> MAX_DRIFT:</span>
+<span class="line">        <span class="tk-fn">alert</span>(<span class="tk-str">&#x27;clock drift&#x27;</span>, m.node); <span class="tk-fn">reject</span>(m); <span class="tk-kw">return</span></span>
+<span class="line">    newL <span class="tk-op">=</span> <span class="tk-fn">max</span>(l, m.l, pt)</span>
+<span class="line">    <span class="tk-kw">if</span> newL <span class="tk-op">==</span> l <span class="tk-kw">and</span> newL <span class="tk-op">==</span> m.l: c <span class="tk-op">=</span> <span class="tk-fn">max</span>(c, m.c) <span class="tk-op">+</span> <span class="tk-num">1</span></span>
+<span class="line">    <span class="tk-kw">else</span> <span class="tk-kw">if</span> newL <span class="tk-op">==</span> l:            c <span class="tk-op">=</span> c <span class="tk-op">+</span> <span class="tk-num">1</span></span>
+<span class="line">    <span class="tk-kw">else</span> <span class="tk-kw">if</span> newL <span class="tk-op">==</span> m.l:          c <span class="tk-op">=</span> m.c <span class="tk-op">+</span> <span class="tk-num">1</span></span>
+<span class="line">    <span class="tk-kw">else</span>:                         c <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">    l <span class="tk-op">=</span> newL</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">put</span>(key, value):                             <span class="tk-com">// local commit, no remote round trip</span></span>
+<span class="line">    ts <span class="tk-op">=</span> <span class="tk-fn">now</span>()</span>
+<span class="line">    store.<span class="tk-fn">write</span>(key, value, ts)</span>
+<span class="line">    replicationLog.<span class="tk-fn">append</span>(key, value, ts)             <span class="tk-com">// shipped asynchronously</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">mergeVersion</span>(local, remote):                 <span class="tk-com">// anti-entropy or read repair</span></span>
+<span class="line">    <span class="tk-fn">receive</span>(remote.ts)</span>
+<span class="line">    <span class="tk-kw">if</span> (remote.ts.l, remote.ts.c, remote.ts.node) <span class="tk-op">&gt;</span> (local.ts.l, local.ts.c, local.ts.node):</span>
+<span class="line">        <span class="tk-kw">return</span> remote                                 <span class="tk-com">// total order: every replica picks the same winner</span></span>
+<span class="line">    <span class="tk-kw">return</span> local</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// For fields where dropping a concurrent write is unacceptable, store a CRDT value (OR-Set, text CRDT)</span></span>
+<span class="line"><span class="tk-com">// or keep a small dotted version vector next to the HLC to detect true concurrency and surface siblings.</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Treating HLC order as proof of causality:</strong> A smaller timestamp does not mean a happened before b. Use version vectors where concurrency detection matters.</li>
+          <li><strong>Using last-write-wins on collaborative data:</strong> Concurrent edits silently disappear. Use merge semantics for fields users edit together.</li>
+          <li><strong>No maximum-drift guard:</strong> One node with a wrong clock can push timestamps into the future and make later legitimate writes look older. Reject or quarantine far-future stamps.</li>
+          <li><strong>Trusting device clocks for offline edits:</strong> Phones and laptops drift. Re-stamp on sync or use client-side logical counters.</li>
+          <li><strong>Missing a deterministic tiebreaker:</strong> Equal timestamps need a rule (such as node id), otherwise replicas can disagree on the winner and never converge.</li>
+          <li><strong>Ignoring anti-entropy:</strong> Stamps order writes, but replicas only converge if you actively repair missed updates with Merkle comparisons, hints, or read repair.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Production systems pair a <strong>cheap default</strong> with <strong>precise tools for the hard fields</strong>. For example, CockroachDB and YugabyteDB use hybrid logical clocks for timestamps, Riak and Dynamo-style stores used vector clocks, and collaborative editors rely on CRDTs. A typical layered design looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Classify keys by conflict semantics:</strong> Which are safely overwritable, which should merge, and which carry invariants that need stronger coordination.</li>
+          <li><strong>Step 1 — Stamp every version with an HLC:</strong> Include node id as a deterministic tiebreaker, and store only that timestamp per version by default.</li>
+          <li><strong>Step 2 — Bound and monitor clock drift:</strong> Reject receives far in the future, expose skew metrics, and alert on NTP failures.</li>
+          <li><strong>Step 3 — Converge with anti-entropy:</strong> Merkle-tree comparison, gossip, read repair, and hinted handoff bring replicas together after partitions.</li>
+          <li><strong>Step 4 — Use merge types where overwrite is wrong:</strong> CRDT registers, sets, and text for collaborative data.</li>
+          <li><strong>Step 5 — Surface true concurrency selectively:</strong> Add dotted version vectors for hot, high-value keys, and re-stamp offline client changes on the server at sync time.</li>
+        </ul>
+        <p>Keep the metadata cost proportional to how much a given key's conflicts actually matter.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Under partition-tolerant, latency-sensitive replication, <strong>use hybrid logical clocks for cheap, causality-consistent ordering</strong> and add richer mechanisms only where overwriting is unacceptable. Remember that a timestamp gives order, not concurrency detection, so pair HLC with merge types or compact version vectors for fields where lost updates would hurt users.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

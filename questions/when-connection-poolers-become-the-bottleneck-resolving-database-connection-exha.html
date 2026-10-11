@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>When connection poolers become the bottleneck: resolving database connection exhaustion — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">07 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Connection Pooling</span>
+      <span class="tag tag--green">Database Scaling</span>
+      <span class="tag tag--amber">Bottlenecks</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">When connection poolers become the bottleneck: resolving database connection exhaustion</h1>
+      <p class="q-scenario"><strong>Leah</strong>, a backend engineer, runs a <strong>Kubernetes-hosted microservices</strong> e-commerce platform on Postgres. During <strong>flash sales</strong>, the database repeatedly hits its <code>max_connections</code> limit and <strong>failover takes too long</strong>. Today every pod keeps a large <strong>in-process connection pool</strong>, so total connections scale with pod count (for example, 200 pods × 20 connections = 4,000 potential backends against a database sized for a few hundred). The workload consists of <strong>short transactions</strong>, uses <strong>prepared statements</strong>, and sets a few <strong>session parameters for telemetry</strong>. She must pick an architecture that absorbs sudden concurrency spikes <em>without</em> exceeding database connection limits, while keeping latency low and failovers fast.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep the per-pod in-process pools, raise max_connections on Postgres, and add application-level queuing or backpressure so requests wait instead of failing.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Deploy an external, horizontally scalable pooler such as PgBouncer in transaction-pooling mode in front of Postgres: run several instances behind a load-balanced service with health checks, shrink the per-pod pools, and add observability for pooler wait times and database wait durations.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Replace the app-side pools with a fully managed database proxy (such as AWS RDS Proxy) that multiplexes connections and handles failover, keeping per-pod pools small.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Skip pooling changes and re-architect for asynchronous writes: pods publish to a durable broker (Kafka or SQS) and dedicated workers consume and write to the database, reducing concurrent clients at the cost of eventual consistency in some areas.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: External Transaction-Mode Pooler (PgBouncer)</h3>
+        <p>The root cause is <strong>connection fan-in</strong>: total database connections equal pods × pool size, and Postgres pays a real price for every backend (a dedicated process with its own memory, plus lock-manager and snapshot overhead). An external <strong>transaction-mode pooler</strong> breaks that coupling: thousands of client connections multiplex onto a small, fixed number of server connections sized to what the database can actually execute in parallel. Because Leah's transactions are <em>short</em>, a server connection is held only for the few milliseconds a transaction runs, which is the ideal profile for this pattern. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Decouples client count from backend count:</strong> Pods can scale from 50 to 500 during a flash sale while Postgres still sees a fixed, small number of server connections (say 50 to 100). Throughput on a given instance generally peaks at a small multiple of the CPU core count, so more backends beyond that add contention rather than capacity.</li>
+          <li><strong>Fails gracefully instead of falling over:</strong> When demand exceeds the server pool, extra transactions wait in the pooler's queue (bounded by <code>query_wait_timeout</code>) instead of forcing new backends or errors on the database. Latency rises smoothly under overload instead of the database collapsing.</li>
+          <li><strong>Faster, calmer failover:</strong> Clients stay connected to the pooler while it re-establishes server connections to the new primary, which avoids a reconnect storm from hundreds of pods. For planned switchovers, <code>PAUSE</code>/<code>RESUME</code> lets in-flight transactions finish and holds new ones briefly. Failure detection and promotion still come from your HA layer (Patroni, an operator, or managed failover).</li>
+          <li><strong>Compatible with the stated workload:</strong> Prepared statements are supported in transaction mode on PgBouncer 1.21+ (<code>max_prepared_statements</code>), and telemetry parameters can move to <code>SET LOCAL</code> inside the transaction or to tracked startup parameters, so neither blocks adoption.</li>
+          <li><strong>Cloud-agnostic and observable:</strong> It runs as a small Deployment or sidecar in Kubernetes and exposes stats (<code>SHOW POOLS</code>, <code>SHOW STATS</code>, or an exporter) for client wait time, server pool saturation and queue depth, which are the signals needed to tune pool sizes.</li>
+        </ul>
+        <p>A solid rollout combines <strong>transaction pooling</strong>, <strong>right-sized pools</strong> (server pool ≈ a small multiple of DB cores, summed across pooler instances), <strong>shrunken per-pod pools</strong> (for example 2 to 5 connections each), <strong>bounded queue timeouts</strong> and <strong>retry with jitter</strong> for idempotent operations. Track client wait time, server pool utilization and queue length before and after the change; if waits stay high with a full server pool, the next lever is query and transaction duration or read replicas, not more connections.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">🔼</div>
+          <h4>A — Raise max_connections + Queue</h4>
+          <p>Each Postgres connection is a separate OS process with its own memory, and more concurrent backends mean more context switching plus lock-manager and snapshot contention. Raising the limit can <strong>lower</strong> total throughput precisely during the flash-sale peak and risks memory exhaustion (OOM). Application-side queuing is a good idea, but without a shared pooler each pod still queues and connects independently, so the fan-in problem remains and failover still triggers a mass reconnect. <strong>Caveat:</strong> a modest increase is a fine stopgap while the pooler is rolled out.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">☁️</div>
+          <h4>C — Managed Proxy (e.g., RDS Proxy)</h4>
+          <p>A managed proxy is a legitimate option and a close second, particularly if the database already runs on AWS and the team wants minimal operations. The catch is <strong>connection pinning</strong>: session-level <code>SET</code> statements and certain prepared-statement usage can pin a client to one server connection, which erodes multiplexing exactly where this workload leans on them. It is also tied to one cloud provider, adds hourly cost and an extra network hop, and offers less control over pool tuning and metrics than a self-managed pooler. <strong>Caveat:</strong> if session state can be removed and the stack is already on AWS, it can be the lower-effort choice.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📨</div>
+          <h4>D — Async Writes via Message Broker</h4>
+          <p>Queue-based writes smooth bursts and cut concurrent clients, but this is an <strong>application re-architecture, not a connection fix</strong>. Checkout and inventory flows usually need synchronous, read-your-writes behavior, so eventual consistency leaks into the user experience. It also adds a broker to operate, needs idempotent consumers, still requires pooling on the worker side, and does nothing for read traffic, which the exhausted connections also serve. <strong>Caveat:</strong> a good complement for genuinely deferrable work (emails, analytics, ledger projections).</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="s-icon">⚡</div>
+          <h4>B — External Transaction-Mode Pooler (PgBouncer) ✓</h4>
+          <p>Deploy an external, horizontally scalable pooler such as PgBouncer in transaction-pooling mode in front of Postgres: run several instances behind a load-balanced service with health checks, shrink the</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Reduces DB Connections</th><th>Peak-Load Latency</th><th>Failover Behavior</th><th>Session-State Compatibility</th><th>Implementation Complexity</th><th>Operational Overhead</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Raise Limit + Queue</td><td>Minimal (still pods × pool) ❌</td><td>Degrades past backend sweet spot ❌</td><td>Slow, mass reconnect ❌</td><td>Full ✅</td><td>Low ✅</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — External Pooler ✓</td><td>Very high ✅</td><td>Stable, bounded queueing ✅</td><td>Fast, clients stay connected ✅</td><td>Needs care (SET LOCAL, PgBouncer 1.21+) ⚠</td><td>Medium ⚠</td><td>Medium (HA pooler fleet) ⚠</td></tr>
+            <tr><td class="tt-option">C — Managed Proxy</td><td>High, unless pinned ⚠</td><td>Good (extra hop) ✅</td><td>Good, managed ✅</td><td>Pinning risk with SET and prepared statements ⚠</td><td>Low ✅</td><td>Low, but cost and lock-in ⚠</td></tr>
+            <tr><td class="tt-option">D — Async Writes</td><td>Moderate (writes only) ⚠</td><td>Good for writes, no help for reads ⚠</td><td>Unchanged ❌</td><td>Full ✅</td><td>High ❌</td><td>High (broker, consumers) ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>A — Raise Limit + Queue</h4>
+          <p>As a short-term stopgap, or for small systems with a handful of app instances where total connections are well below the limit and bursts are modest. Combine with sensible app-side timeouts.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>B — External Pooler</h4>
+          <p>Many pods or functions each hold their own pool, transactions are short, and the team wants a cloud-agnostic, tunable solution with rapid failover. Best when session state can be moved into transactions.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>C — Managed Proxy</h4>
+          <p>The database is already on AWS (RDS or Aurora), the team prefers a managed service with minimal operations, and the workload avoids session-level state that causes pinning.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="s-icon">📌</div>
+          <h4>D — Async Writes</h4>
+          <p>Workloads with genuinely deferrable writes (event ingestion, notifications, analytics) where eventual consistency is acceptable and burst smoothing is the main goal.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Pooled Connection Topology</h3>
+        <p>Thousands of client connections fan in to a few pooler instances, which hold a small, bounded set of server connections:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    subgraph K8s[&quot;Kubernetes cluster&quot;]
+        P1[&quot;Pod 1 - app pool 3&quot;]
+        P2[&quot;Pod 2 - app pool 3&quot;]
+        PN[&quot;Pod N - app pool 3&quot;]
+        S[&quot;Pooler Service - load balanced&quot;]
+        B1[&quot;PgBouncer 1&quot;]
+        B2[&quot;PgBouncer 2&quot;]
+        B3[&quot;PgBouncer 3&quot;]
+    end
+    P1 --&gt; S
+    P2 --&gt; S
+    PN --&gt; S
+    S --&gt; B1
+    S --&gt; B2
+    S --&gt; B3
+    B1 --&gt; DB[(&quot;Postgres primary - about 90 server connections in total&quot;)]
+    B2 --&gt; DB
+    B3 --&gt; DB
+    HA[&quot;HA manager - Patroni or operator&quot;] -. promotes and repoints .-&gt; DB">flowchart LR
+    subgraph K8s[&quot;Kubernetes cluster&quot;]
+        P1[&quot;Pod 1 - app pool 3&quot;]
+        P2[&quot;Pod 2 - app pool 3&quot;]
+        PN[&quot;Pod N - app pool 3&quot;]
+        S[&quot;Pooler Service - load balanced&quot;]
+        B1[&quot;PgBouncer 1&quot;]
+        B2[&quot;PgBouncer 2&quot;]
+        B3[&quot;PgBouncer 3&quot;]
+    end
+    P1 --&gt; S
+    P2 --&gt; S
+    PN --&gt; S
+    S --&gt; B1
+    S --&gt; B2
+    S --&gt; B3
+    B1 --&gt; DB[(&quot;Postgres primary - about 90 server connections in total&quot;)]
+    B2 --&gt; DB
+    B3 --&gt; DB
+    HA[&quot;HA manager - Patroni or operator&quot;] -. promotes and repoints .-&gt; DB</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> PgBouncer Transaction Pooling with Safe Session Context</h3>
+        <p>Per-instance pooler configuration, the Postgres connection budget, and an application transaction that uses SET LOCAL for telemetry, short pools and retries with jitter:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com"># --- pgbouncer.ini (each of the 3 instances) ---</span></span>
+<span class="line">[databases]</span>
+<span class="line">shop <span class="tk-op">=</span> host<span class="tk-op">=</span>pg<span class="tk-op">-</span>primary.internal port<span class="tk-op">=</span><span class="tk-num">5432</span> dbname<span class="tk-op">=</span>shop pool_size<span class="tk-op">=</span><span class="tk-num">30</span>   <span class="tk-com"># 3 instances x 30 = 90 server connections</span></span>
+<span class="line"></span>
+<span class="line">[pgbouncer]</span>
+<span class="line">pool_mode <span class="tk-op">=</span> transaction</span>
+<span class="line">max_client_conn <span class="tk-op">=</span> <span class="tk-num">5000</span>             <span class="tk-com"># client connections are cheap for the pooler</span></span>
+<span class="line">default_pool_size <span class="tk-op">=</span> <span class="tk-num">30</span>             <span class="tk-com"># sized from DB cores, not from traffic</span></span>
+<span class="line">reserve_pool_size <span class="tk-op">=</span> <span class="tk-num">5</span></span>
+<span class="line">reserve_pool_timeout <span class="tk-op">=</span> <span class="tk-num">3</span>           <span class="tk-com"># seconds before the reserve pool is used</span></span>
+<span class="line">max_prepared_statements <span class="tk-op">=</span> <span class="tk-num">200</span>      <span class="tk-com"># protocol-level prepared statements (PgBouncer 1.21+)</span></span>
+<span class="line">query_wait_timeout <span class="tk-op">=</span> <span class="tk-num">5</span>             <span class="tk-com"># fail fast instead of queueing forever</span></span>
+<span class="line">server_lifetime <span class="tk-op">=</span> <span class="tk-num">3600</span></span>
+<span class="line">server_idle_timeout <span class="tk-op">=</span> <span class="tk-num">600</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com"># --- Postgres budget ---</span></span>
+<span class="line"><span class="tk-com"># max_connections = 200  -&gt;  90 pooled + 20 admin/replication/monitoring + headroom</span></span>
+<span class="line"><span class="tk-com"># idle_in_transaction_session_timeout = 10s ; statement_timeout = 2s</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com"># --- Application (per pod) ---</span></span>
+<span class="line">pool.maxSize <span class="tk-op">=</span> <span class="tk-num">3</span>                   <span class="tk-com"># was 20: pods x pool no longer drives database load</span></span>
+<span class="line">pool.acquireTimeout <span class="tk-op">=</span> <span class="tk-num">2s</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">runCheckout</span>(order):</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">withRetry</span>(maxAttempts <span class="tk-op">=</span> <span class="tk-num">3</span>, backoff <span class="tk-op">=</span> <span class="tk-fn">jitter</span>(<span class="tk-num">50ms</span>, <span class="tk-num">400ms</span>), onlyIf <span class="tk-op">=</span> isTransientError):</span>
+<span class="line">        tx <span class="tk-op">=</span> pool.<span class="tk-kw">begin</span>()</span>
+<span class="line">        tx.<span class="tk-fn">exec</span>(<span class="tk-str">&quot;SET LOCAL app.request_id = $1&quot;</span>, order.requestId)       <span class="tk-com">// transaction-scoped, safe</span></span>
+<span class="line">        tx.<span class="tk-fn">exec</span>(<span class="tk-str">&quot;SET LOCAL application_name = &#x27;checkout&#x27;&quot;</span>)              <span class="tk-com">// telemetry without session leakage</span></span>
+<span class="line">        tx.<span class="tk-fn">prepared</span>(<span class="tk-str">&quot;INSERT INTO orders (id, user_id, total) VALUES ($1, $2, $3)&quot;</span>, order)</span>
+<span class="line">        tx.<span class="tk-fn">commit</span>()                                                       <span class="tk-com">// server connection returns to the pool here</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Sizing the pool by traffic instead of by database capacity:</strong> A server pool larger than what the CPUs can run in parallel just moves the queue into Postgres. Size from cores and measured throughput, then let the pooler queue.</li>
+          <li><strong>Leaking session state:</strong> Using plain <code>SET</code>, advisory locks or <code>LISTEN/NOTIFY</code> through a transaction-mode pooler causes settings to bleed between unrelated requests. Use <code>SET LOCAL</code> inside the transaction or route those clients to a session-mode pool.</li>
+          <li><strong>Forgetting the sum across instances:</strong> Three pooler instances with a pool of 100 each means 300 server connections. Budget the total against <code>max_connections</code>.</li>
+          <li><strong>Running a single pooler instance:</strong> It becomes both a CPU bottleneck (single-threaded) and a single point of failure. Run several behind a Service with health checks and spread them across nodes.</li>
+          <li><strong>Unbounded queues and no timeouts:</strong> Without <code>query_wait_timeout</code> and client-side deadlines, requests pile up during spikes and turn a brownout into a full outage. Bound waits and shed load.</li>
+          <li><strong>Ignoring idle-in-transaction sessions:</strong> A transaction held open across an HTTP call pins a server connection and starves the pool. Set <code>idle_in_transaction_session_timeout</code> and keep transactions short.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Connection exhaustion is usually fixed in layers, and the first move is to <strong>measure where the connections go</strong>. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Measure:</strong> Query <code>pg_stat_activity</code> to see how many connections are active vs. idle vs. idle in transaction, and compare pods × pool size against <code>max_connections</code>. Most exhausted databases are mostly idle connections.</li>
+          <li><strong>Step 1 — Right-size app pools:</strong> Cut per-pod pools to a few connections and set sensible acquisition timeouts. This is free and immediately reduces fan-in.</li>
+          <li><strong>Step 2 — Add an external transaction-mode pooler:</strong> Deploy multiple PgBouncer instances, move telemetry to <code>SET LOCAL</code>, and enable protocol-level prepared statements.</li>
+          <li><strong>Step 3 — Harden failover:</strong> Pair the pooler with an HA manager (Patroni, a Kubernetes operator or managed failover), use <code>PAUSE</code>/<code>RESUME</code> for planned switchovers and retry idempotent requests with jitter.</li>
+          <li><strong>Step 4 — Offload reads:</strong> Route read-only traffic to replicas through a separate pooled endpoint once the primary is healthy.</li>
+          <li><strong>Step 5 — Defer non-critical writes:</strong> Move genuinely asynchronous work to a queue, as a complement and not a replacement.</li>
+        </ul>
+        <p>Fix fan-in first, then add layers only where the metrics show they are needed.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Most connection exhaustion is a <strong>fan-in problem</strong>, not a capacity problem: pods × pool size grows with traffic while the database can only execute a small number of queries at once. Put an <strong>external transaction-mode pooler</strong> in front of Postgres, shrink per-pod pools, and remove session-level state so it can be multiplexed. Raising limits or adding queues only moves the failure point.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

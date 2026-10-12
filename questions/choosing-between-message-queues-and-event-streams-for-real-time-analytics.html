@@ -101,23 +101,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📬</div>
-          <h4>A — Message Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📬</span>
+            <h4>A — Message Queue</h4>
+          </div>
           <p>Queues are great at <strong>distributing tasks</strong> to competing workers: each message is consumed once and deleted when acknowledged. Modern queue ecosystems offer native fan-out (SNS→SQS, RabbitMQ exchanges/bindings) and some replay capability (RabbitMQ Streams). However, these are <strong>add-ons bolted onto a task-distribution primitive</strong>, not the native model. A stream's append-only log with independent consumer offsets provides fan-out and replay as first-class features without additional infrastructure.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔀</div>
-          <h4>C — Queue + Stream in Parallel</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>C — Queue + Stream in Parallel</h4>
+          </div>
           <p>There are legitimate architectures that use both a queue and a stream — but for <strong>different workloads</strong> (stream for analytics, queue for task dispatch), not as redundant paths for the same data. Writing the same event to both systems from application code creates a dual-write consistency problem; if one write fails, the systems drift. Use the transactional outbox pattern or CDC to bridge them safely.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🛠️</div>
-          <h4>D — Custom-Built Pipeline</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🛠️</span>
+            <h4>D — Custom-Built Pipeline</h4>
+          </div>
           <p>Custom pipelines are justified in niche domains with extreme constraints (ultra-low-latency trading systems, hardware-accelerated networking) where off-the-shelf platforms add unacceptable overhead. For analytics at an e-commerce company, the engineering cost far outweighs any marginal performance gain. Rebuilding durable storage, partitioning, replication, consumer offset tracking, and backpressure is <strong>years of distributed-systems work</strong>.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Event Streaming Platform ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Event Streaming Platform ✓</h4>
+          </div>
           <p>Use an event streaming platform (e.g., Kafka, Kinesis) so data is processed continuously with low latency and can be read by multiple consumers.</p>
         </div>
 
@@ -148,23 +156,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Message Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Message Queue</h4>
+          </div>
           <p>Discrete background tasks that a pool of workers consumes once, such as sending emails, processing payments, or resizing images, where per-message retries and dead-letter queues matter.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Event Stream</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Event Stream</h4>
+          </div>
           <p>Continuous, high-volume data that multiple consumers need and may want to replay: analytics, clickstream, CDC, audit trails, ML feature pipelines.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Queue + Stream in Parallel</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Queue + Stream in Parallel</h4>
+          </div>
           <p>Almost never on the same data. Using both in one system is fine when each handles <em>different</em> workloads (stream for analytics, queue for tasks).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Custom-Built Pipeline</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Custom-Built Pipeline</h4>
+          </div>
           <p>Only when requirements are truly unusual (e.g., ultra-low-latency trading with hardware constraints) and the team has deep distributed-systems expertise.</p>
         </div>
 

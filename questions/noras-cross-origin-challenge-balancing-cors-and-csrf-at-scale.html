@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🍪</div>
-          <h4>A — SameSite + Origin Checks Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🍪</span>
+            <h4>A — SameSite + Origin Checks Only</h4>
+          </div>
           <p>Cheap and worth keeping, but not sufficient alone. <code>SameSite</code> is evaluated per <em>site</em> (registrable domain), so a request from <code>admin.example.com</code> to <code>app.example.com</code> is same-site and still carries the cookie; a hijacked subdomain bypasses it. <code>Strict</code> breaks inbound links and login redirects, and <code>Lax</code> still sends cookies on top-level GET navigations, which is dangerous if any GET changes state. Origin/Referer checks are good, but headers can be missing (privacy tools strip Referer, some clients omit Origin), and many services must implement the rule identically. <strong>Caveat:</strong> for a single-origin app with no sibling subdomains and modern browsers only, SameSite plus Origin validation is a legitimate minimal defense.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>C — Centralized Redis CSRF Tokens</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>C — Centralized Redis CSRF Tokens</h4>
+          </div>
           <p>This recreates stateful sessions just for CSRF. Every state-changing request needs a Redis lookup, which adds latency, a hard availability dependency on every request path, and cross-region replication lag (a token minted in one region may not exist yet in another). Demanding strong consistency across regions makes it slower still. It carries the highest operational overhead of the four, which is the opposite of the stated goal.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌐</div>
-          <h4>D — Edge-Only Verification</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>D — Edge-Only Verification</h4>
+          </div>
           <p>Edge checks are valuable as an extra layer, but making them the <em>only</em> layer leaves any path that bypasses the edge (internal calls, misconfigured routes, direct origin access, a compromised service) unprotected, and backends must trust a forwarded header, which is a spoofing risk unless it is signed and the network is locked down. Calling an auth microservice from the edge on each check adds latency and a dependency, and splitting security logic between edge and backend makes it harder to reason about, test, and audit.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Stateless Signed Double-Submit Token ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Stateless Signed Double-Submit Token ✓</h4>
+          </div>
           <p>Implement a stateless double-submit pattern by generating a signed CSRF token (in a distinct JS-readable cookie) during login, requiring clients to include this token in an X-CSRF-Token header for mod</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — SameSite + Origin Checks</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — SameSite + Origin Checks</h4>
+          </div>
           <p>Single-origin apps with no sibling subdomains and modern browsers only, and as an additional layer in almost every other design.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Signed Double-Submit</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Signed Double-Submit</h4>
+          </div>
           <p>Cookie-authenticated browser apps spanning several first-party subdomains and many microservices, where local, low-latency validation matters.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Central Redis Tokens</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Central Redis Tokens</h4>
+          </div>
           <p>Rare cases that need per-token revocation or one-time-use tokens and already run a highly available session store; accept the added latency and dependency.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Edge-Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Edge-Only</h4>
+          </div>
           <p>As an extra filtering layer (WAF and bot rules), not as the only enforcement point.</p>
         </div>
 

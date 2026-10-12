@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔐</div>
-          <h4>A — Two-Phase Commit / XA</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔐</span>
+            <h4>A — Two-Phase Commit / XA</h4>
+          </div>
           <p>2PC makes participants <strong>hold locks while waiting for the coordinator</strong>, which stretches latency over cross-region round trips and blocks everyone if the coordinator or a participant fails mid-protocol. It also assumes every participant can join the protocol, but <strong>external payment providers generally cannot take part in XA</strong>. Throughput and availability drop sharply as services and regions are added. <strong>Caveat:</strong> 2PC is acceptable inside a single trusted datacenter with a small number of XA-capable databases.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏬</div>
-          <h4>B — Inventory as Sole Owner with Local Transactions</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏬</span>
+            <h4>B — Inventory as Sole Owner with Local Transactions</h4>
+          </div>
           <p>This is the right <em>half</em> of the answer: one owner for stock with serializable local transactions does protect the never-oversell rule. But on its own it does not solve the cross-service failures Nadia sees. If Payments fails after Inventory reserved, nothing releases the stock, and synchronous calls couple Orders' availability to Inventory's latency. Serializable isolation also aborts transactions under contention, which needs retries. <strong>Caveat:</strong> this is the correct core inside option C, and it is enough on its own when Orders and Inventory share one database and there is no external payment step.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌍</div>
-          <h4>D — Globally Consistent Distributed SQL</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌍</span>
+            <h4>D — Globally Consistent Distributed SQL</h4>
+          </div>
           <p>Distributed SQL gives genuine global transactions, but <strong>multi-region commits carry cross-region latency</strong> on the critical path, and migrating three services onto one shared database couples them tightly and gives up independent ownership. More importantly, the payment gateway call is <strong>outside the database</strong>, so a database transaction cannot make 'charge the card' atomic with 'reserve stock'. A saga or similar workflow is still needed. <strong>Caveat:</strong> distributed SQL is a strong choice for the Inventory service's own storage when you need geo-distributed, strongly consistent stock.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Saga with Inventory-Owned Reservations ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Saga with Inventory-Owned Reservations ✓</h4>
+          </div>
           <p>Use the Saga pattern: the Orders service acts as an orchestrator, first sending a reserve command to Inventory and then a charge command to Payments. If a later step fails, run compensating transactio</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Two-Phase Commit / XA</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Two-Phase Commit / XA</h4>
+          </div>
           <p>A small number of XA-capable databases in one datacenter, short transactions, and tolerance for coordinator blocking.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Inventory Sole Owner, Sync Calls</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Inventory Sole Owner, Sync Calls</h4>
+          </div>
           <p>A simple flow where Orders and Inventory share a boundary and no external step can fail after reservation. Also the core of any saga-based design.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Saga + Inventory-Owned Reservations</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Saga + Inventory-Owned Reservations</h4>
+          </div>
           <p>Multi-service, multi-region workflows involving external systems, where availability and latency matter and temporary intermediate states are acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Global Distributed SQL</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Global Distributed SQL</h4>
+          </div>
           <p>Geo-distributed, strongly consistent state owned by one service (such as stock) where the team accepts cross-region commit latency and the migration cost.</p>
         </div>
 

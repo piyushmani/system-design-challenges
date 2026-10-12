@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>A — Single Database + Serializable Transactions</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>A — Single Database + Serializable Transactions</h4>
+          </div>
           <p>Serializable isolation gives the strongest guarantees and the simplest mental model, but it centralizes everything: all checkouts contend for the same few inventory rows, producing lock waits or serialization-failure retries that grow with concurrency, and any payment call inside the transaction holds locks for seconds. The database becomes both a throughput ceiling and a single point of failure, and merging the services' data defeats service ownership. <strong>Caveat:</strong> at moderate scale it is the simplest correct solution; the hot-row problem only bites at flash-sale concurrency. Note that C's atomic decrement uses the same database ideas, just narrowly scoped.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔗</div>
-          <h4>B — Distributed Transactions (2PC/XA)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>B — Distributed Transactions (2PC/XA)</h4>
+          </div>
           <p>2PC gives atomicity across services but holds locks on every participant until the coordinator finishes, so hot inventory rows stay locked for the duration of payment latency. The coordinator is a blocking point (a failure can leave participants in doubt), availability becomes the product of all participants' availability, and external payment providers cannot enlist in XA anyway. It also couples service deployments and database technologies. <strong>Caveat:</strong> acceptable for low-volume internal workflows where all participants are XA-capable databases, not for flash-sale throughput.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🎲</div>
-          <h4>D — Eventual Consistency with Post-Hoc Reconciliation</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🎲</span>
+            <h4>D — Eventual Consistency with Post-Hoc Reconciliation</h4>
+          </div>
           <p>This violates the stated business requirement (<strong>no oversell</strong>). Compensating after the fact means cancelling orders and refunding paying customers, which costs trust, support effort, and sometimes legal exposure, and it gets worse exactly during the event when volume is highest. Reconciliation is a safety net, not a substitute for an atomic gate. <strong>Caveat:</strong> a legitimate choice only where overselling is tolerable, such as backorderable products or pre-orders.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Atomic Stock Reservation + Saga ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Atomic Stock Reservation + Saga ✓</h4>
+          </div>
           <p>Avoid cross-service transactions: shard inventory by SKU with a single writer per shard and a strongly consistent atomic decrement (CAS or linearizable ops), then run Payment and Order steps asynchron</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Single DB, Serializable</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single DB, Serializable</h4>
+          </div>
           <p>Moderate scale, a single team, and a single database technology, where simplicity beats independent scaling and hot-row contention is manageable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — 2PC / XA</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — 2PC / XA</h4>
+          </div>
           <p>Low-throughput internal workflows across XA-capable databases that truly need atomic multi-resource commits.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Atomic Reserve + Saga</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Atomic Reserve + Saga</h4>
+          </div>
           <p>High-contention, high-concurrency commerce events with strict no-oversell rules and independent services: flash sales, ticketing, limited drops.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Eventual + Reconcile</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Eventual + Reconcile</h4>
+          </div>
           <p>Backorderable products, pre-orders, or businesses that explicitly accept oversell and handle it with refunds or waitlists.</p>
         </div>
 

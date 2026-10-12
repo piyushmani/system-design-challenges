@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🪞</div>
-          <h4>A — Separate Services per Major Version</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🪞</span>
+            <h4>A — Separate Services per Major Version</h4>
+          </div>
           <p>Strong isolation, but it <strong>duplicates core business logic</strong>: every fix, compliance rule, or fraud check must be implemented and tested twice, and behavior can drift between versions. Separate databases make things worse for payments, because consistency between v1 and v2 views of the same transactions becomes a data-sync problem. It doubles operational overhead during the 12-month window. <strong>Caveat:</strong> reasonable when v2 is a ground-up rewrite with a different domain model, or when regulatory isolation is required.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌿</div>
-          <h4>B — Header-Based Versioning with In-App Branching</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌿</span>
+            <h4>B — Header-Based Versioning with In-App Branching</h4>
+          </div>
           <p>Header versioning is a legitimate choice, but <strong>scattering <code>if version == 1</code> branches through business logic</strong> couples the versions inside the core, makes behavior hard to reason about, and is painful to remove later. Versioning in a header is also less visible in logs, caches, and quick debugging than a path, unless you add <code>Vary</code> and tooling. A defect in a branch can affect all traffic. <strong>Caveat:</strong> fine for small differences if all translation lives in a clean adapter layer, which is effectively option D implemented in-process.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🙏</div>
-          <h4>C — No Versioning, Additive Changes Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🙏</span>
+            <h4>C — No Versioning, Additive Changes Only</h4>
+          </div>
           <p>Additive evolution is the best default for non-breaking changes, but this scenario includes <strong>breaking changes by definition</strong> (restructured resources and a different auth header), and the business requirement is that v1 keeps working for 12 months. Hoping partners will upgrade on notice is not a migration strategy for third-party merchants and risks failed payments. <strong>Caveat:</strong> prefer expand/contract and additive fields whenever a change can be made compatible, which reduces how often a new major version is needed.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — API Gateway Translation Layer over a Single Core ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — API Gateway Translation Layer over a Single Core ✓</h4>
+          </div>
           <p>Deploy an API gateway that routes and, if necessary, executes request and response transformations between client-facing versions and a unified set of backend services. Maintain core business logic wi</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Separate Services per Version</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Separate Services per Version</h4>
+          </div>
           <p>v2 is a complete rewrite with a different domain model, or isolation between versions is required for compliance or risk reasons.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Header Versioning + In-App Branching</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Header Versioning + In-App Branching</h4>
+          </div>
           <p>Small differences between versions, a small client base you control, and a team that confines all version logic to a single adapter layer.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — No Versioning</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — No Versioning</h4>
+          </div>
           <p>Changes are purely additive and compatible, or the clients are internal and can be upgraded in lockstep.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Gateway Translation + Single Core</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Gateway Translation + Single Core</h4>
+          </div>
           <p>Many external clients, long migration windows, mostly structural breaking changes, and a need for per-client rollout, rollback, and visibility.</p>
         </div>
 

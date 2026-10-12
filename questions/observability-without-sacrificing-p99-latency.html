@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">⛓️</div>
-          <h4>A — Synchronous In-Path Collection</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⛓️</span>
+            <h4>A — Synchronous In-Path Collection</h4>
+          </div>
           <p>Putting a network call to a collector before the response adds its latency to <strong>every request's p99</strong> and couples your availability to the observability backend: collector slowness becomes user-facing slowness. Telemetry does not need strong consistency or write acknowledgments to be useful. <strong>Caveat:</strong> only truly audit-critical events (financial or compliance records) justify a synchronous durable write, and those belong on a dedicated path, not general telemetry.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">💾</div>
-          <h4>B — Local-Only Logs with Batch Transfer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">💾</span>
+            <h4>B — Local-Only Logs with Batch Transfer</h4>
+          </div>
           <p>Containers are <strong>ephemeral</strong>: when a pod is evicted or crashes, its local disk and the logs on it are gone, often exactly when you need them. Hourly or nightly batches also leave SREs blind during live incidents, and traces only appear after the fact. <strong>Caveat:</strong> a log-shipping agent tailing stdout and forwarding continuously is asynchronous and fine, but that is already part of option D, not batch-only.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📡</div>
-          <h4>C — 100% Capture with Direct Transmission</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📡</span>
+            <h4>C — 100% Capture with Direct Transmission</h4>
+          </div>
           <p>Sending every event individually from the app process burns CPU, sockets and TLS handshakes inside the service, has no backpressure, and ties thread health to a vendor endpoint. At billions of events per day, <strong>100% retention is also very expensive</strong>, and most of it is repetitive healthy traffic. <strong>Caveat:</strong> temporary 100% sampling is reasonable for a low-traffic service or a short debugging window, behind an async exporter.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Async OpenTelemetry Pipeline with Correlation and Adaptive Sampling ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Async OpenTelemetry Pipeline with Correlation and Adaptive Sampling ✓</h4>
+          </div>
           <p>Hybrid asynchronous and correlation-focused model: Use OpenTelemetry-compatible libraries to instrument applications, pass correlation IDs between requests, and generate structured logs appended with</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Synchronous In-Path</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous In-Path</h4>
+          </div>
           <p>Audit or compliance events that must be durable before acknowledging the request, handled on a dedicated path rather than as general telemetry.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Local Logs + Batch</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Local Logs + Batch</h4>
+          </div>
           <p>Offline or intermittently connected edge devices, or low-value batch jobs where real-time visibility is unnecessary.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — 100% Direct Send</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — 100% Direct Send</h4>
+          </div>
           <p>Low-traffic services or short, deliberate debugging windows, ideally still through an async exporter.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Async + Tail Sampling</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Async + Tail Sampling</h4>
+          </div>
           <p>High-traffic, latency-sensitive production systems across many clusters, where debuggability and cost must both be controlled.</p>
         </div>
 

@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">💥</div>
-          <h4>A — Immediate Microservices with Sync REST and 2PC</h4>
+          <div class="strategy-header">
+            <span class="s-icon">💥</span>
+            <h4>A — Immediate Microservices with Sync REST and 2PC</h4>
+          </div>
           <p>This combines the costs of both worlds. Chained <strong>synchronous calls</strong> multiply latency and reduce availability (a path through five services at 99.9% each is about 99.5%), while <strong>2PC</strong> blocks on coordinator or participant failure and holds locks under load. A big-bang split also puts the whole business at risk during the rewrite. <strong>Caveat:</strong> practically no scenario with modern, mixed-technology services justifies 2PC across HTTP services.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🕸️</div>
-          <h4>B — Microservices with DB-per-Service and Events</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>B — Microservices with DB-per-Service and Events</h4>
+          </div>
           <p>This is a legitimate <em>end state</em> for large organizations, but adopting it for every context at once is premature here. The team is already worried about operational complexity, inventory must be near real time (eventual consistency complicates checkout), and the platform investment (tracing, deployment, on-call, contract testing) is large. <strong>Caveat:</strong> it becomes the right choice once boundaries are proven and team size or scaling needs demand independent services.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📈</div>
-          <h4>C — Scale the Monolith Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📈</span>
+            <h4>C — Scale the Monolith Only</h4>
+          </div>
           <p>Vertical scaling, replicas, caching and indexing are cheap and should be done <strong>now</strong>, but alone they don't address team coupling or independent scaling for search and inventory, and they leave module boundaries unenforced, which makes later extraction harder. <strong>Caveat:</strong> if checkout latency were the only problem, this option alone could be enough. Here it is a subset of option D.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Modular Monolith, Extract on Evidence ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Modular Monolith, Extract on Evidence ✓</h4>
+          </div>
           <p>Restructure into a modular monolith by organizing the code into distinct bounded contexts (such as orders, payments, inventory, and search) with isolated schemas or logical database partitions, while</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Big-Bang Microservices + 2PC</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Big-Bang Microservices + 2PC</h4>
+          </div>
           <p>Essentially never for modern web systems. At most, inside a single trust domain where all participants are XA-capable and a rewrite risk is acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Microservices + Events</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Microservices + Events</h4>
+          </div>
           <p>Large organizations with multiple autonomous teams, proven bounded contexts, a mature platform and observability practice, and real need for independent scaling and deployment across many domains.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Scale the Monolith</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Scale the Monolith</h4>
+          </div>
           <p>Small teams and moderate growth where bottlenecks are query- or infrastructure-level and team coupling isn't yet painful.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Modular Monolith</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Modular Monolith</h4>
+          </div>
           <p>Growing teams with emerging boundaries, strong-consistency domains such as payments, and a 12 to 18 month horizon where risk control matters more than architectural purity.</p>
         </div>
 

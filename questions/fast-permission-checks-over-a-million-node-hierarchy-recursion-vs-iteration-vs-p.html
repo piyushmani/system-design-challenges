@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔁</div>
-          <h4>A — Recursive Cross-Service DFS</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔁</span>
+            <h4>A — Recursive Cross-Service DFS</h4>
+          </div>
           <p>Each level adds a network hop, so latency grows with depth and the p95 is dominated by the slowest call in the chain. Availability multiplies: if each service is 99.9% available, a ten-level chain is roughly 99%. Retries amplify load, cycles or very wide nodes can cause runaway call trees, and timeouts are hard to budget. Strict per-request consistency is real, but it is bought with the very latency SLO the scenario sets.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔂</div>
-          <h4>B — Iterative Per-Request Traversal</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔂</span>
+            <h4>B — Iterative Per-Request Traversal</h4>
+          </div>
           <p>Replacing recursion with an explicit queue fixes stack-depth problems and keeps logic in one service, which is a genuine improvement. But the cost is still one database round trip per level (or per batch of children) on every request, so 2,000 checks per second multiplies into tens of thousands of queries per second against the primary. Tail latency depends on the hierarchy shape, and a wide node near the top can blow the 50 ms budget. Note that inheritance should be resolved by walking <em>up</em> the ancestors (short), not down through children (huge). <strong>Caveat:</strong> a good bounded fallback for cache misses.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🕸️</div>
-          <h4>C — Recursive SQL or Graph Traversal</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>C — Recursive SQL or Graph Traversal</h4>
+          </div>
           <p><code>WITH RECURSIVE</code> pushes the traversal into the database and removes network hops, but CPU cost and latency still scale with the size of the reachable set, and the work repeats on every request. At 2,000 requests per second the primary becomes the bottleneck, plans vary with data shape, and cycle protection adds overhead. <strong>Caveat:</strong> fine for admin tooling, audits and for building the read model, just not for the hot authorization path.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Precomputed Closure in a Sharded Key-Value Store ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Precomputed Closure in a Sharded Key-Value Store ✓</h4>
+          </div>
           <p>Pre-calculate and cache the transitive closure or materialized paths (or a denormalized permission read-model) within a high-speed, sharded key-value store, and update it asynchronously via event-driv</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Recursive Cross-Service DFS</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Recursive Cross-Service DFS</h4>
+          </div>
           <p>Tiny hierarchies, low traffic or prototypes where strict real-time consistency matters more than latency and the call graph is shallow.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Iterative Per-Request Traversal</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Iterative Per-Request Traversal</h4>
+          </div>
           <p>Moderate scale, or as the cache-miss fallback; simple to reason about and reasonable when depth is small and the database can absorb the load.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Recursive SQL / Graph Query</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Recursive SQL / Graph Query</h4>
+          </div>
           <p>Admin queries, audits, impact analysis (who can access this subtree) and building or verifying the read model.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Precomputed Closure in KV</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Precomputed Closure in KV</h4>
+          </div>
           <p>High-read, low-write authorization with large hierarchies, strict latency SLOs and tolerable propagation delay.</p>
         </div>
 

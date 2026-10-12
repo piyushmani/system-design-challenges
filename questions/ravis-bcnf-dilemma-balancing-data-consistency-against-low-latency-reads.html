@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔗</div>
-          <h4>A — 2PC and Cross-Shard Joins</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>A — 2PC and Cross-Shard Joins</h4>
+          </div>
           <p>Two-phase commit coordinates <em>writes</em> across participants; it does not make joins fast. Pushing every read through distributed coordination adds multiple network round trips, holds locks, and makes tail latency depend on the slowest shard, which is the opposite of the SLA goal. The coordinator is also a blocking failure point: if it fails between prepare and commit, participants hold locks until recovery, hurting availability. <strong>Caveat:</strong> reserve 2PC (or sagas) for the few write paths that truly span shards.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📋</div>
-          <h4>B — Aggressive Denormalization</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📋</span>
+            <h4>B — Aggressive Denormalization</h4>
+          </div>
           <p>Copying addresses and aggregates into order_items <strong>reintroduces the update anomalies BCNF removed</strong>, and synchronous updates multiply write cost (one address change can touch every item of every order). It also blurs a useful distinction: an order's <em>shipping address at order time</em> is a legitimate historical snapshot, whereas the customer's <em>current</em> address is mutable state, and the two must not be conflated. <strong>Caveat:</strong> a narrow, deliberate snapshot (shipping address on the order) is good modeling, not denormalization to avoid.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌐</div>
-          <h4>D — Distributed SQL Migration</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>D — Distributed SQL Migration</h4>
+          </div>
           <p>Spanner and CockroachDB provide distributed transactions, but <strong>cross-node joins still pay cross-node latency</strong>, and globally consistent commits cost cross-region round trips (consensus and, on Spanner, commit-wait). They perform best when data is co-located by key (interleaving or locality settings), which is a data-modeling effort, not a free lunch. A full migration is also costly and high-risk compared with adding a read model. <strong>Caveat:</strong> a sound long-term platform choice if the team wants global transactions broadly and can fund the migration.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — CQRS-Style Read Models via CDC ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — CQRS-Style Read Models via CDC ✓</h4>
+          </div>
           <p>Keep the BCNF schema in the primary transactional database and build denormalized, read-optimized materialized views maintained asynchronously through change-data-capture and streaming (for example CD</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — 2PC + Distributed Joins</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — 2PC + Distributed Joins</h4>
+          </div>
           <p>Rare, low-volume write paths that must be atomic across shards (for example a one-off account merge) and can tolerate higher latency. Rarely appropriate for hot read paths.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Aggressive Denormalization</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Aggressive Denormalization</h4>
+          </div>
           <p>A small, specific piece of data that is genuinely historical (such as the shipping address captured at order time), or a hot path where joins are proven to dominate and write volume is low.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — CDC Read Models</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — CDC Read Models</h4>
+          </div>
           <p>Read-heavy services with a normalized, strongly consistent core, sharded data, strict read SLAs and tolerance for sub-second to few-second staleness (with read-your-writes where it matters).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Distributed SQL Migration</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Distributed SQL Migration</h4>
+          </div>
           <p>Greenfield or replatforming efforts that need global ACID transactions broadly across the product, with budget for migration and careful key and locality design.</p>
         </div>
 

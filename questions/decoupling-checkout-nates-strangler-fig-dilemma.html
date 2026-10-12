@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🌊</div>
-          <h4>A — Eventual Consistency Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌊</span>
+            <h4>A — Eventual Consistency Only</h4>
+          </div>
           <p>Local writes plus events means the stock decrement exists in two places at different times. Two concurrent checkouts, one routed to each side, can both see stock = 1 and both succeed, which violates the strong-consistency requirement. It also leaves the monolith serving stale order and inventory data to other teams' features. <strong>Caveat:</strong> eventual consistency is exactly right for non-critical data (order history, recommendations, notifications), and C uses it there.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔗</div>
-          <h4>B — Dual Writes + Two-Phase Commit (XA)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>B — Dual Writes + Two-Phase Commit (XA)</h4>
+          </div>
           <p>Dual writes without a coordinator are unsafe (one write can succeed while the other fails). 2PC restores atomicity but <strong>blocks</strong>: locks are held across network round trips, a coordinator failure leaves in-doubt transactions, and transaction availability is the product of both systems' availability, which makes 99.99% and p95 under 200 ms hard to hold. XA is also often unsupported by managed cloud databases and NoSQL stores, and it ties the two teams' deployments together.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>D — Shared Database</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>D — Shared Database</h4>
+          </div>
           <p>A shared database gives easy strong consistency and is sometimes a deliberate, short-lived tactic. As the strategy for the whole migration it defeats the purpose: no data ownership, in-place schema changes can break the monolith and other teams (violating continuous deployment), and both codebases couple to one schema. You cannot scale or fault-isolate checkout independently, and you can never retire the monolith. It turns a migration into a permanent distributed monolith.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — ACL + Outbox Events + Synchronous Idempotent Calls for Critical Writes ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — ACL + Outbox Events + Synchronous Idempotent Calls for Critical Writes ✓</h4>
+          </div>
           <p>Implement an anti-corruption layer (ACL) ahead of the monolith. Construct the new Checkout as a standalone service possessing its own database. Use the monolith&#x27;s outbox pattern and events for general</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Eventual Consistency Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Eventual Consistency Only</h4>
+          </div>
           <p>Non-critical domains such as order history, recommendations, notifications, and analytics, where seconds of staleness are acceptable and no invariant (stock, balance) is at stake.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Dual Writes + 2PC</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Dual Writes + 2PC</h4>
+          </div>
           <p>Rarely. Low-volume internal back-office flows where both stores support XA, downtime tolerance is high, and the arrangement is short-lived.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — ACL + Outbox + Sync Critical Calls</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — ACL + Outbox + Sync Critical Calls</h4>
+          </div>
           <p>Live, revenue-critical migrations with strict consistency on a few operations and strict availability and latency targets overall, and where other teams must keep shipping.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Shared Database</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Shared Database</h4>
+          </div>
           <p>A deliberate, time-boxed tactic to carve out a low-risk, mostly read-only module before data ownership is split, with a written exit plan.</p>
         </div>
 

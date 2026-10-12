@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🛑</div>
-          <h4>A — Fail-Fast Synchronous Checkout</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>A — Fail-Fast Synchronous Checkout</h4>
+          </div>
           <p>Simple and strongly consistent: the customer learns the outcome immediately and nothing is oversold. Timeouts, retries with backoff, and circuit breakers are good building blocks, and they belong <em>inside</em> option B's workers. As the whole strategy, though, every downstream blip becomes a lost sale, and customer retries add load to the struggling system. A timeout does not mean failure either: a payment that timed out may still have succeeded, so you need idempotency anyway. Best when stock is scarce, a wrong 'yes' costs more than a lost order, and dependencies are fast and reliable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⏱️</div>
-          <h4>C — Prolonged Synchronous Retries</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>C — Prolonged Synchronous Retries</h4>
+          </div>
           <p>This is the worst of both worlds. It holds threads, connections, and transactions open while dependencies are struggling, which raises concurrency (Little's law) and invites retry storms and cascading failure. Users stare at spinners and abandon, and mismatched timeouts across proxies, load balancers, and clients create ambiguous outcomes such as 'charged but no confirmation'. Aggressively retrying a failing dependency is a classic way to make an outage worse.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🎰</div>
-          <h4>D — Optimistic Cache-First Acceptance</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🎰</span>
+            <h4>D — Optimistic Cache-First Acceptance</h4>
+          </div>
           <p>Approving orders against a stale cache and <em>assuming</em> payment will succeed invites oversell, orders without verified payment, fraud exposure, and heavy manual reconciliation. Cancelling after the customer was promised the item damages trust more than a short 'pending' status would. It is only defensible for low-value, abundant goods (such as some digital products), and even then payment authorization should be real.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Durable Async Acceptance with Saga and Compensation ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Durable Async Acceptance with Saga and Compensation ✓</h4>
+          </div>
           <p>Graceful degradation featuring durable asynchronous processing: Instantly accept the order by storing an order record and placing a durable message into a processing queue. Provide a clear &#x27;pending&#x27; s</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Fail-Fast Synchronous</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Fail-Fast Synchronous</h4>
+          </div>
           <p>Scarce or limited-edition stock, high fraud risk, or regulated flows where a wrong 'yes' is costlier than a lost sale, and dependencies are fast and reliable. Also the right behavior inside saga workers.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Durable Async + Saga</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Durable Async + Saga</h4>
+          </div>
           <p>High-volume consumer checkout where revenue continuity matters, dependencies can be slow or flaky, and a short 'pending' status is acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Prolonged Sync Retries</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Prolonged Sync Retries</h4>
+          </div>
           <p>Rarely appropriate. Possibly low-volume internal tools where a human operator is willing to wait and the load cannot cascade.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Optimistic Cache-First</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Optimistic Cache-First</h4>
+          </div>
           <p>Low-value, effectively unlimited digital goods with real payment authorization and robust reconciliation, where occasional cancellations are cheap.</p>
         </div>
 

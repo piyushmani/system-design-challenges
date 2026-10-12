@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔗</div>
-          <h4>A — Synchronous Transactional Projections</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>A — Synchronous Transactional Projections</h4>
+          </div>
           <p>Updating the read model in the same transaction as the event append gives strict consistency and no lag, and it is simple. It works well as <strong>inline projection for a small number of critical read models</strong> that live in the same database as the event store. At the scale described, though, write latency now includes every projection's cost, one slow or locked read table slows all writes, readers cannot scale independently, and rebuilding requires locking or complex online migration. <strong>Caveat:</strong> use it selectively, for example for a small 'current order status' table, alongside option C for everything else.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🚶</div>
-          <h4>B — Single-Threaded Asynchronous Projector</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🚶</span>
+            <h4>B — Single-Threaded Asynchronous Projector</h4>
+          </div>
           <p>One consumer gives global ordering and trivial reasoning, but the requirement for global order is almost never real. Throughput is capped by one thread, lag becomes unbounded during peaks, a replay of the full history takes the longest possible time, and one poison event or slow query stalls <em>every</em> read model. <strong>Caveat:</strong> it is fine for small systems, prototypes, or a tiny read model that genuinely needs total order.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧨</div>
-          <h4>D — Two-Phase Commit Across Systems</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧨</span>
+            <h4>D — Two-Phase Commit Across Systems</h4>
+          </div>
           <p>Distributed transactions solve a problem event sourcing does not have. Read models are <strong>derived data</strong> that can be rebuilt, so atomically committing them with the event buys little. Meanwhile, 2PC blocks on a coordinator, makes availability the product of every participant's availability, lowers throughput, and is not supported across arbitrary combinations such as Kafka and a read database. <strong>Caveat:</strong> reserve distributed transactions for rare cases where two systems of record must change together, and even then prefer sagas.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Partitioned Asynchronous Projections with Idempotent Handlers and Checkpoints ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Partitioned Asynchronous Projections with Idempotent Handlers and Checkpoints ✓</h4>
+          </div>
           <p>Partitioned asynchronous projections using keyed shards and consumer groups: distribute the event stream by aggregate ID (e.g., Kafka partitions) so each worker processes a specific partition, maintai</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Synchronous Transactional Projections</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous Transactional Projections</h4>
+          </div>
           <p>A few small, critical read models in the same database as the event store where immediate consistency is required and write volume is moderate.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Single-Threaded Async Projector</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Single-Threaded Async Projector</h4>
+          </div>
           <p>Prototypes, low-volume systems, or a small read model that truly needs total ordering across the whole stream.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Partitioned Async Projections</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Partitioned Async Projections</h4>
+          </div>
           <p>High-volume event-sourced systems with many aggregates, several read models, replay requirements, and a tolerance for seconds of read-model lag.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — 2PC / Distributed Transactions</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — 2PC / Distributed Transactions</h4>
+          </div>
           <p>Rare cases where two systems of record must change atomically and both support a transaction protocol; usually better replaced by a saga.</p>
         </div>
 

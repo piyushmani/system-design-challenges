@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>A — Wide-Column Store with Secondary Indexes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>A — Wide-Column Store with Secondary Indexes</h4>
+          </div>
           <p>Cassandra and Scylla ingest 50,000 writes per second easily, but the hard requirements are on the <em>query side</em>. Secondary indexes on high-cardinality tags are a known anti-pattern, scan-heavy ad-hoc queries are not the model's strength, and rollups and downsampling must be built elsewhere. Reprocessing also needs raw data kept outside the database. <strong>Caveat:</strong> a good write-optimized serving store for known access patterns, but a poor single store for ad-hoc analytics.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">☁️</div>
-          <h4>C — Managed TSDB as the Whole Solution</h4>
+          <div class="strategy-header">
+            <span class="s-icon">☁️</span>
+            <h4>C — Managed TSDB as the Whole Solution</h4>
+          </div>
           <p>A managed TSDB is the fastest way to start and can be right at lower cardinality. But cardinality is the stated pressure here: many TSDBs build per-series indexes held in memory, so cost and latency can climb steeply as series grow. Raw data lives only inside the vendor's store, which makes bug-fix reprocessing and portability harder, and trusting the provider hides pricing, limits and lock-in. <strong>Caveat:</strong> verify cardinality limits and pricing against projected series growth before committing.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🐘</div>
-          <h4>D — Postgres with JSONB and GIN</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🐘</span>
+            <h4>D — Postgres with JSONB and GIN</h4>
+          </div>
           <p>At about 4.3 billion rows per day, a single relational primary cannot keep GIN-indexed JSONB tags up with the write rate: GIN has heavy write amplification, and tag-heavy filters bloat indexes as cardinality grows. Synchronous replication adds commit latency to every write. Twelve months is well over a trillion rows, so partition maintenance, vacuum and storage cost become the main workload. <strong>Caveat:</strong> works well for much smaller meter fleets.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Stream-First: Log, Real-Time Aggregation, OLAP and Raw Lake ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Stream-First: Log, Real-Time Aggregation, OLAP and Raw Lake ✓</h4>
+          </div>
           <p>Adopt a stream-first approach: capture raw events in a durable log (such as Kafka). Utilize stream processing frameworks (Materialize/ksql/Flink) to calculate real-time aggregations and maintain mater</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Wide-Column + Secondary Indexes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Wide-Column + Secondary Indexes</h4>
+          </div>
           <p>Known, key-based access patterns (fetch one meter's latest readings) at very high write rates, with ad-hoc analytics handled elsewhere.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Stream-First + OLAP + Lake</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Stream-First + OLAP + Lake</h4>
+          </div>
           <p>High and growing cardinality, long retention, a need to reprocess history, and a mix of real-time and ad-hoc analytics.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Managed TSDB Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Managed TSDB Only</h4>
+          </div>
           <p>Small to medium cardinality, a small team and fast time to market, where vendor limits and pricing have been verified and lock-in is acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Postgres + JSONB + GIN</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Postgres + JSONB + GIN</h4>
+          </div>
           <p>Modest fleets (millions, not trillions, of rows) with strong relational needs, where the simplicity of one database outweighs its scale limits.</p>
         </div>
 

@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>A — Synchronously Refreshed Materialized Views</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>A — Synchronously Refreshed Materialized Views</h4>
+          </div>
           <p>Views help only queries that <strong>match a precomputed shape</strong>. Ad-hoc queries with variable predicates mostly will not, so tail latency for them is unchanged. Refreshing synchronously on every write <strong>pushes view-maintenance cost onto ingestion</strong> and ties write availability to view health. Restricting EXPLAIN to 'did it use the view' throws away the diagnostic value the scenario asks for. <strong>Caveat:</strong> materialized views are an excellent targeted tool for the few recurring query fingerprints that telemetry (option D) identifies.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧠</div>
-          <h4>B — Centralized Strongly Consistent Optimizer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧠</span>
+            <h4>B — Centralized Strongly Consistent Optimizer</h4>
+          </div>
           <p>Planning at a coordinator is normal, but <strong>synchronously maintaining exact global statistics</strong> makes every ingest pay for statistics updates and makes the optimizer a bottleneck and a single point of failure. Worse, exactness is not the real issue: even perfectly fresh single-column statistics cannot capture <strong>correlation between predicates or join selectivity</strong>, so misestimates persist. <strong>Caveat:</strong> statistics do not need strong consistency, since approximate and slightly stale statistics are fine if the engine can correct itself at runtime.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧩</div>
-          <h4>C — Shard-Local Optimizers with No Global Planner</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>C — Shard-Local Optimizers with No Global Planner</h4>
+          </div>
           <p>Join strategy (broadcast, shuffle, or co-located) is a <strong>global decision</strong> that depends on data across shards, so independent local planners cannot make it. Eventually consistent statistics can make shards choose different plans, and the slowest shard then dominates the query's latency, which <strong>worsens tail latency</strong>. <strong>Caveat:</strong> pushing filters, projections, and partial aggregation down to shards is valuable, but as part of a globally coordinated plan.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — EXPLAIN-Centric Feedback Loop with Adaptive Execution ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — EXPLAIN-Centric Feedback Loop with Adaptive Execution ✓</h4>
+          </div>
           <p>Build an EXPLAIN-centric feedback loop: collect telemetry comparing estimated and actual row counts, run lightweight offline analysis to find misestimates, refine statistics and plan templates, enable</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Synchronous Materialized Views</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous Materialized Views</h4>
+          </div>
           <p>A small, stable set of recurring queries or dashboards where read latency matters far more than write cost, and the view definitions rarely change.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Centralized Strongly Consistent Optimizer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Centralized Strongly Consistent Optimizer</h4>
+          </div>
           <p>Smaller deployments with modest ingest rates where exact statistics are cheap to maintain and a central planner is acceptable as a dependency.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Shard-Local Optimizers</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Shard-Local Optimizers</h4>
+          </div>
           <p>Shard-local queries that never need cross-shard joins, such as lookups confined to one partition.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — EXPLAIN Feedback Loop</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — EXPLAIN Feedback Loop</h4>
+          </div>
           <p>Ad-hoc, high-variance analytical workloads on large distributed data, where plan quality depends on estimates that static statistics cannot get right.</p>
         </div>
 

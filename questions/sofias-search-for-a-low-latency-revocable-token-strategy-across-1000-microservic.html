@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">⏳</div>
-          <h4>A — Long-Lived JWTs with Ad-Hoc Blacklisting</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏳</span>
+            <h4>A — Long-Lived JWTs with Ad-Hoc Blacklisting</h4>
+          </div>
           <p>Local validation is fast, but a token valid for hours or days leaves a <strong>large exposure window</strong> after compromise. An uncoordinated blacklist has to reach every service, has no natural expiry (it grows forever unless entries are aged out), and tends to be incomplete in practice. This fails requirement 2 in the real world even though it looks acceptable on paper. <strong>Caveat:</strong> the 'avoid centralized state' goal is sound, and it is achieved better by shortening the lifetime, as option C does.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📞</div>
-          <h4>B — Short JWTs but Introspect on Every Call</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📞</span>
+            <h4>B — Short JWTs but Introspect on Every Call</h4>
+          </div>
           <p>Per-request introspection (RFC 7662) gives accurate revocation, but it puts a <strong>network call in the hot path of every request in every service</strong>, so the auth server must absorb the whole platform's traffic and becomes both a latency tax and a single point of failure. It also makes the JWT pointless: if you always ask the server, a self-contained token adds nothing. <strong>Caveat:</strong> selective introspection is useful for rare, high-risk operations (for example changing a password or moving money).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗝️</div>
-          <h4>D — Opaque Tokens with Replicated Introspection State</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗝️</span>
+            <h4>D — Opaque Tokens with Replicated Introspection State</h4>
+          </div>
           <p>Replicating token state to keep reads local avoids the central bottleneck, but you have effectively built a <strong>globally replicated session store</strong>, which is stateful and operationally heavy. The option also accepts stale revocations during replication lag <em>without</em> a token-lifetime cap, so the revocation window is unbounded, unlike option C. Every request still performs a lookup in that store. <strong>Caveat:</strong> opaque tokens suit external or partner APIs at the edge, where a gateway introspects once and exchanges the token for a short-lived internal JWT (the 'phantom token' pattern).</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Short-Lived JWTs, Refresh Rotation and a Revocation Broadcast ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Short-Lived JWTs, Refresh Rotation and a Revocation Broadcast ✓</h4>
+          </div>
           <p>Distribute short-lived JWTs (valid for minutes) for local validation via cached JWKs. Employ server-side, one-time-use refresh token rotation to allow centralized revocation. For emergency cut-offs, b</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Long-Lived JWTs + Ad-Hoc Blacklist</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Long-Lived JWTs + Ad-Hoc Blacklist</h4>
+          </div>
           <p>Low-risk, internal, or short-lived workloads where compromise impact is small and revocation speed is not a requirement. Rarely appropriate for user-facing platforms.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Short JWT + Introspect Every Call</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Short JWT + Introspect Every Call</h4>
+          </div>
           <p>Low-volume, high-risk operations (admin actions, payments authorization) where the extra latency is acceptable, used selectively rather than platform-wide.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Short JWT + Rotation + Revocation Feed</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Short JWT + Rotation + Revocation Feed</h4>
+          </div>
           <p>High-throughput, many-service platforms that need local validation, fast but bounded revocation, and an auth server that is not on the hot path.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Opaque + Replicated Introspection</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Opaque + Replicated Introspection</h4>
+          </div>
           <p>External or partner APIs where instant revocation matters and call rates are modest, ideally with a gateway that exchanges the opaque token for an internal JWT.</p>
         </div>
 

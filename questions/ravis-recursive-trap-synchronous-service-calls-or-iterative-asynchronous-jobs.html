@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔁</div>
-          <h4>A — Synchronous Recursive Push</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔁</span>
+            <h4>A — Synchronous Recursive Push</h4>
+          </div>
           <p>Recursive synchronous calls tie the lifetime of every ancestor request to its slowest, deepest descendant. Timeouts compound per hop, a single failure cascades up (or forces repeated retries of whole subtrees), thread and connection use grows with depth and breadth, and a crash mid-propagation leaves no record of what has already been applied. Retrying without idempotency repeats side effects. <strong>Caveat:</strong> for tiny, shallow graphs where the caller needs an immediate answer, a bounded-depth synchronous fan-out can be acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧮</div>
-          <h4>C — Single Transaction with Recursive CTE</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>C — Single Transaction with Recursive CTE</h4>
+          </div>
           <p>A recursive CTE or graph query is a good way to <em>compute</em> the transitive closure (which nodes are affected), and it is useful as a step inside the solution. The mistake is expecting a database transaction to make the <em>remote application</em> of updates atomic: the transaction covers only database rows, not calls to tens of thousands of external services, and holding a large transaction open for the whole propagation blocks other work. Distributed atomic commit across that many services is impractical, and a central synchronous dispatcher remains a bottleneck and a single point of failure.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧭</div>
-          <h4>D — Centralized In-Memory Coordinator</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧭</span>
+            <h4>D — Centralized In-Memory Coordinator</h4>
+          </div>
           <p>The closest alternative, and sound in intent: breadth-first batches control parallelism and a persistent record exists. Its weaknesses are architectural: the coordinator holds the working state in memory and is a bottleneck and single point of failure, recording only the <em>final</em> completion state means a crash loses all progress unless state is persisted per node, and it scales vertically. If its state is persisted and it dispatches through a durable queue, it effectively becomes Option B. <strong>Caveat:</strong> a durable workflow engine like Temporal is a legitimate coordinator-style implementation.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Durable Queue with Idempotent Workers ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Durable Queue with Idempotent Workers ✓</h4>
+          </div>
           <p>Iterative, asynchronous task processing: emit tasks (or batches of node IDs) to a durable queue; idempotent workers consume them, record progress in a persistent store, retry with exponential backoff,</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Sync Recursive Push</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sync Recursive Push</h4>
+          </div>
           <p>Small, shallow, bounded graphs where the caller needs an immediate result and the failure of a subtree can simply be reported.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Durable Queue + Idempotent Workers</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Durable Queue + Idempotent Workers</h4>
+          </div>
           <p>Large or deep graphs, expected partial failures, a need for resumability and observability, and eventual propagation is acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Single Transaction + CTE</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Single Transaction + CTE</h4>
+          </div>
           <p>Impact analysis (which nodes are affected) or graph validation, as a read-only step that feeds the task queue.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Central In-Memory Coordinator</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Central In-Memory Coordinator</h4>
+          </div>
           <p>Workflows with complex ordering or approval gates, ideally built on a durable orchestrator with persisted state.</p>
         </div>
 

@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📡</div>
-          <h4>B — Centralized Logging &amp; Monitoring</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📡</span>
+            <h4>B — Centralized Logging &amp; Monitoring</h4>
+          </div>
           <p>Observability is a force multiplier for every other pattern — circuit breakers without monitoring are flying blind. But monitoring <strong>detects</strong> problems; it doesn't <strong>contain</strong> them. Logging and monitoring are <strong>observability tools, not error-handling mechanisms</strong>. They tell you <em>that</em> errors are happening and <em>where</em>, but they don't <strong>prevent, contain, or recover from</strong> errors. You can have perfect Grafana dashboards showing a cascading failure in real-time — and still be powerless to stop it without resilience patterns in the code. Observability is essential (you should absolutely have it), but it's a <strong>diagnostic layer, not a defensive one</strong>. It answers 'what happened?' not 'how do we survive it?'</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📬</div>
-          <h4>C — Dead-Letter Queues</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📬</span>
+            <h4>C — Dead-Letter Queues</h4>
+          </div>
           <p>DLQs are a critical pattern for <strong>asynchronous message-driven communication</strong> (Kafka, RabbitMQ, SQS), but they only apply to async flows. In a microservices architecture, many calls are <strong>synchronous HTTP/gRPC requests</strong> — order service calling inventory service during checkout. DLQs can't help with synchronous call failures. They also don't prevent failures; they <strong>capture failures after the fact</strong> for later reprocessing. For async pipelines, DLQs are essential. But as the <em>foundational</em> error-handling architecture for all service communication, they're incomplete.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⏱️</div>
-          <h4>D — Exponential Backoff with Jitter</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>D — Exponential Backoff with Jitter</h4>
+          </div>
           <p>Exponential backoff with jitter is an excellent <strong>retry strategy</strong> — it prevents thundering herds by spreading retry attempts over time. But it's a <em>component</em> of a resilience architecture, not the architecture itself. Retries without a circuit breaker are dangerous: if a service is truly down, exponential backoff just means you retry <strong>slower</strong> — but you still retry, consuming resources and amplifying load on the failing service. Backoff + jitter belongs <em>inside</em> a circuit breaker's retry policy, not as a standalone strategy. Backoff with jitter is a critical <strong>component</strong> of option A — it belongs inside the circuit breaker's retry policy. The question here is whether it's sufficient as a <strong>standalone</strong> strategy, and the answer is no: retries without a circuit breaker amplify load on a failing service instead of protecting the caller.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>A — Circuit Breakers with Retry Policies ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Circuit Breakers with Retry Policies ✓</h4>
+          </div>
           <p>Implement circuit breakers with intelligent retry policies at every service-to-service communication boundary to prevent cascading failures.</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Circuit Breakers + Retries</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Circuit Breakers + Retries</h4>
+          </div>
           <p>Any synchronous service-to-service call where a downstream failure could impact the caller's availability. This is the default resilience pattern for every outbound call in a microservices architecture — the question isn't 'should we use circuit breakers?' but 'what are the thresholds and fallbacks?'</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Centralized Logging &amp; Monitoring</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Centralized Logging &amp; Monitoring</h4>
+          </div>
           <p>Always — but as an observability layer, not an error-handling mechanism. Essential for post-incident analysis, capacity planning, SLO tracking, and identifying degradation trends before they become outages. Pair with distributed tracing for microservices.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Dead-Letter Queues</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Dead-Letter Queues</h4>
+          </div>
           <p>Asynchronous event-driven pipelines where messages must not be lost (order processing, payment confirmations, inventory updates via Kafka/SQS/RabbitMQ). DLQs provide a safety net for poison messages and transient consumer failures.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Exponential Backoff + Jitter</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Exponential Backoff + Jitter</h4>
+          </div>
           <p>As the retry strategy inside circuit breakers, rate limiters, and queue consumers. Especially important for shared resources (APIs with rate limits, databases under load) where synchronized retries would create thundering herd problems.</p>
         </div>
 

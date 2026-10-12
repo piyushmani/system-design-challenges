@@ -102,23 +102,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📇</div>
-          <h4>A — Composite Indexes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📇</span>
+            <h4>A — Composite Indexes</h4>
+          </div>
           <p>Indexes lower the <strong>cost of each query</strong>, which raises how many queries the database can handle, but they don't reduce the <em>volume</em> of queries hitting it. In this scenario profiling already shows the slow queries use appropriate indexes, so adding more yields little, and each extra index adds write overhead (inserts, deletes, and updates to indexed columns must maintain it). <strong>Caveat:</strong> if profiling had shown sequential scans or poor query plans, indexing would be the right first move: it's cheap, low-risk, and easy to reverse.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧩</div>
-          <h4>C — Table Partitioning / Sharding</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>C — Table Partitioning / Sharding</h4>
+          </div>
           <p><strong>Partitioning</strong> divides a table into segments on the SAME server (helps the planner skip irrelevant segments). <strong>Sharding</strong> distributes data across MULTIPLE nodes (scales writes and storage). Both are heavy changes that introduce significant operational complexity (cross-partition queries, rebalancing, migration), and neither helps much if the bottleneck is repeated reads of the same hot rows, since a hot row still lives on one shard.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📋</div>
-          <h4>D — Denormalization</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📋</span>
+            <h4>D — Denormalization</h4>
+          </div>
           <p>Removing JOINs speeds up reads, but it <strong>duplicates data</strong>, complicates writes, and risks inconsistency. It's a schema change that is hard to reverse. For Priya's scenario (peak-hour spikes on a working system, with no evidence that JOINs are the dominant cost), this is a heavy-handed structural change when a simpler layer can absorb the load.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Caching Layer ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Caching Layer ✓</h4>
+          </div>
           <p>Introduce a caching layer (e.g., Redis or Memcached) to serve repeated query results from memory.</p>
         </div>
 
@@ -149,23 +157,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Composite Indexes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Composite Indexes</h4>
+          </div>
           <p>Slow query logs show sequential scans or poor plans, or queries are diverse (not repeated identical reads) and the database itself is the bottleneck. Usually the cheapest, safest fix when profiling points to missing index coverage.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">✅</div>
-          <h4>B — Caching</h4>
+          <div class="strategy-header">
+            <span class="s-icon">✅</span>
+            <h4>B — Caching</h4>
+          </div>
           <p>Read-heavy workload with high temporal locality: the same data is requested thousands of times between changes, queries are already well-indexed, and some staleness is acceptable. Not effective if requests are mostly unique.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Table Partitioning / Sharding</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Table Partitioning / Sharding</h4>
+          </div>
           <p>A table has grown to billions of rows and queries naturally split by a dimension (date, tenant, region), or write throughput or storage on a single node is the limiting factor.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Denormalization</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Denormalization</h4>
+          </div>
           <p>Analytics or reporting paths that run complex multi-table JOINs and can tolerate slight staleness, applied after profiling proves JOINs are the dominant cost.</p>
         </div>
 

@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🏛️</div>
-          <h4>A — Single Central Database</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>A — Single Central Database</h4>
+          </div>
           <p>A shared database gives true foreign keys and ACID transactions, but it erases the independence the scenario demands. Services share a schema, so deployments and migrations must be coordinated, one noisy service can degrade all the others, and the database is a single failure domain and scaling ceiling. Synchronous cross-service transactions hold locks longer and reduce write throughput at peak. It is simple and appropriate for a modular monolith, but not for independently deployed services.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧩</div>
-          <h4>B — UUIDs, No Cross-DB FKs, App-Level Integrity</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>B — UUIDs, No Cross-DB FKs, App-Level Integrity</h4>
+          </div>
           <p>This is directionally right: no cross-database foreign keys, globally unique IDs, denormalized parent data and reconciliation. The weakness is that it leaves <em>how</em> changes propagate unspecified. If a service updates its data and then publishes an event as separate steps, a crash in between makes copies diverge, and application-level integrity checks tend to be inconsistent across teams. It also does not keep local FKs inside each service or build in observability. <strong>Caveat:</strong> add an outbox, idempotent consumers and drift metrics and it becomes Option D.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌍</div>
-          <h4>C — Globally Distributed SQL with Cross-Node FKs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌍</span>
+            <h4>C — Globally Distributed SQL with Cross-Node FKs</h4>
+          </div>
           <p>CockroachDB or Spanner offer strong consistency and cross-node constraints, but cross-region transactions pay consensus round trips on commit, so write latency rises sharply at peak, and hot parent rows (such as popular inventory items) become contention points. More importantly, foreign keys across services couple their schemas: independent deployment and ownership are lost, and a migration in one domain can block another. It does simplify developer reasoning, which is a real benefit, but it trades away the service boundaries. <strong>Caveat:</strong> a good choice <em>inside</em> one service that needs global consistency.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Local Integrity + Outbox-Fed Read Models ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Local Integrity + Outbox-Fed Read Models ✓</h4>
+          </div>
           <p>Allow each service to control its own relational database, restricting foreign keys to its specific boundaries. Broadcast state changes through an outbox pattern or event stream to populate asynchrono</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Single Central Database</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Central Database</h4>
+          </div>
           <p>Early-stage products or modular monoliths owned by one team, where transactional simplicity matters more than independent scaling.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — UUIDs, No Cross-DB FKs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — UUIDs, No Cross-DB FKs</h4>
+          </div>
           <p>Smaller systems where occasional drift is tolerable and the team is disciplined, or as an incremental step toward event-driven integration.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Global Distributed SQL</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Global Distributed SQL</h4>
+          </div>
           <p>A single service that needs global strong consistency and cross-region transactions (ledgers, inventory of record), kept inside one bounded context.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Local FKs + Outbox Read Models</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Local FKs + Outbox Read Models</h4>
+          </div>
           <p>Multi-team microservices that need independent deployment, regional resilience and fast local reads, with acceptable and monitored staleness.</p>
         </div>
 

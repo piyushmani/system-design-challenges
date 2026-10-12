@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📮</div>
-          <h4>A — Conventional Message Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📮</span>
+            <h4>A — Conventional Message Queue</h4>
+          </div>
           <p>Queues remove a message once it is acknowledged, so <strong>historical replay is not native</strong>. Keeping per-user order with competing consumers requires routing users into many small queues or ordered message groups, which adds operational complexity, and managed queues have per-queue or per-group throughput limits that make 1 million events per second hard. <strong>Caveat:</strong> queues are excellent for task distribution and work offloading. Note that log-style features in some brokers (for example, RabbitMQ Streams) move toward option B's model.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔀</div>
-          <h4>C — Hybrid Stream + Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>C — Hybrid Stream + Queue</h4>
+          </div>
           <p>A log consumer can already deliver sub-second latency, so the queue is <strong>unneeded extra moving parts</strong>. Splitting events across two systems introduces dual-write and synchronization problems, and the queue path loses strict per-user ordering because of competing consumers. Payments, which need ordering most, would have to stay on the stream anyway. <strong>Caveat:</strong> hybrids are reasonable for specific <em>job</em> workloads (for example, sending emails with retries and delays) driven by events from the log.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>D — Relational Database as the Event Bus</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>D — Relational Database as the Event Bus</h4>
+          </div>
           <p>An append-only table gives durability and replay, but at <strong>1 million inserts per second</strong> it concentrates write load, index maintenance, and polling on one database system. Ordering enforced by locking limits parallelism, and LISTEN/NOTIFY is not a durable delivery mechanism. <strong>Caveat:</strong> writing events to a table inside a business transaction (the transactional outbox pattern) is a good way to feed the log, but the table should not be the backbone.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Partitioned Distributed Log ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Partitioned Distributed Log ✓</h4>
+          </div>
           <p>Use a partitioned distributed log (such as Kafka or Pulsar) with topics partitioned by user ID, retention that supports historical reprocessing, and a stream-processing framework (such as Flink or Kaf</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Conventional Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Conventional Queue</h4>
+          </div>
           <p>Task and job distribution where each message is processed once by any worker, replay is not needed, and strict global per-key order is not required.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Partitioned Log + Stream Processing</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Partitioned Log + Stream Processing</h4>
+          </div>
           <p>High-volume event streams that need per-key ordering, replay, and multiple independent consumers, such as payments, personalization, analytics, and audit.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Hybrid Stream + Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hybrid Stream + Queue</h4>
+          </div>
           <p>A log as the source of truth, with specific task-style consumers (email sending, retries with delays) that fit a job queue's semantics.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Relational DB as Event Bus</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Relational DB as Event Bus</h4>
+          </div>
           <p>Low-volume systems where adding messaging infrastructure is not justified and transactional consistency with business data matters more than throughput.</p>
         </div>
 

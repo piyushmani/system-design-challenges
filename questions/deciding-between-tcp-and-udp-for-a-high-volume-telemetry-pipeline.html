@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>A — TCP (TLS) for Everything</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — TCP (TLS) for Everything</h4>
+          </div>
           <p>Reliable and easy to reason about, and a good fit for mains-powered gateways. For millions of low-power devices, though, every connection costs memory (kernel buffers and TLS state) at the core, keep-alives and reconnects drain batteries, TLS handshakes cost CPU and energy, and NAT idle timeouts silently kill connections. Head-of-line blocking also delays fresh readings behind retransmitted stale ones, which is reliability that telemetry does not need.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🛠️</div>
-          <h4>B — UDP with Custom Reliability</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🛠️</span>
+            <h4>B — UDP with Custom Reliability</h4>
+          </div>
           <p>Re-implementing ordering, ACKs, and retransmission on constrained firmware is bug-prone, hard to patch in the field, and duplicates work already done by TCP, QUIC, and CoAP. Worse, it applies the cost to <strong>all</strong> traffic instead of only alerts, and without congestion control it can harm the network. Use a standard confirmable mechanism, selectively.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🎲</div>
-          <h4>C — Pure Best-Effort UDP, Including Alerts</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🎲</span>
+            <h4>C — Pure Best-Effort UDP, Including Alerts</h4>
+          </div>
           <p>Reasonable for telemetry, unacceptable for safety faults and low-battery alerts. There is no delivery guarantee and no visibility into loss, and statistical aggregation cannot reconstruct a single missing alert. Silent loss of a critical alert is both a safety and a liability problem.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Hybrid: UDP to Edge Aggregators + Reliable Backhaul ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Hybrid: UDP to Edge Aggregators + Reliable Backhaul ✓</h4>
+          </div>
           <p>Adopt a hybrid model: devices transmit high-volume, non-critical telemetry via UDP to local edge aggregators. These aggregators handle buffering, deduplication, and sequencing before forwarding reliab</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — TCP (TLS) for All</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — TCP (TLS) for All</h4>
+          </div>
           <p>Mains-powered gateways, moderate fleet sizes, and streaming or bulk transfers (firmware, logs) where ordering and guaranteed delivery matter more than per-device energy.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — UDP + Custom Reliability</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — UDP + Custom Reliability</h4>
+          </div>
           <p>Rarely. Prefer an existing standard (CoAP confirmable, QUIC) unless you have a specialized network and the team to maintain a protocol.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Pure Best-Effort UDP</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Pure Best-Effort UDP</h4>
+          </div>
           <p>Pure analytics streams where occasional loss is irrelevant, such as dense ambient sampling with no safety or billing consequences.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Hybrid UDP + Edge + TCP</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Hybrid UDP + Edge + TCP</h4>
+          </div>
           <p>Large fleets of constrained devices with mixed criticality: high-volume telemetry plus rare alerts that must be delivered and monitored.</p>
         </div>
 

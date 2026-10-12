@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🗳️</div>
-          <h4>A — WAN-Spanning Paxos or Raft</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗳️</span>
+            <h4>A — WAN-Spanning Paxos or Raft</h4>
+          </div>
           <p>This is safe by construction, but every election and commit crosses regions, and elections can time out when the inter-region link degrades. With two regions, any voter split leaves one side as a single point of failure: lose it and the cluster halts. <strong>Caveat:</strong> with three regions, or a small witness in a third site, a WAN-spanning consensus group is a strong and simple choice. Option C also uses consensus internally, just kept local.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧬</div>
-          <h4>B — Local Masters with Last-Write-Wins or CRDTs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧬</span>
+            <h4>B — Local Masters with Last-Write-Wins or CRDTs</h4>
+          </div>
           <p>This is split-brain by design: both regions accept writes as leader during a partition. Last-write-wins silently discards updates and depends on clocks, and CRDTs can merge data such as counters or sets but cannot merge the idea of a single leader. It suits data that is meant to be writable everywhere, not leadership or lease state.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏢</div>
-          <h4>D — Third-Party Central Coordinator with Global Sync Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏢</span>
+            <h4>D — Third-Party Central Coordinator with Global Sync Replication</h4>
+          </div>
           <p>A single external coordinator is a single point of failure and a black box for correctness, global synchronous replication adds WAN latency to every write, and forcing read-only mode whenever the coordinator is unreachable turns a coordinator problem into an outage for the primary region too. Outsourcing arbitration also does not remove the need for fencing at the resources.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Fenced Leases on a Local Quorum ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Fenced Leases on a Local Quorum ✓</h4>
+          </div>
           <p>Implement a lease-based leader election system utilizing short, renewable leases along with fencing tokens and a compact, fast quorum of controller nodes situated in the preferred region. Use an exter</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — WAN-Spanning Consensus</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — WAN-Spanning Consensus</h4>
+          </div>
           <p>Three or more regions (or a cheap third-site witness), strict linearizability, moderate write rates, and tolerance for WAN round trips.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Local Masters + LWW/CRDT</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Local Masters + LWW/CRDT</h4>
+          </div>
           <p>Data (not leadership) that can merge, such as counters, sets or presence, and must stay writable in every region during partitions.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Fenced Leases on Local Quorum</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Fenced Leases on Local Quorum</h4>
+          </div>
           <p>Latency-sensitive coordination with a clearly preferred region, a need for primary-region availability, and acceptance of stale or read-only service in the secondary region during partitions.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Central Coordinator</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Central Coordinator</h4>
+          </div>
           <p>Small systems already standardized on a managed lock or coordination service where global write latency is not critical.</p>
         </div>
 

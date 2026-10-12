@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📣</div>
-          <h4>A — Universal Fanout-on-Write Push</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📣</span>
+            <h4>A — Universal Fanout-on-Write Push</h4>
+          </div>
           <p>Simple and fast for small audiences, but a single post from a multi-million-follower account becomes millions of broker messages. The burst causes head-of-line blocking that delays unrelated users, saturates push gateways, and inflates cost (including pushes to inactive devices). Minimal server-side storage also weakens history, offline delivery, and de-duplication. <strong>Caveat:</strong> it is a fine design for platforms where audiences are uniformly small.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔄</div>
-          <h4>B — Pull-Only Fanout-on-Read</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>B — Pull-Only Fanout-on-Read</h4>
+          </div>
           <p>Storage-efficient with no write amplification, but every poll triggers filtering, de-duplication, and pagination work, so read load scales with <em>users × poll frequency</em> regardless of activity. Latency is bounded by the polling interval, which is not near real-time, and frequent polling drains mobile batteries. Per-user feeds have low cache hit rates. Pull is the right approach for the celebrity path, not for the whole system.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📡</div>
-          <h4>D — Topic-Based Central Push Gateway</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📡</span>
+            <h4>D — Topic-Based Central Push Gateway</h4>
+          </div>
           <p>Topics work well for broadcast (breaking news, announcements), but personal social notifications are per-user. With no per-user inbox you lose unread counts, history, de-duplication, per-user preferences, and offline retrieval, and provider topic limits and delivery guarantees are weak for this use. A central gateway also concentrates failure risk. Use topics for broadcast-style messages alongside C, not instead of it.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Hybrid Fanout (Write for Normal Users, Read for Celebrities) ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Hybrid Fanout (Write for Normal Users, Read for Celebrities) ✓</h4>
+          </div>
           <p>A hybrid architecture. Use an asynchronous message bus and sharded workers to precompute individual inboxes (fanout-on-write) for standard users. However, for &quot;celebrity&quot; accounts with massive followi</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Universal Fanout-on-Write</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Universal Fanout-on-Write</h4>
+          </div>
           <p>Platforms with uniformly small audiences (private groups, small teams) where write amplification is bounded and real-time delivery is the priority.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Pull-Only Fanout-on-Read</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Pull-Only Fanout-on-Read</h4>
+          </div>
           <p>Low-frequency, non-urgent feeds, or the celebrity portion of a hybrid system. Also a fallback path when push is unavailable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Hybrid</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hybrid</h4>
+          </div>
           <p>Skewed social graphs with a long tail of huge accounts, mixed real-time and offline delivery, and cost sensitivity.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Topic-Based Gateway</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Topic-Based Gateway</h4>
+          </div>
           <p>Broadcast announcements (breaking news, system notices, sports scores) where all subscribers get the same message and no per-user history is needed.</p>
         </div>
 

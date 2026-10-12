@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Sticky WebSockets with Server-to-Server Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sticky WebSockets with Server-to-Server Replication</h4>
+          </div>
           <p>Sticky sessions and in-memory subscriptions make servers stateful: a crash loses subscription state, rebalancing is painful, and server-to-server replication forms a mesh whose fan-out cost grows roughly with the square of the server count. Deployments and autoscaling cause mass reconnects to specific nodes. It works for small clusters but does not scale gracefully to 100k users across regions. <strong>Caveat:</strong> stickiness itself is still useful for connection upgrade and long-poll affinity; the problem is putting <em>state</em> and routing logic inside the application servers.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧰</div>
-          <h4>B — Stateless WebSockets + Global Broker + Registry</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧰</span>
+            <h4>B — Stateless WebSockets + Global Broker + Registry</h4>
+          </div>
           <p>This is a strong building-block design and is essentially what option D does <em>inside each region</em>. As described, however, it centers on one broker and one connection registry shared across regions, which couples regional failure domains and puts inter-region round trips on the fan-out path. It also does not say how per-user ordering is guaranteed across regions (a per-user Kafka partition key helps, but only within one cluster). <strong>Caveat:</strong> for a single-region deployment, B is arguably the simplest correct answer.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⏱️</div>
-          <h4>C — Aggressive HTTP Long Polling</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>C — Aggressive HTTP Long Polling</h4>
+          </div>
           <p>Long polling creates a new HTTP request and response cycle for each batch of events. At 100k users, shortening intervals multiplies request volume, TLS and header overhead, and server load, and still adds latency each time the poll is re-established. Ordering needs cursors and careful idempotency, and presence is awkward. It is a reasonable <em>fallback</em>, not a primary transport. <strong>Caveat:</strong> where proxies block WebSockets, long polling (or SSE) is a valid transport.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Region-Centric WebSockets with Home-Region Ordering ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Region-Centric WebSockets with Home-Region Ordering ✓</h4>
+          </div>
           <p>Implement a hybrid, region-centric architecture by using WebSockets inside each region alongside a local message bus to ensure low latency, while replicating events asynchronously across regions via a</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Sticky WebSockets</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sticky WebSockets</h4>
+          </div>
           <p>Small clusters in a single region where operational simplicity matters and the server count stays low.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Stateless + Global Broker</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Stateless + Global Broker</h4>
+          </div>
           <p>Single-region or modest multi-region deployments where a shared broker is acceptable; also the building block used inside each region of the region-centric design.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Aggressive Long Polling</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Aggressive Long Polling</h4>
+          </div>
           <p>Clients or networks that cannot use WebSockets or SSE, low-frequency updates, or as a fallback transport.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Region-Centric</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Region-Centric</h4>
+          </div>
           <p>Large multi-region real-time systems with latency budgets, per-user ordering, and requirements for regional isolation.</p>
         </div>
 

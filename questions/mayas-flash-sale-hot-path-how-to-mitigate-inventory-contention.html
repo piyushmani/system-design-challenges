@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>A — Redis Distributed Lock</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Redis Distributed Lock</h4>
+          </div>
           <p>A lock serializes access but does not remove contention: tens of thousands of requests still queue or spin on one key, and each now also pays a network round trip to Redis. Worse, a <code>SETNX</code> plus expiry lock is <strong>not a safe mutual-exclusion primitive</strong>. If the holder pauses (GC, network delay) past the TTL, a second holder enters and stock can be double-decremented unless fencing tokens are added. The 'strong consistency' claim also fails if the Redis primary fails over before replicating. <strong>Caveat:</strong> a single atomic Redis <code>DECR</code> or Lua script (no lock at all) is a legitimate, simple gate for a stock counter, but that is a different design from the lock described here.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>B — Pessimistic Row Locking (SELECT FOR UPDATE)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>B — Pessimistic Row Locking (SELECT FOR UPDATE)</h4>
+          </div>
           <p>This is essentially the current design with an explicit lock. Every buyer waits in line on the same row lock, transactions hold database connections while waiting, and the connection pool saturates, which is exactly the timeouts Maya sees. It guarantees correctness, but at the cost of throughput and availability under a surge. <strong>Caveat:</strong> it is perfectly fine for low-contention inventory (many SKUs, few concurrent buyers per SKU).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔁</div>
-          <h4>C — Optimistic Concurrency (Version / CAS)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔁</span>
+            <h4>C — Optimistic Concurrency (Version / CAS)</h4>
+          </div>
           <p>Optimistic control shines when conflicts are rare. With tens of thousands of writers on one row, nearly every attempt conflicts: only one wins per round, so total attempts can grow toward O(N²) and the retries create a <strong>retry storm</strong> that raises latency and still starves some users. Capping retries makes it fail fast, but customers then get errors even while stock remains. <strong>Caveat:</strong> a single conditional statement such as <code>UPDATE ... SET stock = stock - 1 WHERE stock &gt; 0</code> avoids read-modify-write retries and is a good improvement for moderate contention.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Single-Writer Partitioned Command Log ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Single-Writer Partitioned Command Log ✓</h4>
+          </div>
           <p>Implement an asynchronous partitioned command log (like a Kafka topic partitioned by SKU) and handle stock reductions using a single consumer instance per partition, ensuring a single writer per key.</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Redis Lock</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Redis Lock</h4>
+          </div>
           <p>Coordinating infrequent, low-contention critical sections where occasional lock expiry is tolerable or fenced by the downstream system. Not for correctness-critical hot counters.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — SELECT FOR UPDATE</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — SELECT FOR UPDATE</h4>
+          </div>
           <p>Low-to-moderate contention inventory (many SKUs, few concurrent buyers each) where simplicity and strict transactional guarantees matter most.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Optimistic CAS</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Optimistic CAS</h4>
+          </div>
           <p>Workloads where conflicts are rare (for example, user profile edits), so retries are uncommon and cheap.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Single-Writer Log</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Single-Writer Log</h4>
+          </div>
           <p>Extreme write contention on a small set of hot keys (flash sales, ticketing, limited drops) where exact counts and surge tolerance matter more than synchronous confirmation.</p>
         </div>
 

@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">💾</div>
-          <h4>A — Write-Through Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">💾</span>
+            <h4>A — Write-Through Cache</h4>
+          </div>
           <p>Write-through caching writes data to both cache and database simultaneously. This <strong>adds latency to every write</strong> (two write operations instead of one) — exactly the wrong trade-off during peak write hours. It also doesn't reduce database write load at all; every write still hits the DB. The read benefits are real (cache hits are fast), but a write-through cache is optimized for <strong>read-after-write consistency</strong>, not write throughput. For Sarah's peak write surges, this makes the write path slower while only helping reads that hit cached keys.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔪</div>
-          <h4>B — Horizontal Sharding</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔪</span>
+            <h4>B — Horizontal Sharding</h4>
+          </div>
           <p>Sharding is the only option here that genuinely <strong>scales write throughput</strong>, so it's a serious candidate for Sarah's peak problem. But it brings <strong>heavy complexity</strong>: cross-shard queries (a timeline pulling posts from friends on different shards), rebalancing, routing logic, and distributed transactions, and it is hard to undo. It's the right move once load testing shows a single primary can't keep up even after write-path optimization and vertical headroom are exhausted. Until then, replicas plus write batching are cheaper and reversible.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📊</div>
-          <h4>C — Materialized Views</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📊</span>
+            <h4>C — Materialized Views</h4>
+          </div>
           <p>Materialized views precompute expensive read queries, which dramatically speeds up specific read patterns (e.g., 'top posts this week', 'follower count'). But they <strong>only help reads</strong> — they do nothing for write throughput during peak hours. Materialized views must be periodically refreshed to stay current, and the refresh itself is an expensive operation that competes for database resources. They also don't reduce write load during peak hours. They're also rigid: each view is tailored to one query pattern, so new read patterns require new views. Materialized views are a powerful <strong>tactical optimization</strong> for known hot queries, but they're not a scaling architecture — they're a query-level optimization layered on top of one.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Primary-Replica Topology ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Primary-Replica Topology ✓</h4>
+          </div>
           <p>Adopt a primary-replica (master-slave) database topology that routes all writes to a dedicated primary node while distributing read traffic across multiple read replicas.</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Write-Through Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Write-Through Cache</h4>
+          </div>
           <p>Read-after-write consistency is critical (e.g., user profile updates that must be immediately visible) and write volume is moderate. Best used as a complement to primary-replica, not as a standalone scaling strategy.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Horizontal Sharding</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Horizontal Sharding</h4>
+          </div>
           <p>Load testing shows a single primary is saturated by writes even after batching, queuing and vertical scaling, or the dataset no longer fits one node. Works best when data partitions cleanly by a key (user ID, tenant, region) with few cross-shard queries.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Materialized Views</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Materialized Views</h4>
+          </div>
           <p>Specific read queries are expensive (multi-table JOINs, aggregations, ranking algorithms) and their results can tolerate staleness. Ideal for dashboards, analytics, recommendation feeds, and trending content where precomputation is more efficient than real-time computation.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Primary-Replica</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Primary-Replica</h4>
+          </div>
           <p>Read volume is saturating a single database (CPU, I/O or connections), reads tolerate small staleness, and you want a low-risk first step. Pair it with write-path optimization if writes peak separately.</p>
         </div>
 

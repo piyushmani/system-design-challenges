@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🌐</div>
-          <h4>A — Centralized Synchronous Evaluation</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>A — Centralized Synchronous Evaluation</h4>
+          </div>
           <p>Scaling and caching the central service reduces load but not the architectural problem: every request still pays a network round trip, the flag service stays on the critical path, and a regional or global outage still takes the API down. Adding a cache in front also undermines the 'immediate global consistency' claim, since cached entries are stale by definition. <strong>Caveat:</strong> a central call can be acceptable for rarely evaluated, low-QPS back-office paths.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⏱️</div>
-          <h4>B — Local Cache with Polling</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>B — Local Cache with Polling</h4>
+          </div>
           <p>A simple, widely used design and a valid <em>fallback</em> layer: local evaluation fixes latency and availability. The shortfall is propagation: a kill switch takes up to a full poll interval, and thousands of instances polling creates thundering-herd load unless you add jitter, ETags, or a CDN or relay in front. If a few seconds of delay is acceptable and you want the lowest operational cost, it is a legitimate choice, and it is exactly what Option C falls back to when the push connection drops.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🚢</div>
-          <h4>D — Deployment-Time Flags</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🚢</span>
+            <h4>D — Deployment-Time Flags</h4>
+          </div>
           <p>Deployment-time flags couple release speed to your CI/CD pipeline: a rollback takes minutes at best (build, canary, rollout), per-user or percentage targeting is impractical with environment variables, and an emergency kill switch would depend on the very deployment system that may be degraded during an incident. Flag state is also hard to audit across services. <strong>Caveat:</strong> deployment configuration is fine for permanent operational config (not true flags), and canaries complement flags for risky code releases.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Push-Based Local Evaluation ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Push-Based Local Evaluation ✓</h4>
+          </div>
           <p>Push-based local evaluation with fallbacks: a central control plane stores flags and broadcasts changes through a global pub/sub system; each instance runs a local SDK that evaluates flags from an in-</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Central Sync Evaluation</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Central Sync Evaluation</h4>
+          </div>
           <p>Low-QPS administrative or back-office paths where a network call is affordable and instant global consistency matters more than latency.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Local Cache + Polling</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Local Cache + Polling</h4>
+          </div>
           <p>Smaller systems or relaxed propagation needs (tens of seconds is fine), or as the fallback path inside a push-based design.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Push-Based Local Evaluation</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Push-Based Local Evaluation</h4>
+          </div>
           <p>Latency-sensitive, multi-region services that need kill switches in seconds, audit trails, and resilience to control-plane outages.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Deployment-Time Flags</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Deployment-Time Flags</h4>
+          </div>
           <p>Static configuration that rarely changes (not true feature flags), or gating that should be tied to a specific build.</p>
         </div>
 

@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🐘</div>
-          <h4>A — Single Cross-Region ZooKeeper Ensemble</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🐘</span>
+            <h4>A — Single Cross-Region ZooKeeper Ensemble</h4>
+          </div>
           <p>A single ensemble with members in three regions survives the loss of one region (two of three still form a majority), but <strong>every write pays cross-region latency</strong> and all local coordination depends on the WAN. ZooKeeper is built for small coordination metadata, not for the full request path of thousands of services, and a degraded inter-region link slows or stalls everyone. <strong>Caveat:</strong> as the small global coordinator in option C (leader election, a handful of keys), a cross-region ensemble is a perfectly reasonable choice; the issue is using it for everything.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌍</div>
-          <h4>B — Single Global Raft Cluster</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌍</span>
+            <h4>B — Single Global Raft Cluster</h4>
+          </div>
           <p>One global Raft cluster provides strong consistency, but <strong>every commit needs a cross-region majority</strong>, so even local decisions take WAN round trips and are bounded by the slowest link in the quorum. A single global leader also becomes a throughput and latency bottleneck for all regions, and elections after a regional loss take longer across long links. <strong>Caveat:</strong> for low-volume control planes where simplicity matters and writes are rare, this is acceptable; it does not fit a scheduler serving thousands of microservices.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏷️</div>
-          <h4>D — Managed Consensus in a Primary Region</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏷️</span>
+            <h4>D — Managed Consensus in a Primary Region</h4>
+          </div>
           <p>A single primary region is a <strong>single point of failure</strong>. When it is down, no new leader can be elected through the source of truth, and failing over to asynchronously replicated data in another region risks losing recent writes or creating a split-brain. DNS and load-balancer failover are also slow and coarse. <strong>Caveat:</strong> managed consensus services are a good fit <em>inside</em> each region (as the regional clusters in option C) and reduce operational work.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Regional Raft + Global Lease ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Regional Raft + Global Lease ✓</h4>
+          </div>
           <p>Independent Raft clusters per region with local leaders for fast regular requests, plus a lightweight global coordinator (a multi-region lease or a targeted cross-region quorum) used only to elect the</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Cross-Region ZooKeeper</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Cross-Region ZooKeeper</h4>
+          </div>
           <p>As the small global coordinator for leader election, configuration and locks where writes are infrequent and the team already operates ZooKeeper.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Single Global Raft</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Single Global Raft</h4>
+          </div>
           <p>Low-volume global control planes where correctness is paramount, writes are rare, and regional latency does not matter.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Regional Raft + Global Lease</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Regional Raft + Global Lease</h4>
+          </div>
           <p>Multi-region systems with a high volume of local operations and occasional global tasks that need a single leader (schedulers, orchestrators, global config).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Primary Region + Async Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Primary Region + Async Replication</h4>
+          </div>
           <p>Active-passive disaster recovery where one region is the clear home of the system and some data loss on failover is acceptable (RPO greater than zero).</p>
         </div>
 

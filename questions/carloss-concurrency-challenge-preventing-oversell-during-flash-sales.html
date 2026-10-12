@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔐</div>
-          <h4>A — Database Locking</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔐</span>
+            <h4>A — Database Locking</h4>
+          </div>
           <p>This is correct, and for moderate contention it is the simplest answer, especially in single-statement form: <code>UPDATE inventory SET available = available - :qty WHERE sku = :sku AND available &gt;= :qty</code>. The problem is scale: thousands of transactions queue on one row lock, <strong>connections pile up</strong>, latency grows with queue depth, and serializable isolation adds abort-and-retry on top. If the transaction also wraps a payment call, the lock is held for hundreds of milliseconds and throughput collapses. The database also becomes the availability bottleneck for the whole checkout. <strong>Caveat:</strong> keep the atomic conditional update as the final guard even in the recommended design.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧷</div>
-          <h4>B — Distributed Lock (Redlock)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧷</span>
+            <h4>B — Distributed Lock (Redlock)</h4>
+          </div>
           <p>A lock service adds a network hop and a new failure domain to every purchase without removing the underlying contention, because the database still serializes the write. Redlock's safety is also debated: a client pause, clock drift, or network partition can leave two clients believing they hold the lock, so a correct design needs <strong>fencing tokens</strong>, which in turn require the database to enforce the check anyway. <strong>Caveat:</strong> lock leases suit coordination tasks (leader election, cron dedup), not the correctness of a money-and-stock invariant.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔁</div>
-          <h4>D — Optimistic Concurrency</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔁</span>
+            <h4>D — Optimistic Concurrency</h4>
+          </div>
           <p>Optimistic control shines when conflicts are rare. In a flash sale every buyer reads the same version, so <strong>one wins and the rest fail and retry</strong>, producing retry storms: wasted reads, backoff-induced latency, and starvation for unlucky clients. Throughput on a hot row can end up lower than with plain locking. <strong>Caveat:</strong> it is the right tool for low-contention, longer-lived edits such as a user editing a profile.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Per-SKU Serialization via Partitioned Queue ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Per-SKU Serialization via Partitioned Queue ✓</h4>
+          </div>
           <p>A durable, partitioned command queue keyed by SKU (for example Kafka) with a single consumer per partition applying inventory decrements sequentially and publishing state-update events.</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Database Locking</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Database Locking</h4>
+          </div>
           <p>Moderate contention, simple checkout flows, a single database, and a team that wants the simplest correct solution. Use the single-statement conditional UPDATE and keep transactions short.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Distributed Lock</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Distributed Lock</h4>
+          </div>
           <p>Coordinating work that is not a data invariant (leader election, scheduled-job dedupe), with fencing tokens if a lock is ever used for correctness.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Per-SKU Partitioned Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Per-SKU Partitioned Queue</h4>
+          </div>
           <p>Extreme hot-SKU contention (flash sales, drops, ticketing) where durability, observability, and load shedding matter and asynchronous results are acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Optimistic Concurrency</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Optimistic Concurrency</h4>
+          </div>
           <p>Low-contention, long-running edits (carts, profiles, documents) where conflicts are rare and retrying is cheap.</p>
         </div>
 

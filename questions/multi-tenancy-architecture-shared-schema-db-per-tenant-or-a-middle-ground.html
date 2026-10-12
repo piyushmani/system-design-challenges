@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🏢</div>
-          <h4>A — Single Shared Schema, One Cluster</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏢</span>
+            <h4>A — Single Shared Schema, One Cluster</h4>
+          </div>
           <p>The cheapest and simplest model, and a perfectly good <em>pool tier</em>. As the whole answer it fails the enterprise requirements: one cluster is one blast radius, a single heavy tenant can degrade everyone (noisy neighbor), restoring one tenant means extracting rows from a shared backup, and dedicated scaling is impossible. A single cluster also has a vertical scaling ceiling. <strong>Caveat:</strong> for a product with only small tenants and no isolation contracts, this is the right place to start.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>B — Database-per-Tenant for Everyone</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>B — Database-per-Tenant for Everyone</h4>
+          </div>
           <p>It gives excellent isolation and simple per-tenant backup/restore, but at 10,000+ tenants it is <strong>operationally and financially heavy</strong>: thousands of databases to provision, patch, migrate, monitor, and back up, connection-pool pressure, catalog and memory overhead, and idle capacity paid for tiny tenants. Onboarding becomes a provisioning workflow instead of an insert. <strong>Caveat:</strong> reasonable when every tenant is large, regulated, or paying enough to justify dedicated infrastructure.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧩</div>
-          <h4>D — Sharded Shared Schema</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>D — Sharded Shared Schema</h4>
+          </div>
           <p>Hashing tenants across several shared clusters scales the pool horizontally and shrinks the blast radius per cluster, but every tenant is still in a shared database. Enterprises still lack isolation, custom restore, and dedicated scaling, and hash-based placement makes it awkward to move one tenant out or rebalance a heavy one. Re-sharding adds its own operational risk. <strong>Caveat:</strong> this is a <em>scaling technique for the pool tier</em>, and it combines well with option C once the pool outgrows one cluster.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Hybrid Tiering (Pooled Tier + Siloed Enterprise Tier) ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Hybrid Tiering (Pooled Tier + Siloed Enterprise Tier) ✓</h4>
+          </div>
           <p>Implement a hybrid tiering system: initiate the majority of tenants in a shared schema cluster for cost-effective and straightforward onboarding, but automatically upgrade large or enterprise tenants</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Single Shared Schema</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Shared Schema</h4>
+          </div>
           <p>Early-stage product, many similar small tenants, no isolation or per-tenant restore requirements, and a team that needs to move fast.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — DB-per-Tenant for All</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — DB-per-Tenant for All</h4>
+          </div>
           <p>A modest number of large, regulated tenants where every customer pays for dedicated infrastructure, or strict data-residency rules apply to all of them.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Hybrid Tiering</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hybrid Tiering</h4>
+          </div>
           <p>Tenant sizes and requirements vary widely: a large long tail plus a few customers with isolation, SLA, or compliance needs. Requires investment in routing and migration tooling.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Sharded Shared Schema</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Sharded Shared Schema</h4>
+          </div>
           <p>A very large pool of similar tenants that outgrows one cluster, with no strong per-tenant isolation needs. Often used as the scaling mechanism inside the pooled tier.</p>
         </div>
 

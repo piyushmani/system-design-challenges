@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔑</div>
-          <h4>A — Consistent Hashing, In-Memory Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔑</span>
+            <h4>A — Consistent Hashing, In-Memory Only</h4>
+          </div>
           <p>This gives excellent point-lookup latency, but range and top-N queries must scatter to every partition and merge, so cost and tail latency grow with shard count (the slowest shard sets the response time). Hand-maintained custom aggregates drift over time. In-memory storage with asynchronous replication can also lose recent writes on failover, which matters for sessions. <strong>Caveat:</strong> as the primary store for sessions it is fine, it just lacks an efficient answer for ordered queries.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌲</div>
-          <h4>B — Range-Partitioned with Leader Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌲</span>
+            <h4>B — Range-Partitioned with Leader Replication</h4>
+          </div>
           <p>Ranges and point lookups both work, and strong consistency is attractive. But the leader-per-range model sends writes (and strongly consistent reads) to one replica, which caps hot-range throughput and adds cross-region latency for far-away readers. Monotonic or skewed keys, such as time-based IDs or top-score ranges, concentrate load on one range. Millions of lookups per second also strain leaders unless follower reads are allowed, which relaxes the consistency it was chosen for. <strong>Caveat:</strong> a strong fit for mostly regional, range-heavy workloads.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌐</div>
-          <h4>D — Single Global Consensus-Backed Ordered Tree</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>D — Single Global Consensus-Backed Ordered Tree</h4>
+          </div>
           <p>One globally ordered, strongly consistent structure puts consensus round trips (often across regions) on reads and writes. Tail latency for session lookups suffers, cost rises, and a regional outage can block progress. A single source of truth is stricter than a leaderboard needs. Systems such as Spanner or CockroachDB actually split data into many consensus groups rather than one global tree, which is the opposite of what this option describes. <strong>Caveat:</strong> justified when every read must reflect the latest committed write globally, as in financial ledgers.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Hash-Partitioned Primary + Derived Ordered Index ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Hash-Partitioned Primary + Derived Ordered Index ✓</h4>
+          </div>
           <p>Adopt a hybrid model: utilize primary hash-partitioned databases to ensure blazing fast point lookups, and complement them with a separately managed distributed ordered index (like an external search</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Consistent Hashing, In-Memory</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Consistent Hashing, In-Memory</h4>
+          </div>
           <p>Pure key-value workloads (sessions, caches) where range queries are rare or answered elsewhere.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Range-Partitioned, Leader per Range</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Range-Partitioned, Leader per Range</h4>
+          </div>
           <p>Range-heavy workloads with mostly regional access and a need for strong consistency, such as ordered ledgers or time-series by key range.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Hash Primary + Ordered Index</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hash Primary + Ordered Index</h4>
+          </div>
           <p>Mixed point-lookup plus top-N workloads at global scale, where leaderboard freshness can lag by a second or two.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Global Consensus Tree</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Global Consensus Tree</h4>
+          </div>
           <p>Small, correctness-critical datasets that need one globally linearizable order and can afford cross-region latency.</p>
         </div>
 

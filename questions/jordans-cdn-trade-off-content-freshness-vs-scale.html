@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🧷</div>
-          <h4>A — Long TTLs + URL Versioning</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧷</span>
+            <h4>A — Long TTLs + URL Versioning</h4>
+          </div>
           <p>Fingerprinted URLs are the right tool for <strong>immutable assets</strong> such as images, CSS, and JS. For product pages they fail: canonical URLs, bookmarks, search rankings, and inbound links need a stable address, and changing the URL on every price update is impractical. Hour-long TTLs with no invalidation also cannot meet the few-seconds freshness target for prices and stock. <strong>Caveat:</strong> use it for static assets alongside option C for the HTML and dynamic data.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⏱️</div>
-          <h4>B — Very Short Global TTLs, No Revalidation or Purge</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>B — Very Short Global TTLs, No Revalidation or Purge</h4>
+          </div>
           <p>Freshness is easy, scale is not. With, say, 200 edge locations and a 5-second TTL, a single hot URL can generate about 40 origin requests per second <em>just from expiry</em>, multiplied across popular products. Without stale-while-revalidate, each expiry makes a user wait for the origin, so p99 latency spikes and concurrent misses cause a thundering herd, which the origin explicitly cannot handle. <strong>Caveat:</strong> short TTLs are acceptable for a few small dynamic endpoints when they are protected by a shield and stale-while-revalidate, which is precisely what option C adds.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📡</div>
-          <h4>D — Synchronous Push to Every Edge</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📡</span>
+            <h4>D — Synchronous Push to Every Edge</h4>
+          </div>
           <p>Making edges the system of record and updating hundreds of locations synchronously on every write couples write latency and availability to the slowest or failed POP. Mainstream CDNs do not offer synchronous global replication as a service, and consistency during partial failures becomes a hard distributed-systems problem. It also bloats edges with data that may never be requested. <strong>Caveat:</strong> edge key-value stores can hold small hot datasets with <em>eventual</em> replication, but that is a different guarantee from synchronous push.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Moderate TTL + stale-while-revalidate + Origin Shield + Surrogate-Key Purge ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Moderate TTL + stale-while-revalidate + Origin Shield + Surrogate-Key Purge ✓</h4>
+          </div>
           <p>Apply moderate TTLs combined with cache-control directives that include stale-while-revalidate at the edges. Introduce an origin shield to aggregate revalidations, utilize conditional GETs (ETag/If-Mo</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Long TTL + URL Versioning</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Long TTL + URL Versioning</h4>
+          </div>
           <p>Immutable assets (images, CSS, JS, fonts) where each change ships under a new fingerprinted URL.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Very Short TTLs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Very Short TTLs</h4>
+          </div>
           <p>A tiny number of cheap-to-render dynamic endpoints with low traffic, where origin capacity is comfortably sufficient.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — SWR + Shield + Surrogate Purge</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — SWR + Shield + Surrogate Purge</h4>
+          </div>
           <p>Mostly cacheable pages with a small volatile component, spiky traffic, a fragile origin, and a need for near-immediate updates on specific events.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Synchronous Push to Edges</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Synchronous Push to Edges</h4>
+          </div>
           <p>Rarely justified. Consider eventually consistent edge key-value stores for small hot configuration data, not synchronous replication of a catalog.</p>
         </div>
 

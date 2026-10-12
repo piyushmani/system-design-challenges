@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>A — Distributed 2PC (XA)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Distributed 2PC (XA)</h4>
+          </div>
           <p>2PC is a <strong>blocking protocol</strong>: if the coordinator fails between prepare and commit, participants stay <em>in-doubt</em> and hold locks. Latency is at least two round trips gated by the slowest participant, which is painful across regions at thousands of requests per second. Payment gateways and notification providers generally don't support XA at all. <strong>Caveat:</strong> 2PC is acceptable inside a single data center or database cluster with XA-capable resources and short transactions, but that is not this system.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📣</div>
-          <h4>C — Choreographed SAGA</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📣</span>
+            <h4>C — Choreographed SAGA</h4>
+          </div>
           <p>Choreography removes the single coordinator, but the booking logic becomes <strong>implicit</strong>: spread across consumers, hard to reason about, and hard to answer 'what is the status of this booking?'. Timeouts, ordering and compensation sequencing must be re-implemented in each service, and adding a step risks cyclic dependencies. <strong>Caveat:</strong> it works well for short flows with two or three loosely coupled participants and no strong need for a single status view.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>D — Centralized Database / Distributed Locks</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>D — Centralized Database / Distributed Locks</h4>
+          </div>
           <p>Pulling all data into one database destroys <strong>service autonomy</strong> and creates a global single point of failure that can't be active in multiple regions. It also doesn't cover the side effects that matter most: a database rollback does not un-charge a credit card or unsend an email. Distributed locks on a shared DB add lease-expiry and fencing problems. <strong>Caveat:</strong> a single database is a legitimate choice for a small system or a modular monolith, where it is a deliberate trade-off rather than an escape from coordination.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Orchestrated SAGA with Outbox ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Orchestrated SAGA with Outbox ✓</h4>
+          </div>
           <p>Develop an orchestrated SAGA pattern: utilize a central coordinator to trigger each phase (inventory reservation, payment processing, state persistence, notification dispatch). Services should use the</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — 2PC (XA)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — 2PC (XA)</h4>
+          </div>
           <p>All participants are XA-capable resources inside one trust domain and data center (for example, two databases behind one application), transactions are short, and throughput is modest.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Orchestrated SAGA</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Orchestrated SAGA</h4>
+          </div>
           <p>Multi-step, multi-service business processes with external side effects, a need for a single status and audit view, and requirements for a definite outcome with compensation.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Choreographed SAGA</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Choreographed SAGA</h4>
+          </div>
           <p>Short flows with few participants, highly autonomous teams, and no requirement for a central status view or complex timeout handling.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Central DB / Locks</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Central DB / Locks</h4>
+          </div>
           <p>A small system or modular monolith where services are not truly independent and a single database is an acceptable, deliberate coupling.</p>
         </div>
 

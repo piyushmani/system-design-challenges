@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🎟️</div>
-          <h4>A — Global Centralized Sequencer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🎟️</span>
+            <h4>A — Global Centralized Sequencer</h4>
+          </div>
           <p>A total order across all SKUs is <strong>stronger than the invariant requires</strong>, and you pay for it: every event funnels through one leader, which becomes the throughput ceiling, a latency hop, and a single point of failure. Failover of that leader stalls the whole platform. <strong>Caveat:</strong> a global sequence is appropriate when operations genuinely span arbitrary entities and need one timeline (for example, a ledger), but inventory updates on independent SKUs do not.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔀</div>
-          <h4>C — CRDT-Based Eventual Convergence</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>C — CRDT-Based Eventual Convergence</h4>
+          </div>
           <p>A standard counter CRDT converges, but convergence does not <strong>enforce a lower bound</strong>. Two replicas can each decrement the last unit and both accept the sale, so overselling is detected only after the fact and repaired by compensation (apologies, cancellations, refunds). That conflicts with a requirement to <em>eliminate</em> overselling. <strong>Caveat:</strong> bounded or escrow-style counters can enforce limits by pre-allocating stock rights to replicas, but that is a coordinated design, and it is not what 'concurrent decrements plus later reconciliation' describes.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏛️</div>
-          <h4>D — Synchronous Global Consensus</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>D — Synchronous Global Consensus</h4>
+          </div>
           <p>Consensus is a good mechanism for ordering writes within a replica group, but running it <strong>across the entire cluster for every update</strong> puts a quorum round trip (often cross-region) on the critical path of every sale and funnels all updates through one consensus group. Latency and availability suffer, and throughput is capped by that group. <strong>Caveat:</strong> consensus is still useful <em>inside</em> option B, since each partition can be replicated with Raft-style quorum commits. The problem is the global scope, not consensus itself.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Partitioned Per-SKU Ordering ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Partitioned Per-SKU Ordering ✓</h4>
+          </div>
           <p>Partitioned per-SKU ordering: split inventory by SKU (or small groups of SKUs) and use a partitioned log (one partition per shard) to guarantee strong ordering within each shard. For cross-SKU orders,</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Global Centralized Sequencer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Global Centralized Sequencer</h4>
+          </div>
           <p>Operations that must be totally ordered across all entities (such as a financial ledger or a single audit timeline) and where moderate throughput is acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Partitioned Per-SKU Ordering</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Partitioned Per-SKU Ordering</h4>
+          </div>
           <p>A per-entity invariant (stock, balance per account) with high aggregate throughput, where cross-entity operations are handled by sagas or reservations.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — CRDT Eventual Convergence</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — CRDT Eventual Convergence</h4>
+          </div>
           <p>Counters or sets where temporary divergence and later repair are acceptable, such as likes, view counts, or collaborative state. Not for hard lower bounds.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Synchronous Global Consensus</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Synchronous Global Consensus</h4>
+          </div>
           <p>Small, low-volume, high-value state that must be linearizable cluster-wide, such as cluster metadata, leader election, or configuration.</p>
         </div>
 

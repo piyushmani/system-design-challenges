@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🏛️</div>
-          <h4>B — One Global Multi-Paxos Group</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>B — One Global Multi-Paxos Group</h4>
+          </div>
           <p>Paxos is just as safe as Raft, but adding nodes to one consensus group does <em>not</em> add throughput: every write still passes through one leader and one log and needs a larger quorum, which <strong>increases</strong> latency and failure surface across regions. Splitting logs without sharding the data does not change that. Multi-Paxos also has no single canonical specification, so implementations vary and operational tooling is thinner. <strong>Caveat:</strong> Paxos variants (Flexible Paxos, EPaxos) can reduce WAN latency in specialized designs, but they are harder to build and operate.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🕸️</div>
-          <h4>C — Leaderless Dynamo-Style Quorums</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>C — Leaderless Dynamo-Style Quorums</h4>
+          </div>
           <p>Eventual consistency with last-write-wins or CRDTs <strong>violates the stated linearizability requirement</strong>. Even with R + W &gt; N, sloppy quorums, concurrent writes, and clock skew can return stale values or lose updates, which is unacceptable for feature flags and registries where inconsistency causes outages. A strong mode for a subset of keys means running two systems. <strong>Caveat:</strong> for non-critical, high-volume data such as telemetry or caches, leaderless designs are a good fit.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔀</div>
-          <h4>D — Raft Behind a Central Proxy</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>D — Raft Behind a Central Proxy</h4>
+          </div>
           <p>A proxy does not scale consensus; writes still go to one leader, and the proxy adds a hop and a new failure domain that must itself be highly available. Serving reads from a proxy cache is not linearizable, and proxy-based leader tracking duplicates what client libraries already do. <strong>Caveat:</strong> a thin, stateless routing layer (or a smart client) in front of shards is reasonable; a stateful caching proxy that claims linearizability is not.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>A — Raft Groups with Cross-Region Quorums ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Raft Groups with Cross-Region Quorums ✓</h4>
+          </div>
           <p>Partition the keyspace across several independent Raft groups containing 3 to 5 nodes, locating replicas in every region with a per-shard leader. Direct reads and writes for specific keys to the corre</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Sharded Raft Groups</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sharded Raft Groups</h4>
+          </div>
           <p>Linearizable metadata (registry, flags, locks, leader election) across regions with modest write rates, strong tooling needs, and a future scale-out path.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Global Multi-Paxos</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Global Multi-Paxos</h4>
+          </div>
           <p>Specialized systems with deep consensus expertise or an existing Multi-Paxos platform; not recommended as a greenfield choice here.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Leaderless Quorums</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Leaderless Quorums</h4>
+          </div>
           <p>High-volume, availability-first data that tolerates staleness (shopping carts, telemetry, session caches).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Raft + Central Proxy</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Raft + Central Proxy</h4>
+          </div>
           <p>As a thin stateless router or client-side library that hides leader discovery; not as a place to cache or to claim consistency.</p>
         </div>
 

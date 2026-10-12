@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📇</div>
-          <h4>A — Composite and Covering Indexes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📇</span>
+            <h4>A — Composite and Covering Indexes</h4>
+          </div>
           <p>Indexes help read paths but hurt the write path: every index adds write amplification, and with 5,000 writes per second and write latency already rising, more indexes make the root problem worse. Aggregating a time window still reads and groups many rows whatever the index shape, and covering indexes duplicate data. Indexing shines for selective queries; these queries aggregate large ranges. <strong>Caveat:</strong> a modest, targeted index plus time partitioning is the right first step for a small tenant base with limited data volume.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧩</div>
-          <h4>B — Tenant Sharding with Per-Tenant Indexes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>B — Tenant Sharding with Per-Tenant Indexes</h4>
+          </div>
           <p>Per-tenant partial indexes or schemas don't scale operationally: thousands of tenants produce thousands of indexes or tables, which slows planning, bloats the catalog, complicates migrations and vacuum, and turns onboarding into a DDL operation. Tenant sharding itself is legitimate (Citus, for instance, distributes tables by tenant_id), but it spreads the same row-store scan costs across more nodes at much higher operational cost and does not change the OLTP/OLAP mismatch. Large tenants also become hot shards.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔄</div>
-          <h4>C — Postgres Materialized Views / Pre-Aggregates</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>C — Postgres Materialized Views / Pre-Aggregates</h4>
+          </div>
           <p>Pre-aggregation serves known dashboards quickly, but the query pattern includes <strong>various dimensions</strong> with filtering and grouping, so each new dimension combination needs another rollup and the number of rollups explodes. Refresh strategies are costly: full refreshes are heavy, and triggers or incremental maintenance (such as pg_ivm) add write overhead to a system whose writes are already slow. Everything stays on the primary, so reads and writes keep competing. <strong>Caveat:</strong> for a small, fixed set of dashboards, rollups can be enough and cheap.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Dedicated OLAP Store via CDC ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Dedicated OLAP Store via CDC ✓</h4>
+          </div>
           <p>Move analytics reads to a dedicated OLAP database (ClickHouse or a managed analytics service) fed by asynchronous CDC or streaming (such as Debezium), keep PostgreSQL for OLTP writes, and serve analyt</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Composite / Covering Indexes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Composite / Covering Indexes</h4>
+          </div>
           <p>Small to moderate data volumes, selective queries, and profiling that shows missing or ineffective indexes; the cheapest first step.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Tenant Sharding + Per-Tenant Indexes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Tenant Sharding + Per-Tenant Indexes</h4>
+          </div>
           <p>Very large multi-tenant OLTP workloads where tenants are isolated and mostly queried by point lookups and row-level operations (for example with Citus), not heavy aggregation.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Materialized Views / Pre-Aggregates</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Materialized Views / Pre-Aggregates</h4>
+          </div>
           <p>A fixed, small set of dashboards or KPIs where query shapes are known in advance and a few seconds of staleness is fine.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — OLAP Store via CDC</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — OLAP Store via CDC</h4>
+          </div>
           <p>High write rates with time-window aggregation across flexible dimensions, strict latency SLOs, and a team able to run (or buy) an analytics store.</p>
         </div>
 

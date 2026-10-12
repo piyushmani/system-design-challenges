@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📦</div>
-          <h4>A — Pre-Pull Everything on Every Node</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📦</span>
+            <h4>A — Pre-Pull Everything on Every Node</h4>
+          </div>
           <p>Pre-pulling gives the fastest possible start for images already on the node, but pre-pulling <strong>every</strong> image on <strong>every</strong> node does not scale: with dozens of services at 200–800 MB it consumes tens to hundreds of GB of disk per node, bloats node bootstrap, and triggers kubelet image garbage collection under disk pressure, which evicts the very layers you cached. It does not help <em>new nodes</em> created by the autoscaler (they start empty), and every release re-pulls everything fleet-wide, creating its own thundering herd against the registry. <strong>Caveat:</strong> pre-pulling a <em>small, targeted</em> set is exactly the right tool, which is why it appears inside Option B.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌊</div>
-          <h4>C — Lazy Image Streaming</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌊</span>
+            <h4>C — Lazy Image Streaming</h4>
+          </div>
           <p>Nydus and stargz/eStargz snapshotters let a container start after fetching only the chunks it needs, which can cut start time substantially for large images that read little at boot. But it does not fix the availability problem: the registry stays on the runtime path, so an outage can stall running containers on remote reads. It also requires converting images, installing and tuning a snapshotter on every node, and extra observability for remote reads, and apps that read most of their files at startup gain little. <strong>Caveat:</strong> it pairs well with mirrors for very large images and is worth piloting after the basics are in place.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>D — Merge Images / Monolithic Image per Region</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>D — Merge Images / Monolithic Image per Region</h4>
+          </div>
           <p>Combining microservices into larger images <strong>makes each pull bigger, not smaller</strong>, and couples the deployment, scaling, and blast radius of unrelated services, which undoes the benefits of microservices. A monolithic image per region does not remove the registry dependency; it concentrates it. The real fix for image size is slimming each image (multi-stage builds, distroless bases, shared base layers that are cached across services), not merging services.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Regional Mirrors + Targeted Pre-Warming ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Regional Mirrors + Targeted Pre-Warming ✓</h4>
+          </div>
           <p>Deploy regional registry mirrors (read-through caches or replicated registries) for availability, and pre-warm only the most latency-sensitive services; use immutable tags and automated warm-up for th</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Pre-Pull Everything</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Pre-Pull Everything</h4>
+          </div>
           <p>Small, fixed fleets with a handful of images, or air-gapped nodes with no registry reachable. Also a good model for a very small tier-1 set (as part of B).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Mirrors + Targeted Pre-Warm</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Mirrors + Targeted Pre-Warm</h4>
+          </div>
           <p>Multi-region Kubernetes with many services and surge-driven autoscaling that needs registry-outage tolerance with bounded operational overhead. The default recommendation here.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Lazy Streaming</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Lazy Streaming</h4>
+          </div>
           <p>Very large images (multiple GB, such as ML or data tooling) where containers read only a fraction of files at startup, once mirrors are in place and an image conversion pipeline is acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Merge Images</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Merge Images</h4>
+          </div>
           <p>Rarely appropriate. Consider merging only when separate services are always deployed and scaled together, in which case they were arguably one service.</p>
         </div>
 

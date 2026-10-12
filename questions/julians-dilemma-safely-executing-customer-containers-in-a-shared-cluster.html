@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>A — Kubernetes-Native Hardening Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Kubernetes-Native Hardening Only</h4>
+          </div>
           <p>Namespaces, RBAC, NetworkPolicies, Pod Security, seccomp/AppArmor, and non-root users are necessary hygiene, but they all share <strong>one host kernel</strong>. A single kernel vulnerability (container escapes through runc, overlayfs, io_uring, and netfilter bugs have all occurred in practice) lets a malicious plugin break out and reach every tenant on the node. Hardening reduces the attack surface; it does not change the trust boundary. For <em>untrusted</em> code it is not sufficient on its own. <strong>Caveat:</strong> these controls are still required <em>inside</em> the chosen design, and are enough for trusted first-party workloads.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🛡️</div>
-          <h4>B — gVisor for All Customer Pods</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🛡️</span>
+            <h4>B — gVisor for All Customer Pods</h4>
+          </div>
           <p>gVisor is a strong middle option: its user-space kernel intercepts syscalls and exposes the host kernel through a much narrower interface, with startup close to plain containers. But it still depends on the host kernel for the remaining syscalls, has incomplete syscall and feature coverage (some plugins fail or behave differently), and can add noticeable overhead for syscall-heavy, network-heavy, or file-I/O-heavy workloads, so the option's assumption of container-like resource use is optimistic. It also lacks a hardware boundary. <strong>Caveat:</strong> a good fit for a medium-risk tier, or where nested virtualization is not available.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏰</div>
-          <h4>D — Dedicated Cluster per Tenant</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏰</span>
+            <h4>D — Dedicated Cluster per Tenant</h4>
+          </div>
           <p>Separate clusters give the strongest blast-radius separation, including the control plane, but at significant cost: control-plane fees, idle node capacity, per-cluster upgrades, policy drift, and fleet-level observability that grows linearly with tenant count. It conflicts directly with the team's goal of lowering cost and operational burden. <strong>Caveat:</strong> reserve it for a small number of tenants with compliance or contractual needs, using the same automation; it complements C rather than replacing it.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — MicroVM Sandboxing (Firecracker / Kata) ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — MicroVM Sandboxing (Firecracker / Kata) ✓</h4>
+          </div>
           <p>Run untrusted workloads in lightweight VMs (Firecracker or Kata Containers) via RuntimeClass on dedicated node pools with a shared control plane, using cached images and pre-warmed VMs to reduce start</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — K8s Hardening Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — K8s Hardening Only</h4>
+          </div>
           <p>Trusted workloads from your own teams or vetted vendors, where you control the code and supply chain. Always the baseline, never the only layer for untrusted code.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — gVisor</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — gVisor</h4>
+          </div>
           <p>Medium-risk workloads with simple syscall profiles, or environments where nested virtualization is unavailable but stronger-than-container isolation is wanted.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — MicroVMs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — MicroVMs</h4>
+          </div>
           <p>Untrusted or unverified third-party code in a shared cluster (plugins, CI runners, notebooks, function platforms) where kernel exploits are in the threat model.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Cluster per Tenant</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Cluster per Tenant</h4>
+          </div>
           <p>Regulated tenants, contractual isolation requirements, or customers needing cluster-level customization, where the cost can be passed through.</p>
         </div>
 

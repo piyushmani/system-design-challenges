@@ -1476,13 +1476,9 @@ body::after {
 .page {
   position: relative;
   z-index: 1;
-  max-width: 860px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 2rem 1.25rem 4rem;
-}
-
-.page.home {
-  max-width: 1200px;
 }
 
 /* ── Top Bar ───────────────────────────────────── */
@@ -1985,13 +1981,32 @@ body::after {
   border-color: var(--accent);
 }
 
-.strategy-item .s-icon {
-  font-size: 1.4rem;
+.strategy-header {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
   margin-bottom: .45rem;
 }
 
+.strategy-header .s-icon,
+.strategy-item .s-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-bottom: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.strategy-header h4 {
+  font-size: .84rem;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.35;
+}
+
 .strategy-item h4 {
-  font-size: .82rem;
+  font-size: .84rem;
   font-weight: 700;
   margin-bottom: .3rem;
 }
@@ -2000,6 +2015,7 @@ body::after {
   font-size: .76rem;
   color: var(--text-dim);
   line-height: 1.6;
+  margin: 0;
 }
 
 /* ── Verdict ───────────────────────────────────── */

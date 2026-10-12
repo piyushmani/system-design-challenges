@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🌍</div>
-          <h4>A — Single Global Redis (Cache-Aside)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌍</span>
+            <h4>A — Single Global Redis (Cache-Aside)</h4>
+          </div>
           <p>This keeps the exact architecture that created the problem: <strong>every distant user still pays an intercontinental round trip</strong> on every read, the primary region remains a single point of failure with a large blast radius, and a long TTL directly lengthens how long stale data can persist if an invalidation is missed. It is simple, but it fails both the latency and the resilience goals. <strong>Caveat:</strong> fine for single-region products.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">✍️</div>
-          <h4>B — Multi-Master Write-Through</h4>
+          <div class="strategy-header">
+            <span class="s-icon">✍️</span>
+            <h4>B — Multi-Master Write-Through</h4>
+          </div>
           <p>Writing synchronously to both the database and a cache is a <strong>dual-write</strong>: if one succeeds and the other fails, they diverge, and failures leave stale or missing entries. Cross-region cache replication (for example active-active Redis) is generally <strong>asynchronous</strong>, so the claim of 'strong consistency globally' does not hold, and concurrent updates in different regions need conflict resolution. It also makes writes wait on the slowest cache region. <strong>Caveat:</strong> write-through within a single region is a useful local optimization.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🛰️</div>
-          <h4>D — Global CDN / Edge Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🛰️</span>
+            <h4>D — Global CDN / Edge Cache</h4>
+          </div>
           <p>A CDN gives excellent global latency, but with <strong>long TTLs the staleness window is only as short as the purge is reliable</strong>: a missed or slow purge leaves stale profiles at the edge for the full TTL, and purge propagation times vary by provider. Profile data with per-user settings may also be private, which makes shared edge caching unsafe unless responses are carefully keyed and authorized. <strong>Caveat:</strong> an excellent complement for public, immutable assets such as content-addressed avatar images, with short TTLs for public profile fields.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Regional Caches with Event-Driven Invalidation ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Regional Caches with Event-Driven Invalidation ✓</h4>
+          </div>
           <p>Add local caches in each region (regional Redis clusters or in-memory near-caches) using cache-aside for reads. On every profile update, publish an invalidation or update event to a reliable broker (K</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Single Global Redis</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Global Redis</h4>
+          </div>
           <p>Single-region or low-traffic applications where all users are near the cache and a regional outage is acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Multi-Master Write-Through</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Multi-Master Write-Through</h4>
+          </div>
           <p>A single region (or tightly clustered regions) where write-through simplifies local read-after-write, paired with a message-based fix for cross-region propagation.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Regional Caches + Events</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Regional Caches + Events</h4>
+          </div>
           <p>Read-heavy, rarely updated data served worldwide, with a seconds-level freshness target and resilience requirements per region.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — CDN with Purge</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — CDN with Purge</h4>
+          </div>
           <p>Public, cacheable content (static assets, content-addressed images, public profile fields) with short TTLs or immutable URLs.</p>
         </div>
 

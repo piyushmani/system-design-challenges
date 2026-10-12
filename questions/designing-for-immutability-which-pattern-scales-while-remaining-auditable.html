@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🪣</div>
-          <h4>B — Versioned S3 Objects + SQL Pointer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🪣</span>
+            <h4>B — Versioned S3 Objects + SQL Pointer</h4>
+          </div>
           <p>Versioning gives immutable history, but this is a <strong>dual write</strong>: S3 and SQL are updated without a shared transaction, so a failure between the two leaves history without a pointer or a pointer without history. Synchronous S3 writes also add latency to every state change and tie write availability to two systems. The SQL row is still updated in place, so the current state remains mutable, and S3 object versions are an archive rather than an ordered, queryable event stream, which makes replay and projection building painful. <strong>Caveat:</strong> S3 with Object Lock is an excellent <em>archive tier</em> for the event log in the recommended design.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔄</div>
-          <h4>C — In-Place Updates + Trigger Audit</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>C — In-Place Updates + Trigger Audit</h4>
+          </div>
           <p>This fails the 'immutable' requirement: state is overwritten in place, and the audit table is just another mutable table unless it is locked down separately. Triggers add write amplification on the hottest path during sales and hold row locks longer, and diffs record <em>what</em> changed but not <em>why</em>. Read replicas scale reads, but replica lag produces stale reads that are hard to reason about, and the single primary remains the write ceiling. <strong>Caveat:</strong> for a small system with modest traffic and light audit needs, it is the simplest to operate.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌊</div>
-          <h4>D — Kafka + Compacted Topic</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌊</span>
+            <h4>D — Kafka + Compacted Topic</h4>
+          </div>
           <p>Kafka is a great <em>transport</em> but a poor system of record here. Log compaction <strong>discards older records per key</strong>, so the compacted topic is by definition not an audit trail, and auditability depends entirely on a separate archive pipeline. Kafka has no native point-lookup API, so 'synchronous reads' need an additional state store (for example, Kafka Streams interactive queries) with its own rebalancing and recovery issues, and there is no per-aggregate optimistic concurrency on append. <strong>Caveat:</strong> Kafka is the right backbone for distributing events <em>from</em> the event store to projectors, which is exactly how it is used in the recommended design.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>A — Event Sourcing + CQRS ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Event Sourcing + CQRS ✓</h4>
+          </div>
           <p>Event sourcing with an append-only event store and CQRS: asynchronous materialized read views, periodic snapshots, and idempotent consumers.</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Event Sourcing + CQRS</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Event Sourcing + CQRS</h4>
+          </div>
           <p>Strict audit and immutability requirements, order lifecycles with many state transitions, several read shapes, replay or what-if analysis, and traffic spikes where read and write scaling differ.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — S3 Versions + SQL Pointer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — S3 Versions + SQL Pointer</h4>
+          </div>
           <p>Low-write systems needing cheap long-term retention of document-like versions (contracts, uploads) that can tolerate occasional reconciliation between the store and the index.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — In-Place + Trigger Audit</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — In-Place + Trigger Audit</h4>
+          </div>
           <p>Simple CRUD systems with moderate traffic where audit means 'who changed what' and tampering risk is low. A trigger-based audit table or temporal tables are enough.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Kafka + Compacted Topic</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Kafka + Compacted Topic</h4>
+          </div>
           <p>Streaming-first platforms where latest-state-per-key is the main need (changelogs, caches) and a separate system of record handles history.</p>
         </div>
 

@@ -102,23 +102,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>A — Strict Linearizable Consistency</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Strict Linearizable Consistency</h4>
+          </div>
           <p>Linearizable (CP) consistency requires <strong>distributed consensus</strong> (e.g., Raft, Paxos) on every write. During a network partition, nodes that can't reach quorum must <strong>refuse writes entirely</strong> — meaning users in the affected region simply cannot send messages. For a social messaging app, an unavailable system is far worse than a briefly delayed message. Additionally, consensus rounds add <strong>cross-datacenter latency</strong> (often 100–300 ms per write), which kills the real-time feel. Strong consistency is critical for banking ledgers and inventory systems, but it's the wrong trade-off for chat.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔄</div>
-          <h4>B — Eventual Consistency (Generic)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>B — Eventual Consistency (Generic)</h4>
+          </div>
           <p>Choosing generic eventual consistency without specifying HOW conflicts resolve is <strong>directionally correct but architecturally incomplete</strong>. It ensures availability during partitions but says nothing about resolving concurrent edits (e.g., two admins renaming a group chat simultaneously). Without a structured resolution strategy, you're left implementing ad-hoc merge logic that's <strong>error-prone, hard to test, and inconsistent across services</strong>.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⚠️</div>
-          <h4>D — Eventual Consistency (Accept Conflicts)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚠️</span>
+            <h4>D — Eventual Consistency (Accept Conflicts)</h4>
+          </div>
           <p>This option explicitly <strong>accepts unresolved conflicts</strong> as a design choice, meaning divergent state is a known trade-off rather than an oversight. While this might work for low-stakes data (e.g., 'last seen online' timestamps), it's dangerous for messaging. Users could see <strong>messages in different orders</strong>, miss messages entirely during partition recovery, or observe duplicate deliveries — all without the system ever correcting itself. A real-time messaging system needs a <strong>principled convergence mechanism</strong>, not a handwave.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Eventual Consistency with CRDTs ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Eventual Consistency with CRDTs ✓</h4>
+          </div>
           <p>Implement eventual consistency backed by Conflict-free Replicated Data Types (CRDTs) to achieve automatic, deterministic conflict resolution across replicas.</p>
         </div>
 
@@ -149,23 +157,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Linearizable Consistency</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Linearizable Consistency</h4>
+          </div>
           <p>Financial transactions, inventory management, or distributed locking where a single source of truth is non-negotiable and brief unavailability during partitions is an acceptable trade-off. Examples: bank transfers, seat reservations, leader election.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Eventual Consistency (Generic)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Eventual Consistency (Generic)</h4>
+          </div>
           <p>Systems where data is inherently idempotent or append-only, and the application can tolerate temporary divergence without user-visible impact. Examples: analytics event pipelines, log aggregation, DNS propagation.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — CRDTs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — CRDTs</h4>
+          </div>
           <p>Collaborative or concurrent-write workloads where multiple actors modify shared state simultaneously and the system must converge without coordination. Examples: real-time messaging, collaborative editing (Google Docs), distributed counters (like counts), shopping cart merges.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Accept Conflicts</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Accept Conflicts</h4>
+          </div>
           <p>Extremely low-stakes, high-throughput data where occasional inconsistency has negligible user impact and the cost of conflict resolution outweighs the benefit. Examples: 'last seen' timestamps, approximate view counts, non-critical UI hints.</p>
         </div>
 

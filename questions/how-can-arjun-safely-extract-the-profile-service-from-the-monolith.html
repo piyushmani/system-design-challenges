@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🪞</div>
-          <h4>A — Shared Database Facade</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🪞</span>
+            <h4>A — Shared Database Facade</h4>
+          </div>
           <p>Two services reading and writing the same tables form a <strong>distributed monolith</strong>: the schema is still coupled, migrations still need cross-team coordination, and the database bottleneck is unchanged. Sending schema-changing requests back to the monolith means the new service cannot evolve on its own. <strong>Caveat:</strong> a shared database is a defensible, short-lived <em>first step</em> to prove routing and API contracts, as long as there is a concrete plan to split the data.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">✌️</div>
-          <h4>B — Application-Level Dual Writes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">✌️</span>
+            <h4>B — Application-Level Dual Writes</h4>
+          </div>
           <p>Writing to two databases from application code is not atomic: one write can succeed while the other fails, or concurrent requests can interleave differently in each store, causing silent divergence. Reconciliation jobs detect drift after the fact but cannot always tell which side is right, and checkout-critical fields cannot tolerate that. <strong>Caveat:</strong> dual writes driven by a transactional outbox or log are fine; naive dual writes are the problem.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧊</div>
-          <h4>D — Sidecar + Cache Facade</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧊</span>
+            <h4>D — Sidecar + Cache Facade</h4>
+          </div>
           <p>Sidecar caches and materialized views speed up reads, but the monolith database remains the source of truth and the write bottleneck, so deployment coupling and slow schema changes remain. Batch refresh makes staleness unpredictable, and per-host cache invalidation across a large fleet is error-prone. It is an optimization, not a decomposition.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Dedicated DB + Anti-Corruption Layer + CDC with Incremental Cutover ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Dedicated DB + Anti-Corruption Layer + CDC with Incremental Cutover ✓</h4>
+          </div>
           <p>Provide the new Profile service with a dedicated database and establish an anti-corruption layer. Employ change-data-capture (CDC) or an event stream from the monolith to asynchronously update the new</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Shared DB Facade</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Shared DB Facade</h4>
+          </div>
           <p>A very short-lived first step to validate routing and API contracts, never as the final state.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Dual Writes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Dual Writes</h4>
+          </div>
           <p>Only with a transactional outbox or log-based mechanism; avoid naive dual writes for anything that needs correctness.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Own DB + ACL + CDC</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Own DB + ACL + CDC</h4>
+          </div>
           <p>Extracting a data-owning, read-heavy domain from a monolith where autonomy, scalability, and gradual rollout all matter.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Sidecar + Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Sidecar + Cache</h4>
+          </div>
           <p>Quick read-latency relief on a monolith that will remain the system of record; not a decomposition strategy.</p>
         </div>
 

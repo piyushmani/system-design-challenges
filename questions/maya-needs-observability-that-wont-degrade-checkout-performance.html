@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>A — Blocking In-Request Exporter</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>A — Blocking In-Request Exporter</h4>
+          </div>
           <p>Every request pays a network round trip to the telemetry backend, and if that backend slows or fails, your payment latency and availability become hostage to your monitoring. During spikes, exactly when tracing matters most, it would break the SLO it is meant to protect. Retaining 100% of traces and logs also creates the cost problem the team is worried about.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📉</div>
-          <h4>C — Low-Cardinality Metrics Plus Ad-Hoc Tracing</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📉</span>
+            <h4>C — Low-Cardinality Metrics Plus Ad-Hoc Tracing</h4>
+          </div>
           <p>Cheap and safe for latency, and a sound <em>baseline</em> (it is part of option B). But it leaves you blind to exactly what the team fears: rare, one-off failures. Ad-hoc tracing helps only if you can reproduce the problem after you start looking; an intermittent payment drop will already be gone. Metrics tell you <em>that</em> the SLO is burning, not <em>why</em>.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>D — Always-On Full-Fidelity Tracing, Retained Indefinitely</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>D — Always-On Full-Fidelity Tracing, Retained Indefinitely</h4>
+          </div>
           <p>Maximum detail at maximum cost. Unbounded cardinality inflates indexes and bills, ingest overhead grows during spikes, and queries get slow. Indefinite retention conflicts with data-minimization and PCI or GDPR obligations, and most stored traces are never read. Complete history is not the same as faster diagnosis.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — OpenTelemetry with Async Export and Collector-Side Tail Sampling ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — OpenTelemetry with Async Export and Collector-Side Tail Sampling ✓</h4>
+          </div>
           <p>Utilize OpenTelemetry within the application process, employing non-blocking asynchronous batching alongside a local in-memory (and disk-backed) buffer and an OTLP exporter routing to a collector. Exe</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Blocking In-Request Export</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Blocking In-Request Export</h4>
+          </div>
           <p>Essentially never on a production hot path. Occasionally acceptable in local development or test harnesses where overhead does not matter.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — OTel Async + Tail Sampling</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — OTel Async + Tail Sampling</h4>
+          </div>
           <p>High-volume, latency-SLO-bound services that need rare-failure visibility at controlled cost. The default for production microservices.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Metrics + Ad-Hoc Tracing</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Metrics + Ad-Hoc Tracing</h4>
+          </div>
           <p>Early-stage or low-risk services, or tight budgets where a metrics baseline is enough and tracing is added on demand.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Always-On Full Fidelity</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Always-On Full Fidelity</h4>
+          </div>
           <p>Short, bounded forensic windows or low-volume critical systems where storage cost is trivial, always with redaction and a defined retention policy.</p>
         </div>
 

@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🗳️</div>
-          <h4>A — Majority Quorum Reads and Writes (N=3, W=2, R=2)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗳️</span>
+            <h4>A — Majority Quorum Reads and Writes (N=3, W=2, R=2)</h4>
+          </div>
           <p>R + W > N does guarantee that a read overlaps the latest successful write, and losing one region still leaves two replicas, so correctness is fine. The problem is <strong>latency</strong>: every read must wait for the second-fastest replica, which is usually in another region, and inter-region round trips commonly exceed 50 ms for distant pairs. That penalizes the 100x read majority to protect the rare write. Overlap also does not equal linearizability in leaderless systems (concurrent writes, sloppy quorums, partial failures). <strong>Caveat:</strong> acceptable if all three regions are close together or if reads are rare.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⚡</div>
-          <h4>B — Write Quorum 3 of 5, Read One (W=3, R=1)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Write Quorum 3 of 5, Read One (W=3, R=1)</h4>
+          </div>
           <p>With N=5, W=3 and R=1, <strong>R + W = 4, which does not exceed N</strong>, so a read can hit a replica that missed the latest write. Anti-entropy and read repair only reduce staleness over time; they do not provide the immediate read-after-write the requirement states. It trades the one hard consistency requirement for latency. <strong>Caveat:</strong> a fine setup where bounded staleness is acceptable, or when combined with session tokens that route a user's reads to a fresh replica.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌱</div>
-          <h4>D — Async CRDTs (W=1, R=1)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌱</span>
+            <h4>D — Async CRDTs (W=1, R=1)</h4>
+          </div>
           <p>CRDTs give excellent availability and converge without coordination, but with W=1 and R=1 a user who writes in one region and reads from another can <strong>miss their own update</strong> until replication catches up, which violates the stated read-after-write need. Many profile fields (display name, bio) are last-writer-wins registers rather than natural CRDT merges, so concurrent edits can silently drop data. <strong>Caveat:</strong> excellent for commutative data (counters, sets, presence) and collaborative editing.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Leader-Based Consensus with Fast Local Reads ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Leader-Based Consensus with Fast Local Reads ✓</h4>
+          </div>
           <p>Use leader-based replication per partition (Raft-style): writes commit on majority acknowledgment, the leader serves linearizable reads via leases or read-index so local reads are very fast, followers</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — N=3, W=2, R=2</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — N=3, W=2, R=2</h4>
+          </div>
           <p>Small clusters where replicas are close together (same continent or metro), reads are not the dominant cost, and the simplicity of a leaderless quorum is attractive.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — N=5, W=3, R=1</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — N=5, W=3, R=1</h4>
+          </div>
           <p>Workloads that tolerate bounded staleness (feeds, counters, recommendations), or setups that pair R=1 with session routing so a user's reads hit an up-to-date replica.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Leader-Based Consensus</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Leader-Based Consensus</h4>
+          </div>
           <p>Globally distributed, read-heavy data with per-user ownership, a read-your-writes requirement, strict latency targets and a need for automatic regional failover.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Async CRDTs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Async CRDTs</h4>
+          </div>
           <p>Commutative, collaboration-style data (counters, sets, presence, collaborative text) where concurrent updates must always merge and availability beats immediate freshness.</p>
         </div>
 

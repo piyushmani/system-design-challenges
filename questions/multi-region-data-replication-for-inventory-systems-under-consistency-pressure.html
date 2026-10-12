@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>A — Synchronous Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Synchronous Replication</h4>
+          </div>
           <p>Synchronous (consensus-based) replication guarantees <strong>linearizable consistency</strong> — every region sees the same inventory count immediately. But the cost is devastating for e-commerce: every inventory write must wait for a <strong>cross-region consensus round</strong> (round trips of roughly 70–100 ms between US-East and EU-West and 200+ ms to Asia-Pacific, and consensus needs at least one quorum round trip). At checkout, this latency is directly on the critical path. Worse, during a network partition between regions, writes are <strong>blocked entirely</strong> — meaning customers in the affected region cannot complete purchases. For an inventory system where a rare oversell is fixable (refund + apology) but checkout downtime costs thousands per minute, this trade-off is wrong.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧮</div>
-          <h4>C — CRDTs for Inventory</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>C — CRDTs for Inventory</h4>
+          </div>
           <p>CRDTs guarantee automatic convergence, but <strong>inventory has a floor constraint</strong> (stock cannot go below zero). A plain PN-Counter can decrement past zero on concurrent replicas, and the merge will happily report the oversold total as 'correct.' <strong>Bounded counters</strong> (Balegas et al., 2015) do enforce the floor: each replica holds a share of the remaining stock as 'rights' it can spend locally, and rights move between replicas asynchronously. That is the <em>same escrow idea as regional quotas</em>, with communication off the hot path, so this is a legitimate alternative rather than a straw man. Alex's choice between them is mostly practical: quotas live in the application and slot into existing relational stores and business workflows (backorders, reallocation, compensating oversells), while bounded counters need a CRDT-capable datastore and still need the same compensation logic for stock adjustments, returns and counting errors.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏰</div>
-          <h4>D — Centralized Master-Slave</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏰</span>
+            <h4>D — Centralized Master-Slave</h4>
+          </div>
           <p>A single master handling all writes is the <strong>simplest model</strong> but fails the multi-region requirement. Users far from the master region suffer write latency proportional to their geographic distance. If the master region goes down, the entire platform becomes <strong>read-only</strong> until a failover completes (which can take minutes). This model also creates a <strong>write throughput ceiling</strong> — a single node can only absorb so many transactions per second. For a growing e-commerce platform, this is a ticking time bomb. It works for small-scale deployments but doesn't survive the scaling curve Alex's platform is on.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Asynchronous Replication with Conflict Resolution ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Asynchronous Replication with Conflict Resolution ✓</h4>
+          </div>
           <p>Adopt asynchronous replication with explicit conflict detection and domain-specific resolution strategies to handle concurrent writes across regions.</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Synchronous Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous Replication</h4>
+          </div>
           <p>Financial transactions, payment processing, or any operation where an incorrect state has irreversible consequences (double-charging, money transfer). Acceptable when write volume is low enough that cross-region latency doesn't impact user experience.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Async Replication + Conflict Resolution</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Async Replication + Conflict Resolution</h4>
+          </div>
           <p>Multi-region systems with high write throughput where business rules can define conflict resolution (e-commerce inventory, booking systems, multi-region content management). The dominant pattern when you need both low latency and correctness, and can tolerate a narrow conflict window.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — CRDTs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — CRDTs</h4>
+          </div>
           <p>Data types without hard floor/ceiling constraints — collaborative editing, messaging, distributed counters (likes, views), shopping carts (add/remove items). Excellent when the data model naturally fits CRDT semantics and business constraints don't require coordination.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Centralized Master-Slave</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Centralized Master-Slave</h4>
+          </div>
           <p>Single-region deployments, early-stage startups, or read-heavy workloads where write traffic is low and originates primarily from one geography. Also useful as a stepping stone before graduating to multi-master async replication.</p>
         </div>
 

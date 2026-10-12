@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>A — Synchronous OLTP Reads</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>A — Synchronous OLTP Reads</h4>
+          </div>
           <p>Synchronous OLTP reads give the best raw freshness, but a 10 ms p95 budget leaves almost no room for connection acquisition, a database round trip, and queueing at 5,000 TPS with several features per request (each inference fans out into many reads). It also ties recommendation availability to the transactional database, and the SQL that computes features online is usually a separate code path from the offline training logic, which is the classic source of <strong>training-serving skew</strong>. <strong>Caveat:</strong> for low-traffic internal tools with relaxed latency, this is the simplest option and perfectly acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📦</div>
-          <h4>B — Features Baked into the Model</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📦</span>
+            <h4>B — Features Baked into the Model</h4>
+          </div>
           <p>Per-user counters and session aggregates are <em>inputs</em>, not parameters, and baking high-cardinality per-entity data into a model artifact is not feasible: the artifact would be enormous and stale the moment it ships. Redeploying a model whenever a counter changes is operationally absurd and breaks sub-second freshness. Bundling is legitimate only for small static reference data (vocabularies, embedding tables, calibration constants) that changes when the model changes.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⚡</div>
-          <h4>C — Redis-Only Event-Driven Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Redis-Only Event-Driven Cache</h4>
+          </div>
           <p>Close to the right idea, and it gets the streaming-to-Redis path right, but it stops short on failure and skew: TTL eviction creates misses for slow-changing features, the 'never fall back' rule leaves no defined behavior on a miss (missing values at inference are themselves a skew source), and there is no feature or model versioning and no per-feature staleness tracking. It is a good <em>component</em> of Option D, not a complete architecture.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Tiered Hybrid Feature Serving ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Tiered Hybrid Feature Serving ✓</h4>
+          </div>
           <p>Adopt a hybrid: classify features by freshness tier, precompute batch features in the offline store (for training) and backfill the online store, stream real-time features via CDC into a fast key-valu</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Sync OLTP Reads</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sync OLTP Reads</h4>
+          </div>
           <p>Low-traffic or internal use cases with relaxed latency (tens to hundreds of ms), few features, and a need for read-your-writes freshness without extra infrastructure.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Features in Model</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Features in Model</h4>
+          </div>
           <p>Small, static, non-entity data (vocabularies, embedding tables, calibration constants) that changes only when the model itself changes.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Redis-Only Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Redis-Only Cache</h4>
+          </div>
           <p>A single freshness tier where everything is streamed, defaults are acceptable on a miss, and the team wants the fewest moving parts.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Tiered Hybrid</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Tiered Hybrid</h4>
+          </div>
           <p>Real-time ML with mixed freshness requirements, tight latency budgets, and a need for reproducibility between training and serving; the standard feature-store architecture.</p>
         </div>
 

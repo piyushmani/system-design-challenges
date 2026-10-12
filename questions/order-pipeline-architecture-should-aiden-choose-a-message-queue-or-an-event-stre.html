@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📬</div>
-          <h4>A — Work Queue (RabbitMQ / SQS)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📬</span>
+            <h4>A — Work Queue (RabbitMQ / SQS)</h4>
+          </div>
           <p>Queues distribute <em>tasks</em> among competing workers; they are not built to broadcast the same event to several independent systems. With delete-on-ack, each message is consumed by exactly one worker, so a second consumer type needs separate queues (a fan-out layer such as SNS plus SQS) and duplicate publishing. Short retention removes replay entirely. Ordering is limited (FIFO queues order within a message group at limited throughput; standard SQS does not order), and a dead-letter queue handles failures but not reprocessing windows. <strong>Caveat:</strong> for a single-consumer background-job workload (emails, thumbnails), a queue is the simpler and better tool.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔀</div>
-          <h4>C — Queue plus Stream Hybrid</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>C — Queue plus Stream Hybrid</h4>
+          </div>
           <p>The hybrid looks attractive but creates two sources of truth. The queue and the stream can disagree about what happened, the CDC or connector bridge adds another failure point and more latency, and payments and fulfillment may see different orderings or contents for the same order. You pay the operational cost of two messaging systems while a stream already meets the payment latency target. <strong>Caveat:</strong> it can make sense during a migration, when a mature queue-based payments stack exists and streaming is added incrementally with a plan to converge.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📞</div>
-          <h4>D — Synchronous Downstream Calls</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📞</span>
+            <h4>D — Synchronous Downstream Calls</h4>
+          </div>
           <p>Synchronous calls couple the order API's availability and latency to every downstream service: availability becomes the product of the individual availabilities, and a slow consumer such as analytics slows checkout. There is no replay, bursts hit dependencies directly, and a distributed transaction or compensating actions across payment, warehouse, and fraud services is complex and error-prone. A database write plus RPC is still a dual write that can duplicate or lose work. <strong>Caveat:</strong> synchronous calls are right for the few decisions that must finish before replying to the user (for example fraud pre-authorization), while the rest flows through events.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Partitioned Event Stream ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Partitioned Event Stream ✓</h4>
+          </div>
           <p>An event streaming platform (Kafka or Pulsar): publish all order events to a topic partitioned by order ID, retained for a time window (or a compacted topic for current state), with consumer groups an</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Work Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Work Queue</h4>
+          </div>
           <p>Background job processing with competing consumers: one logical consumer, no need for replay, and per-message retry with a dead-letter queue.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Partitioned Event Stream</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Partitioned Event Stream</h4>
+          </div>
           <p>Multiple independent consumers of the same events, per-key ordering, replay needs, and high or bursty throughput.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Queue + Stream Hybrid</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Queue + Stream Hybrid</h4>
+          </div>
           <p>Migrating from an existing queue-based critical path while adding streaming for new consumers, with a plan to converge on one system.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Synchronous Calls</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Synchronous Calls</h4>
+          </div>
           <p>Low-volume systems with a few tightly coupled steps that must succeed or fail together before replying to the user.</p>
         </div>
 

@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">⛔</div>
-          <h4>A — Synchronous Write-Path Compaction</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⛔</span>
+            <h4>A — Synchronous Write-Path Compaction</h4>
+          </div>
           <p>Making writes wait for compaction ties <strong>write latency directly to compaction cost</strong>, the opposite of what the platform needs. One large compaction would stall ingestion for the whole shard, and a slow disk or a large SSTable set turns into client timeouts. LSM trees exist so that writes are cheap appends to a memtable and WAL, with heavy work deferred to the background. <strong>Caveat:</strong> a bounded form of this idea is valid, namely slowing writes when compaction debt crosses a threshold, but that is backpressure on a background process, not compaction in the write path.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🎛️</div>
-          <h4>B — Central Compaction Coordinator</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🎛️</span>
+            <h4>B — Central Compaction Coordinator</h4>
+          </div>
           <p>A central scheduler adds a <strong>single point of failure and a scaling bottleneck</strong>, and it needs a fresh view of every shard to make good decisions. It also keeps the problem that hurts today, namely full-table compactions in a window, so the IO and CPU bursts remain. Compaction is an inherently local decision (it depends on each node's own SSTables, disk and load), so there is little for a global controller to optimize. <strong>Caveat:</strong> a lightweight global <em>policy</em> layer (for example staggering heavy work so not all replicas of a shard compact at once) is useful, but execution should stay local.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗓️</div>
-          <h4>D — Weekly Operator-Run Full Compaction</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗓️</span>
+            <h4>D — Weekly Operator-Run Full Compaction</h4>
+          </div>
           <p>This is today's approach with a longer interval. Tombstones and SSTables <strong>accumulate for a week</strong>, so reads slow down as the week goes on, storage balloons, and the eventual full compaction is <em>bigger</em> and riskier than the nightly one. It also relies on manual operations, which do not scale across many nodes and shards. In size-tiered setups, a major compaction can leave one huge SSTable that rarely gets compacted again, which makes later maintenance harder. <strong>Caveat:</strong> strict retention policies and snapshot cleanup are good hygiene and belong in any design, but they are not sufficient on their own.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Decentralized Incremental Compaction ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Decentralized Incremental Compaction ✓</h4>
+          </div>
           <p>Run continuous, incremental, IO/CPU-adaptive background compaction independently on every shard, with time-windowed and tombstone-aware logic for older data, tiered storage for cold segments, and back</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Synchronous Write-Path Compaction</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous Write-Path Compaction</h4>
+          </div>
           <p>Almost never as a general design. Narrowly justified as <em>backpressure</em> when compaction debt crosses a hard limit and continuing to accept writes would make the node unrecoverable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Central Coordinator</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Central Coordinator</h4>
+          </div>
           <p>Cluster-wide <em>policy</em> and visibility, for example staggering heavy work across replicas, capping concurrent compactions per rack, or pausing compaction during a maintenance event. Not for executing compaction itself.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Decentralized Incremental</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Decentralized Incremental</h4>
+          </div>
           <p>Large, multi-node LSM-tree deployments with time-series or TTL-driven data, strict latency targets and a need for low operational effort. The default for production systems.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Weekly Manual Full Compaction</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Weekly Manual Full Compaction</h4>
+          </div>
           <p>Small or dev-scale clusters, rarely written archival data, or a one-off repair after a bad bulk delete. Always rate-limited and one node at a time.</p>
         </div>
 

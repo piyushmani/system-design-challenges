@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🗃️</div>
-          <h4>A — Database Lookup on Every Request</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗃️</span>
+            <h4>A — Database Lookup on Every Request</h4>
+          </div>
           <p>Always-fresh data is attractive, but it puts a network round trip and a query on the critical path of every request, turns a small hot table into a database bottleneck at high traffic, and ties every service's availability to that database. Adding a short-TTL cache to fix this is really option B with slower and less predictable propagation. <strong>Caveat:</strong> for low-traffic admin tools or batch jobs where a few milliseconds do not matter, this is simple and acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📡</div>
-          <h4>C — Client-Side Polling Every 10 Seconds</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📡</span>
+            <h4>C — Client-Side Polling Every 10 Seconds</h4>
+          </div>
           <p>Rollback takes at least the polling interval, and clients that are asleep or slow keep the old state longer. Polling load scales with the number of clients rather than services, and shipping targeting and bucketing logic to the client exposes the rules and lets users tamper with them, which is unacceptable for a payment workflow. It can be reasonable for non-sensitive UI toggles served from a CDN.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔌</div>
-          <h4>D — Persistent Push to Every Client and Instance</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔌</span>
+            <h4>D — Persistent Push to Every Client and Instance</h4>
+          </div>
           <p>Streaming updates is a good idea for services, and many flag platforms do it. The problem is the scope and the absence of a fallback: holding millions of persistent frontend connections creates fan-out and reconnection-storm risk, silent staleness appears whenever a channel degrades, and clients are untrusted for payments. Option B uses push for services together with a polling safety net.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Local Versioned Cache with Event-Driven Updates ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Local Versioned Cache with Event-Driven Updates ✓</h4>
+          </div>
           <p>Maintain feature flags in a versioned, in-memory cache within each service instance. The control plane broadcasts flag modifications via a durable pub/sub system (like Kafka). Service instances subscr</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Database per Request</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Database per Request</h4>
+          </div>
           <p>Small systems, internal admin tools or low-traffic back-office jobs where a few milliseconds do not matter and simplicity wins.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Local Cache + Events</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Local Cache + Events</h4>
+          </div>
           <p>Latency-sensitive, high-throughput backends with safety-critical rollouts that need fast rollback, global availability and an audit trail.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Client Polling</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Client Polling</h4>
+          </div>
           <p>Non-sensitive UI toggles on static or CDN-served sites where updates that take 10 seconds or more are acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Push to Every Client</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Push to Every Client</h4>
+          </div>
           <p>Consumer or collaborative UIs that need instant updates for non-sensitive features, with a polling or resync fallback in place.</p>
         </div>
 

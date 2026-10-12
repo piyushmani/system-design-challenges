@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>A — In-Process Mutexes + Reconciliation</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — In-Process Mutexes + Reconciliation</h4>
+          </div>
           <p>A mutex only protects threads inside one process. Two servers can both read a balance of 100 and both write 70, producing a lost update, and a periodic reconciliation job cannot un-oversell an item that has already been shipped or un-charge a card. Local locks are the right tool for protecting in-memory data structures, not cross-node business state.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗝️</div>
-          <h4>B — Distributed Lock (e.g., Redis RedLock) per Update</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗝️</span>
+            <h4>B — Distributed Lock (e.g., Redis RedLock) per Update</h4>
+          </div>
           <p>Every update pays lock acquire and release round trips, and the lock service becomes a hot dependency. Safety rests on timing assumptions: if a lock holder pauses (GC, VM stall) and its TTL expires, a second client enters and both write, unless the storage layer rejects stale holders using a <strong>fencing token</strong>, which RedLock does not provide. Whether RedLock is safe has been publicly debated, but the practical guidance is that such locks suit efficiency use cases, not correctness. A crashed holder also blocks that user until the TTL expires.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏦</div>
-          <h4>D — Centralized SQL with Serializable Transactions</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏦</span>
+            <h4>D — Centralized SQL with Serializable Transactions</h4>
+          </div>
           <p>This is correct and often the simplest option: the database enforces invariants, handles multi-row atomicity (wallet plus inventory), and manages recovery. It ranks below C <em>here</em> because all traffic funnels to one primary (vertical scaling ceiling and a failover window), contended rows cause serialization failures that need retry loops (for example SQLSTATE 40001 in PostgreSQL), lock waits raise latency on hot rows, and cross-region writes pay consensus latency. Thousands of ops/s is within reach of a tuned single primary, so D is a legitimate default when scale and availability needs are moderate.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Single-Writer-per-User (Actor/Shard) with a Durable Command Log ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Single-Writer-per-User (Actor/Shard) with a Durable Command Log ✓</h4>
+          </div>
           <p>Use consistent hashing to partition users, directing all requests for a specific user to one dedicated worker or shard, following a single-writer-per-user or actor model. Maintain a durable command qu</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — In-Process Mutexes + Reconciliation</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — In-Process Mutexes + Reconciliation</h4>
+          </div>
           <p>Protecting in-memory data structures inside one process (caches, counters local to a node). Never for shared business state across servers.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Distributed Lock</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Distributed Lock</h4>
+          </div>
           <p>Efficiency-only exclusion (avoiding duplicate work), or combined with fencing tokens validated by the storage layer for correctness-sensitive cases.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Single Writer per User + Log</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Single Writer per User + Log</h4>
+          </div>
           <p>High throughput with hot per-entity contention, strict per-entity ordering, strong availability needs, and a team able to operate shard ownership and replay.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Serializable SQL Transactions</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Serializable SQL Transactions</h4>
+          </div>
           <p>Moderate throughput that fits one primary (or a sharded SQL setup), multi-row invariants, and a preference for the simplest correct design. A strong default.</p>
         </div>
 

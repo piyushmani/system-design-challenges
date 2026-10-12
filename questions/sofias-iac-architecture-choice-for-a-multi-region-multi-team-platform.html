@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🏛️</div>
-          <h4>A — Single Central State and Pipeline</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>A — Single Central State and Pipeline</h4>
+          </div>
           <p>This is the current situation and the source of the pain. One lock serializes every change, plan and refresh time grows with every resource, a corrupted state or bad apply endangers everything, and one pipeline needs broad credentials across all accounts. Cross-stack references are easy only because everything is coupled.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">☸️</div>
-          <h4>C — Central Kubernetes GitOps Controller</h4>
+          <div class="strategy-header">
+            <span class="s-icon">☸️</span>
+            <h4>C — Central Kubernetes GitOps Controller</h4>
+          </div>
           <p>Continuous reconciliation is attractive, and tools such as Crossplane, ACK, or Terraform controllers can drive cloud resources. As the <em>foundation</em> for account and network provisioning it has problems: the central cluster becomes a high-privilege component holding cross-account credentials (blast radius concentrated), there is a bootstrap dependency (you need infrastructure to run the thing that builds infrastructure), and auto-reconcile plus destructive diffs need careful guardrails. It works better as a layer on top of B for platform resources.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">☁️</div>
-          <h4>D — Managed SaaS IaC Control Plane</h4>
+          <div class="strategy-header">
+            <span class="s-icon">☁️</span>
+            <h4>D — Managed SaaS IaC Control Plane</h4>
+          </div>
           <p>A strong alternative. Terraform Cloud/Enterprise and similar platforms provide state, locking, remote runs, RBAC, run queues, policy checks, and audit logs out of the box, with a workspace per stack giving the same decomposition as B. Trade-offs: vendor dependency and pricing model, change velocity limited by the provider's run concurrency and availability (existing infrastructure keeps running, but changes are blocked), and less control over where state and credentials live. It is essentially B delivered as a service, and it still needs modules, cross-stack contracts, and drift handling.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Per-Stack State, Reusable Modules, and Per-Account Pipelines ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Per-Stack State, Reusable Modules, and Per-Account Pipelines ✓</h4>
+          </div>
           <p>Divide the infrastructure into individual Terraform stacks (state files or workspaces) based on environment and region. Store these in a remote backend equipped with state locking, such as S3 paired w</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Single State and Pipeline</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single State and Pipeline</h4>
+          </div>
           <p>A small team with a handful of resources in one account and one environment, where simplicity outweighs isolation.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Per-Stack State + Modules</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Per-Stack State + Modules</h4>
+          </div>
           <p>Many accounts, regions, and teams needing isolation, audit trails, and portability, with a platform team able to own pipelines and tooling.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Central GitOps Controller</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Central GitOps Controller</h4>
+          </div>
           <p>Kubernetes-centric organizations that already run mature cluster operations and want continuous reconciliation, usually for in-cluster or platform resources rather than account foundations.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Managed SaaS Control Plane</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Managed SaaS Control Plane</h4>
+          </div>
           <p>Organizations that prefer buying over building, want built-in RBAC, policy, and run management, and accept the vendor dependency and cost model.</p>
         </div>
 

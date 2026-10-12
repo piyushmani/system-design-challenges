@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>B — Insert-Only Relational / Distributed SQL</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>B — Insert-Only Relational / Distributed SQL</h4>
+          </div>
           <p>This is the strongest alternative: insert-only tables on a strongly consistent distributed SQL database (Spanner, CockroachDB, and similar) give transactional consistency and simple reads. The weaknesses are that immutability enforced by triggers and constraints is policy that privileged users can bypass, cross-region synchronous commits put wide-area round trips on every write, and a denormalized current-state table updated in the same transaction adds write amplification and contention at 5,000 events per second. <strong>Caveat:</strong> at lower volumes, or when the team already runs such a database, it is a very reasonable choice.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗃️</div>
-          <h4>C — Object Storage Blobs with Batch-Built Indexes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗃️</span>
+            <h4>C — Object Storage Blobs with Batch-Built Indexes</h4>
+          </div>
           <p>Object storage is an excellent immutable archive (with versioning or Object Lock) but a poor primary write path for 5,000 small events per second: per-object request costs and the small-file problem add up, and listing and indexing are slow. Periodic batch rebuilds mean current-state reads can be stale by the batch interval, which violates checkout freshness, and 'eventual visibility' of new blobs is incompatible with a source of truth that must be authoritative. It belongs in Option A as the cold, archival tier.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🛠️</div>
-          <h4>D — Custom WAL with Synchronous Cross-Region Quorum</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🛠️</span>
+            <h4>D — Custom WAL with Synchronous Cross-Region Quorum</h4>
+          </div>
           <p>Waiting for fsync and a cross-region quorum on every write puts wide-area round trips in every write's latency and tail latency, and availability drops whenever the quorum is unreachable. A single leader limits write scalability, and serving reads only from the leader or fully synced followers wastes capacity. Building a replicated log yourself reproduces what Raft-based systems and log platforms already provide, with a high correctness and operations burden.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>A — Event Log with CQRS and Multi-Region Replication ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Event Log with CQRS and Multi-Region Replication ✓</h4>
+          </div>
           <p>An append-only, partitioned event log (Kafka-like) as the immutable source of truth: record every domain event partitioned by orderId or aggregate, keep the raw log as the audit trail, build asynchron</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Event Log + CQRS</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Event Log + CQRS</h4>
+          </div>
           <p>High-volume, multi-region order or ledger-style domains where audit, replay, and independent read scaling are core requirements.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Insert-Only SQL</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Insert-Only SQL</h4>
+          </div>
           <p>Moderate volumes, strong consistency needs, a team already operating a distributed SQL database, and audit requirements met by append-only tables plus strict access controls.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Object Store + Batch Indexes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Object Store + Batch Indexes</h4>
+          </div>
           <p>Long-term archive of the event stream, large payloads, or low-frequency compliance snapshots, as the cold tier of another design.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Custom Quorum WAL</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Custom Quorum WAL</h4>
+          </div>
           <p>Rarely: only when building a storage engine or replicated-log product itself; otherwise use Raft-based systems or an existing log platform.</p>
         </div>
 

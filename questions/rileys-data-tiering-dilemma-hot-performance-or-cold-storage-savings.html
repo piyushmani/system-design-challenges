@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">⏱️</div>
-          <h4>A — Synchronous Writes to All Tiers (2PC)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>A — Synchronous Writes to All Tiers (2PC)</h4>
+          </div>
           <p>Writing every event to three tiers synchronously, with 2PC, puts the slowest and least available system on the critical path: write latency is bounded by object storage, availability is the product of three systems, and a coordinator failure can block ingest at 50k events/s. It also stores fresh data in cold storage as many tiny objects (inefficient and costly per request) and defeats the point of tiering, which is to move data as it ages. Reading sequentially across tiers adds latency on misses. <strong>Caveat:</strong> a durable log (for example Kafka) as the single write target and replay source gives the safety this option is reaching for, without 2PC.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🐌</div>
-          <h4>C — Lazy Migration on First Access</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🐌</span>
+            <h4>C — Lazy Migration on First Access</h4>
+          </div>
           <p>Waiting to move data until someone reads it inverts the cost model: aged data stays on expensive hot storage indefinitely if nobody reads it, which is exactly the common case for cold data, and the first reader pays for a synchronous migration inside the request path, producing unpredictable, high tail latency. Batch jobs 'triggered only when older data is read' give no cost bound and no schedule. <strong>Caveat:</strong> on-demand <em>caching</em> (promoting a recalled cold object into warm) is useful, but aging out must be proactive and policy-driven.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧭</div>
-          <h4>D — Central Per-Record Index</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧭</span>
+            <h4>D — Central Per-Record Index</h4>
+          </div>
           <p>A pointer for every record is itself a big-data problem: at 50k events/s that is about 4.3 billion index entries per day and about 3 trillion over two years, which makes the index expensive, a scaling bottleneck, and a single point of failure on every read. Writing to both the index and the hot tier is a dual write with no atomicity, risking dangling or missing entries. Synchronously fetching cold data per targeted read gives high latency, and pre-aggregates in the index duplicate analytics work. <strong>Caveat:</strong> a small index over <em>segments or partitions</em> (which is what B's catalog is) is the efficient version of this idea, and secondary indexes (for example by user ID) can serve specific query patterns.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Hot-First Writes + Catalog-Driven Async Migration ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Hot-First Writes + Catalog-Driven Async Migration ✓</h4>
+          </div>
           <p>Write only to the hot tier plus lightweight metadata/catalog entries (lifecycle and location); migrate hot to warm to cold asynchronously by age or size policy; route reads through the catalog; keep m</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Sync Write to All Tiers</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sync Write to All Tiers</h4>
+          </div>
           <p>Very small data volumes with a strict need for immediate multi-tier durability, almost never at high ingest rates. A durable log is the better answer for the same goal.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Hot-First + Async Catalog</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Hot-First + Async Catalog</h4>
+          </div>
           <p>High-ingest event and time-series workloads with clear age-based access patterns, cost sensitivity, and a need for fast, consistent reads on recent data.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Lazy On-Access Migration</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Lazy On-Access Migration</h4>
+          </div>
           <p>Rarely: small systems where operational simplicity outweighs cost and predictable latency. On-demand promotion (caching), not demotion, is the useful part.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Per-Record Global Index</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Per-Record Global Index</h4>
+          </div>
           <p>Workloads dominated by point lookups across old data (for example by entity ID), using a targeted secondary index over segments or keys rather than a global per-record index.</p>
         </div>
 

@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🐘</div>
-          <h4>A — Single Postgres with Partitions</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🐘</span>
+            <h4>A — Single Postgres with Partitions</h4>
+          </div>
           <p>Time-partitioned tables and materialized views work well up to hundreds of thousands of rows per second, but 5 to 25 million per second is far beyond a single primary even with batching, because every row pays for a B-tree index on (device_id, timestamp), WAL and vacuum. Read replicas do not help writes, and vertical scaling hits a wall quickly. Materialized view refreshes over this volume are expensive, and keeping months of history in row storage is costly. <strong>Caveat:</strong> this is a fine design for thousands of devices.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>C — Cassandra with (device_id, date) Keys</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>C — Cassandra with (device_id, date) Keys</h4>
+          </div>
           <p>Cassandra sustains very high write rates and TTLs are convenient, but it is a poor fit for the query side. It has no native rollups, secondary-index aggregations scale badly, and months-long analytics across many devices means scanning many partitions or running external Spark jobs. Expired TTL data becomes tombstones that need compaction; time-window compaction mitigates this but still adds operational work. <strong>Caveat:</strong> as the hot tier behind a log it is a legitimate choice, but on its own it fails the analytics requirement.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⏱️</div>
-          <h4>D — Hourly Batch ETL into OLAP</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>D — Hourly Batch ETL into OLAP</h4>
+          </div>
           <p>An OLAP store such as ClickHouse or BigQuery is excellent for analytics, but loading it with hourly batches means dashboards and alerts are up to an hour stale, which contradicts the requirement for results within seconds. Making the OLAP store the only serving layer also pushes alert-style lookups onto an engine tuned for scans. <strong>Caveat:</strong> streaming the log continuously into ClickHouse would repair the latency problem and is a reasonable simplification of Option B at smaller scale, but that is not what this option describes.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Log + Hot TSDB + Rollups + Parquet Cold Tier ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Log + Hot TSDB + Rollups + Parquet Cold Tier ✓</h4>
+          </div>
           <p>Direct ingestion into a durable append-only log (such as Kafka) -&gt; stream recent data points into a time-series optimized datastore (like TimescaleDB or a dedicated TSDB) to handle low-latency queries</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Single Postgres</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Postgres</h4>
+          </div>
           <p>Thousands of devices, modest write rates, short retention and a team that already runs Postgres. Excellent for early-stage products or internal tools.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Log + Hot TSDB + Parquet</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Log + Hot TSDB + Parquet</h4>
+          </div>
           <p>Millions of devices or series, strict seconds-level alerting plus long-range analytics, and a team able to operate a streaming platform (or buy it managed).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Cassandra</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Cassandra</h4>
+          </div>
           <p>Very high write volume with key-based access (fetch one device's recent points) and simple queries, usually as the hot tier or a serving store rather than the whole stack.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Hourly Batch into OLAP</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Hourly Batch into OLAP</h4>
+          </div>
           <p>Analytics-first workloads where a delay of minutes to hours is acceptable, such as reporting and capacity planning without tight alerting needs.</p>
         </div>
 

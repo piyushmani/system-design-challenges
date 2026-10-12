@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🚚</div>
-          <h4>B — Proxy All Uploads Through the API</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🚚</span>
+            <h4>B — Proxy All Uploads Through the API</h4>
+          </div>
           <p>Relaying bytes through application servers makes them the bottleneck: each upload holds a connection, memory and bandwidth for its full duration, so tens of thousands of concurrent uploads require a very large, expensive fleet and amplify burst and slow-client risks. Synchronous thumbnailing also ties request latency and failure to image-processing time. It does give simple, immediate consistency, which is its only real advantage. <strong>Caveat:</strong> acceptable for small files at low volume, or for sensitive flows that must be scanned in-line.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗂️</div>
-          <h4>C — Object Store as the Only Source of Truth</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗂️</span>
+            <h4>C — Object Store as the Only Source of Truth</h4>
+          </div>
           <p>Object-store listing is a prefix scan, not a query engine: it is paginated, comparatively slow and costly at millions of objects, offers no secondary indexes (by owner, status or time across prefixes) and has no place for ACLs or processing state. Strong list-after-write consistency on modern S3 and Azure Blob helps correctness, but polling the bucket for new files is wasteful, adds delay and does not scale with bursts. <strong>Caveat:</strong> viable for simple, prefix-organized data lakes with batch consumers, not for interactive user listings.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🙋</div>
-          <h4>D — Client-Reported Completion</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🙋</span>
+            <h4>D — Client-Reported Completion</h4>
+          </div>
           <p>Relying on the client to say 'upload finished' means <strong>a crash, network drop or malicious client breaks the invariant</strong>: files can be orphaned in storage and never listed, or records can claim objects that do not exist. Nothing validates the object, and manual reconciliation does not scale or provide observability. <strong>Caveat:</strong> a client callback is fine as an <em>optimization hint</em> to speed up finalization, as long as the server verifies and event-driven reconciliation remains the source of truth.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>A — Pre-Signed Direct Upload with Event-Driven Finalization ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Pre-Signed Direct Upload with Event-Driven Finalization ✓</h4>
+          </div>
           <p>Use pre-signed URLs: on upload initiation, write a &#x27;pending&#x27; metadata record to a strongly consistent database and return a pre-signed URL. The client uploads directly to object storage, which emits o</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Pre-Signed URL + Events</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Pre-Signed URL + Events</h4>
+          </div>
           <p>User-generated content at scale (images, videos, documents) with bursty uploads, a need for fast listings, post-processing such as thumbnails or scanning, and tolerance for seconds of finalization delay.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Proxy Through API</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Proxy Through API</h4>
+          </div>
           <p>Small files at low volume, or flows that must be inspected, transformed or scanned in-line before anything is stored, where simplicity matters more than scale.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Storage Listing Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Storage Listing Only</h4>
+          </div>
           <p>Batch or data-lake style workloads organized by prefix and consumed by batch jobs, where interactive per-user listings and metadata queries are not required.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Client-Reported Completion</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Client-Reported Completion</h4>
+          </div>
           <p>Only as a hint layered on top of option A (clients tell the server to check sooner), or in prototypes where orphaned objects and manual cleanup are acceptable.</p>
         </div>
 

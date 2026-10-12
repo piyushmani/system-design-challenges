@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🐘</div>
-          <h4>A — Single TimescaleDB Cluster with Synchronous Cross-Region Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🐘</span>
+            <h4>A — Single TimescaleDB Cluster with Synchronous Cross-Region Replication</h4>
+          </div>
           <p>PostgreSQL's write path is fundamentally single-writer per primary, and 1 to 3 million inserts per second sustained is at or beyond what a single primary handles even with batching. <strong>Synchronous cross-region replication</strong> adds WAN round-trip latency to every commit, hurting throughput and availability. Manual sharding by device ID reintroduces the complexity the option claims to avoid, and Timescale's multi-node mode has been deprecated upstream. Strong consistency is also unnecessary for telemetry. <strong>Caveat:</strong> for roughly 100K rows per second or less in a single region, TimescaleDB is simple and excellent.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>C — Cassandra/ScyllaDB with Secondary Indexes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>C — Cassandra/ScyllaDB with Secondary Indexes</h4>
+          </div>
           <p>Wide-column stores handle write-heavy ingest well, but they are weak for analytics: secondary indexes on high-cardinality columns are an anti-pattern, range queries become scatter-gather with client-side merging, and wide-range dashboard queries won't reliably meet a 2-second SLO. Batch pre-aggregation adds lag, and compaction at this scale is operationally heavy. <strong>Caveat:</strong> Cassandra is a good fit for key-based lookups such as the latest values per device, not ad-hoc time-series analytics.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📉</div>
-          <h4>D — Edge Pre-Aggregation with Optional Raw Retention</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📉</span>
+            <h4>D — Edge Pre-Aggregation with Optional Raw Retention</h4>
+          </div>
           <p>It contradicts the stated requirements: <strong>raw events must be kept for 90 days</strong> and ad-hoc queries must work. Once raw data is aggregated away, you can't re-aggregate, drill down or compute correct percentiles from averages. 'Opportunistic retries' on constrained devices mean silent data loss, and a standard relational database as the summary store is a poor fit for bursts. <strong>Caveat:</strong> edge filtering, batching and compression are great complements for reducing volume where raw detail is truly not required.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Durable Log + Stream Rollups + OLAP Hot Tier + Object Storage Cold Tier ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Durable Log + Stream Rollups + OLAP Hot Tier + Object Storage Cold Tier ✓</h4>
+          </div>
           <p>Utilize durable, log-based ingestion systems (such as Kafka or Kinesis) in each region, paired with stream processing applications (like Flink or Beam) to generate real-time data rollups. The processo</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Timescale + Sync Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Timescale + Sync Replication</h4>
+          </div>
           <p>Moderate volumes (up to roughly 100K inserts per second), a single region, a need for full SQL and joins with relational data, and a small team that values simplicity.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Log + Stream + OLAP + S3</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Log + Stream + OLAP + S3</h4>
+          </div>
           <p>Very high ingest, multi-region deployments, mixed real-time dashboards and long retention, and ad-hoc analytics at controlled cost.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Cassandra + Secondary Indexes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Cassandra + Secondary Indexes</h4>
+          </div>
           <p>Key-based access patterns such as latest state per device or time-bucketed reads by device, with massive write throughput and simple read shapes.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Edge Aggregation + RDBMS</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Edge Aggregation + RDBMS</h4>
+          </div>
           <p>Bandwidth- or battery-constrained devices where summaries are sufficient and raw data is not needed. Best used as a complement to a raw-capable backend.</p>
         </div>
 

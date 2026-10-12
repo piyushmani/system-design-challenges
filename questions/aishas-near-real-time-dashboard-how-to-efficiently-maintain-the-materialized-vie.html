@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>A — Synchronous In-Transaction MV Update</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Synchronous In-Transaction MV Update</h4>
+          </div>
           <p>Strong consistency is attractive, but it <strong>couples every write to the view</strong>. Aggregate rows (daily revenue, refund counts) become hot rows that serialize concurrent writers through lock contention, which directly hurts the high write throughput requirement. A slow or failed MV update fails the business transaction, so a view problem becomes an outage. Worse, orders, payments, and refunds live in <em>different microservices and databases</em>, so one local transaction cannot cover them without 2PC. <strong>Caveat:</strong> for a single database with modest write volume and a hard need for read-your-writes (for example, a ledger balance), this is simple and correct.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⚡</div>
-          <h4>C — Redis Read-Through / Write-Through Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Redis Read-Through / Write-Through Cache</h4>
+          </div>
           <p>A cache is an optimization in front of a query, not a way to <em>maintain</em> an aggregate. Each write invalidates or refreshes aggregate entries, so hot dashboard keys churn constantly, and every miss falls back to an expensive aggregation over the source databases, exactly when concurrency is highest (cache stampede, p99 spikes). Redis pub/sub is fire-and-forget, so a missed message silently leaves stale data with no lag metric to alert on. Aggregation across several services still has to be computed somewhere. <strong>Caveat:</strong> a small Redis or in-process cache with a 1-2 second TTL is a good <em>complement</em> in front of the MV store for the hottest tiles.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧮</div>
-          <h4>D — Compute on the Fly at Query Time</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>D — Compute on the Fly at Query Time</h4>
+          </div>
           <p>With no persisted view, query cost scales with data volume and with the number of concurrent dashboards, so holding p99 under 100 ms at peak is hard, and analytical reads compete with transactional writes for the same resources. The batch recompute 'every few minutes' for non-critical paths also contradicts the few-seconds staleness target. Failures in any shard or source directly degrade reads. <strong>Caveat:</strong> this works for low-concurrency, ad hoc exploration, or when a columnar engine ingests events directly, which is essentially option B with a different sink.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — CDC + Stream Processing into a Read-Optimized MV Store ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — CDC + Stream Processing into a Read-Optimized MV Store ✓</h4>
+          </div>
           <p>Produce change events from the source databases and employ a CDC + stream-processing pipeline (e.g., Debezium -&gt; Kafka -&gt; Kafka Streams/Flink) for incremental updates to read-optimized materialized vi</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Synchronous MV in Transaction</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous MV in Transaction</h4>
+          </div>
           <p>A single database, modest write volume, and a hard requirement that reads reflect the latest write (for example, an account balance or a stock counter updated in the same transaction).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — CDC + Stream Processing</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — CDC + Stream Processing</h4>
+          </div>
           <p>Multiple services or databases feed one read model, writes are heavy, reads must be fast under load, and seconds of staleness are acceptable. Needs a team able to operate the streaming stack.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Redis Cache with Invalidation</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Redis Cache with Invalidation</h4>
+          </div>
           <p>Repeated reads of the same query result with a clear invalidation key, where a miss is cheap enough to absorb. Best as a layer in front of another store.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Compute at Query Time</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Compute at Query Time</h4>
+          </div>
           <p>Low-concurrency or ad hoc analytics, small data volumes, or an OLAP engine that already ingests the raw events and can scan fast enough.</p>
         </div>
 

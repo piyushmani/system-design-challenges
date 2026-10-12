@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔌</div>
-          <h4>A — Local Per-Pod Pools with Retries</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔌</span>
+            <h4>A — Local Per-Pod Pools with Retries</h4>
+          </div>
           <p>Total connections equal pods times pool size, and that product grows with autoscaling, so slightly larger pools make the storm <strong>worse</strong>. Serverless instances cannot share a pool (each concurrent invocation holds its own), and retries with backoff but no budget can become a <em>retry storm</em> that amplifies the outage. There is also no central view of connection usage. <strong>Caveat:</strong> for a small, fixed fleet of long-lived pods with no serverless component, local pools plus a hard connection budget is the simplest option and is perfectly adequate.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🛠️</div>
-          <h4>C — Custom Pooling Microservice</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🛠️</span>
+            <h4>C — Custom Pooling Microservice</h4>
+          </div>
           <p>This rebuilds PgBouncer with an RPC layer on top: logical sessions, queuing, fairness, auth, TLS, failover and metrics, all to be designed, tested and owned by the team. Every query pays an extra network hop, preserving PostgreSQL session semantics over RPC is hard to get right, and the service becomes a new single point of failure. It is only justified when you need tenant-aware admission control or protocol-level policy that no off-the-shelf pooler offers.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📬</div>
-          <h4>D — Async Queue-Based Write Pipeline</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📬</span>
+            <h4>D — Async Queue-Based Write Pipeline</h4>
+          </div>
           <p>Queues are excellent for <strong>load leveling</strong>, but this option converts synchronous writes into eventually consistent ones, so read-your-writes breaks when reads go to replicas. It also needs idempotent consumers, ordering, dead-letter handling and lag monitoring, and it does nothing for workflows that need a live database session. It is a good <em>complement</em> for non-critical writes such as analytics or notifications, but not the primary fix for a connection limit on a transactional path.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Pooling Proxy with Dual Pool Modes ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Pooling Proxy with Dual Pool Modes ✓</h4>
+          </div>
           <p>Deploy a connection proxy or multiplexer (such as a pooled PgBouncer cluster or RDS Proxy) ahead of the PostgreSQL instance. Utilize transaction-mode pooling for serverless traffic and session-mode fo</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Local Per-Pod Pools</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Local Per-Pod Pools</h4>
+          </div>
           <p>A small, fixed fleet of long-lived pods with no serverless component, where total connections stay far below the database limit. The simplest choice when the numbers are bounded.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Pooling Proxy</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Pooling Proxy</h4>
+          </div>
           <p>Many or bursty clients (serverless, autoscaling) against a database with a hard connection cap, and a mix of stateless and session-stateful workloads.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Custom Pool Service</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Custom Pool Service</h4>
+          </div>
           <p>Rare cases that need tenant-aware admission control or custom routing that no pooler provides, and a team willing to own a critical new service.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Async Write Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Async Write Queue</h4>
+          </div>
           <p>Write-heavy, non-interactive flows (events, audit logs, notifications) where eventual consistency is acceptable and load leveling matters more than immediate visibility.</p>
         </div>
 

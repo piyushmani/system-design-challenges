@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🎟️</div>
-          <h4>A — Centralized Per-Shard Sequencer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🎟️</span>
+            <h4>A — Centralized Per-Shard Sequencer</h4>
+          </div>
           <p>A sequencer gives a clean total order, but <strong>every write must reach it</strong>. Users in distant regions pay a cross-region round trip, and during a partition the side without the sequencer cannot commit, so both the low-latency and partition-availability requirements fail. Offline writes cannot be sequenced at all. Last-write-wins by sequence number also does not reflect true causality. <strong>Caveat:</strong> good when a single region owns the data and strict per-shard ordering matters more than availability.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧭</div>
-          <h4>B — Full Vector Clocks per Object</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧭</span>
+            <h4>B — Full Vector Clocks per Object</h4>
+          </div>
           <p>Vector clocks are the only option here that <strong>exactly detects concurrency</strong> and give precise causality, but each version carries one counter per replica (and per client if clients are identified), so metadata grows with participants and pruning breaks guarantees. Concurrent versions (siblings) must be resolved by the application, adding read-path complexity. With a handful of regions the overhead can be acceptable. <strong>Caveat:</strong> choose them (ideally dotted version vectors) for keys where concurrency must be detected and surfaced, and the number of replicas is small and bounded.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔀</div>
-          <h4>D — CRDT-Based Data Model</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>D — CRDT-Based Data Model</h4>
+          </div>
           <p>CRDTs give automatic convergence with no coordination and are excellent for counters, sets, and collaborative text. As a blanket answer they are heavy: the data model must be redesigned, not every invariant is expressible as commutative operations (uniqueness, bounded counters), and state can grow through tombstones and per-replica metadata. Debugging merged state is harder, and many CRDTs still depend on causal context or timestamps internally (for example LWW registers). <strong>Caveat:</strong> apply them to the fields whose semantics fit, layered on top of HLC rather than instead of it.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Hybrid Logical Clocks (HLC) ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Hybrid Logical Clocks (HLC) ✓</h4>
+          </div>
           <p>Implement Hybrid Logical Clocks (HLCs) or a similar timestamping method: each replica marks updates with an HLC (combining physical time with a small logical counter) and retains a single, concise tim</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Central Sequencer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Central Sequencer</h4>
+          </div>
           <p>A single region or a strongly consistent system where a total order per shard is required and partition availability is secondary.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Vector Clocks</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Vector Clocks</h4>
+          </div>
           <p>A small, bounded set of replicas where detecting concurrent writes and surfacing siblings to the application is valuable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Hybrid Logical Clocks</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hybrid Logical Clocks</h4>
+          </div>
           <p>Multi-region, latency-sensitive, partition-tolerant systems that want compact timestamps and readable, causality-consistent ordering, with simple conflict policies by default.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — CRDT Data Model</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — CRDT Data Model</h4>
+          </div>
           <p>Collaborative or offline-first data (text, sets, counters) where automatic merging matches the semantics, and a model redesign is acceptable.</p>
         </div>
 

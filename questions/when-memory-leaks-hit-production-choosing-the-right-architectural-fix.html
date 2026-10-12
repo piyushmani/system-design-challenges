@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔧</div>
-          <h4>A — Tune GC and Debug in Place</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔧</span>
+            <h4>A — Tune GC and Debug in Place</h4>
+          </div>
           <p>Bigger heaps and GC tuning treat symptoms. A larger heap delays the OOM but makes each full GC pause longer and the eventual failure bigger, and the whole service (with its state) remains one failure domain. Heap-dump analysis is necessary, but dumping multi-gigabyte heaps from production pauses the process, and making it the <em>only</em> plan leaves customers exposed during the investigation. <strong>Caveat:</strong> modern collectors (G1 tuning, ZGC, Shenandoah) can reduce pause times and are a valid complement, just not a containment strategy.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>C — Externalize Caches to Redis</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>C — Externalize Caches to Redis</h4>
+          </div>
           <p>Moving caches to Redis removes one common leak source from the JVM heap and can be a good long-term change. But it adds a network hop to every cache read, a new dependency and failure mode, and serialization overhead, while doing nothing about other long-lived graphs (listeners, ThreadLocals, static maps, buffers). It also does not limit the blast radius: a leaking JVM still takes down the same service. <strong>Caveat:</strong> if heap dumps confirm that in-process caches dominate growth, a bounded local L1 cache in front of an external L2 is often the best permanent fix.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🦀</div>
-          <h4>D — Rewrite in Rust or Go</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🦀</span>
+            <h4>D — Rewrite in Rust or Go</h4>
+          </div>
           <p>A rewrite is the slowest and riskiest option and does nothing for the current incident. The premise is also flawed: <strong>Go is garbage-collected</strong>, and only Rust (ownership-based) avoids a tracing GC. Any language can leak through unbounded caches, goroutine or task leaks, and reference cycles. Integrating native modules adds JNI/FFI and operational complexity. <strong>Caveat:</strong> moving a proven hotspot (for example a tight parsing loop) off-heap can be justified after profiling, but not as a first response.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Contain and Recycle: Stateless Units with Memory Guardrails ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Contain and Recycle: Stateless Units with Memory Guardrails ✓</h4>
+          </div>
           <p>Restructure the system into smaller, stateless services paired with ephemeral worker processes to handle intensive or stateful workloads, thereby decentralizing runtime state. Implement container memo</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — GC Tuning + Debug In Place</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — GC Tuning + Debug In Place</h4>
+          </div>
           <p>Early investigation on a non-critical service, or as a complement to other options (modern GC choices for latency). Not enough alone when customers are being impacted.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Stateless + Guardrails</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Stateless + Guardrails</h4>
+          </div>
           <p>Production services with an active leak or unexplained memory growth, where availability must be protected while the root cause is found. Also a lasting good practice.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Externalize Caches</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Externalize Caches</h4>
+          </div>
           <p>Heap dumps show large, shareable caches dominate memory and cross-instance sharing adds value; keep a bounded local cache in front.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Rewrite in Rust or Go</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Rewrite in Rust or Go</h4>
+          </div>
           <p>Proven, narrow hotspots with strict latency or footprint needs after profiling, as a deliberate multi-quarter investment rather than incident response.</p>
         </div>
 

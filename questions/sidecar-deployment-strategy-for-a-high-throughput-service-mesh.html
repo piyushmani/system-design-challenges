@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🚪</div>
-          <h4>B — Centralized Gateway Proxies</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🚪</span>
+            <h4>B — Centralized Gateway Proxies</h4>
+          </div>
           <p>Hairpinning all east-west traffic through a few gateways adds hops and cross-zone traffic, creates a <strong>bottleneck and shared failure domain</strong> for all tenants, and moves identity from the workload to the gateway so service-to-service authentication is coarse. It also puts every tenant's load on the same proxies. <strong>Caveat:</strong> gateways are the right tool for north-south edge concerns (external ingress, egress control, WAF, rate limiting), not as the only enforcement point for internal traffic.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📚</div>
-          <h4>C — In-Process Library</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📚</span>
+            <h4>C — In-Process Library</h4>
+          </div>
           <p>No extra hop gives the <strong>lowest latency</strong>, but policy enforcement lives <em>inside</em> the application's trust boundary, so a bug or compromised app can bypass it. It also forces per-language SDK maintenance, inconsistent upgrades across teams, and shares the app's crash and resource domain. <strong>Caveat:</strong> proxyless gRPC with xDS is a valid choice for homogeneous, latency-critical gRPC fleets with a strong platform team.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🖥️</div>
-          <h4>D — Node-Level Shared Daemon</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🖥️</span>
+            <h4>D — Node-Level Shared Daemon</h4>
+          </div>
           <p>One daemon per node is cost-efficient, but it is shared by every tenant on that node: <strong>noisy neighbors</strong>, a node-wide blast radius when it fails, and harder per-pod identity and resource attribution. For a multi-tenant system with fault-isolation requirements, that is the wrong default. <strong>Caveat:</strong> node-level designs work when they preserve per-pod identity and keep L7 optional (as in ambient-style meshes), but a plain shared daemon does not provide tenant isolation.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>A — Per-Pod Sidecar Proxy ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Per-Pod Sidecar Proxy ✓</h4>
+          </div>
           <p>Implement a per-pod colocated sidecar proxy (deploying one sidecar container alongside each application container) designed to intercept all incoming and outgoing traffic to manage mTLS, metrics, trac</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Per-Pod Sidecar</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Per-Pod Sidecar</h4>
+          </div>
           <p>Multi-tenant, zero-trust environments with polyglot services that need uniform L7 policy, per-workload identity, tenant isolation and rich telemetry.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Central Gateways</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Central Gateways</h4>
+          </div>
           <p>North-south traffic: external ingress, egress control, WAF, rate limiting, and external TLS termination.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — In-Process Library</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — In-Process Library</h4>
+          </div>
           <p>Homogeneous, latency-critical fleets (for example gRPC) with a strong platform team and the ability to enforce library versions, including proxyless xDS setups.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Node-Level Daemon</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Node-Level Daemon</h4>
+          </div>
           <p>Cost-dominated, mostly L4 mTLS needs on trusted single-tenant nodes, or ambient-style designs that keep per-pod identity.</p>
         </div>
 

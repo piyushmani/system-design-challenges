@@ -100,23 +100,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🗂️</div>
-          <h4>B — Materialized Views</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗂️</span>
+            <h4>B — Materialized Views</h4>
+          </div>
           <p>Materialized views trade freshness for speed: results are only as current as the last <strong>REFRESH</strong>, and refreshing a complex view can be expensive and lock-heavy. With data that changes often and users expecting current results, that's a poor first step. It also leaves the inefficient query in place, just running on a schedule.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">💾</div>
-          <h4>C — Application Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">💾</span>
+            <h4>C — Application Cache</h4>
+          </div>
           <p>Caching hides the slow query instead of fixing it. Every cache miss and expiry still runs the multi-second query, invalidation is tricky when the data changes often, and reporting queries with many parameter combinations get <strong>low hit rates</strong>.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧩</div>
-          <h4>D — Table Partitioning</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>D — Table Partitioning</h4>
+          </div>
           <p>Partitioning helps when queries can <strong>skip partitions</strong> based on a key such as date. It doesn't stop a correlated subquery from running once per row, and it adds significant schema and operational complexity. Running a badly shaped plan in parallel just spends more CPU on the same wasted work.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>A — Rewrite Subqueries as Joins ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Rewrite Subqueries as Joins ✓</h4>
+          </div>
           <p>Rewrite the subqueries as joins so the optimizer can plan the query as a single set-based operation.</p>
         </div>
 
@@ -147,23 +155,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Rewrite as Joins</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Rewrite as Joins</h4>
+          </div>
           <p>Queries with correlated subqueries, repeated subplans, or CTE chains that block optimization, where the data must be fresh. Always try this first.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Materialized Views</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Materialized Views</h4>
+          </div>
           <p>Expensive aggregations over large, slowly changing data where results can be minutes or hours old: dashboards, daily reports, leaderboards.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Application Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Application Cache</h4>
+          </div>
           <p>The same query with the same parameters requested repeatedly, where brief staleness is acceptable and the query has already been optimized.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Table Partitioning</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Table Partitioning</h4>
+          </div>
           <p>Very large tables (hundreds of millions of rows) where queries naturally filter on the partition key, such as date ranges on event or log tables.</p>
         </div>
 

@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔐</div>
-          <h4>A — Serializable Transactions with Row Locks</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔐</span>
+            <h4>A — Serializable Transactions with Row Locks</h4>
+          </div>
           <p>This is correct and simple to reason about, and for moderate load a single conditional <code>UPDATE ... WHERE available &gt;= 1</code> on a hot row is a respectable baseline. At 10k attempts per second on the <strong>same hot rows</strong>, however, requests queue behind row locks, each lock is held across application round trips and the commit (including synchronous replication for data-center tolerance), and serializable isolation adds <strong>aborts and retries (SQLSTATE 40001)</strong> that amplify load. Read replicas do nothing for the write path, and cross-shard events complicate things further. <strong>Caveat:</strong> it can be the right first implementation, with the actor model as the scale-up path.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧷</div>
-          <h4>B — Redis Distributed Locks (Redlock)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧷</span>
+            <h4>B — Redis Distributed Locks (Redlock)</h4>
+          </div>
           <p>A lock with a TTL can <strong>expire while the holder is still working</strong> (a GC pause or network delay), letting a second client in; Redis failover can also lose a lock. The safety of Redlock under such pauses and clock jumps is widely disputed, and safe use requires a <strong>fencing token</strong> checked by the database, at which point the database, not the lock, is enforcing correctness. Each reservation also costs several round trips and retries under contention, causing a thundering herd. <strong>Caveat:</strong> locks are fine for efficiency (avoiding duplicate work), not for guarding an invariant such as 'never oversell'.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📬</div>
-          <h4>D — Async Queue with Compensation</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📬</span>
+            <h4>D — Async Queue with Compensation</h4>
+          </div>
           <p>This fails the primary requirement outright: the design <strong>accepts overselling and fixes it afterwards</strong>, which means telling paying customers they lost a seat they were promised. Queues are a good fit for the work that happens <em>after</em> a reservation is decided (payment, email, projection), but not as the point where the decision is made. <strong>Caveat:</strong> a queue can still sit in front of the actor owners for buffering and admission control, as long as the owner makes the authoritative decision.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Single-Writer Sharded Actors with a Durable Command Log ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Single-Writer Sharded Actors with a Durable Command Log ✓</h4>
+          </div>
           <p>Implement a single-writer, sharded actor architecture: consistently hash each seat key to a designated owner process. The owner handles reservations sequentially in memory, writes commands to a persis</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Serializable DB Transactions</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Serializable DB Transactions</h4>
+          </div>
           <p>Moderate contention, simpler stacks, and teams that want the database to be the single source of truth. A good first implementation using a conditional update on a hot row.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Redis Redlock</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Redis Redlock</h4>
+          </div>
           <p>Efficiency locking (avoiding duplicate work, rate-limiting a job) where an occasional double execution is harmless. Not for guarding hard invariants.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Single-Writer Sharded Actors</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Single-Writer Sharded Actors</h4>
+          </div>
           <p>Extreme hot-key contention with a strict invariant, a latency budget, and the capability to run stateful services with replicated logs and fenced failover.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Async Queue + Compensation</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Async Queue + Compensation</h4>
+          </div>
           <p>Soft inventory where overselling is a tolerable business risk (for example overbooking with a clear policy), or for post-reservation processing rather than the decision itself.</p>
         </div>
 

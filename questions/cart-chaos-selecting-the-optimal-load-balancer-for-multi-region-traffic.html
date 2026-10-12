@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🌐</div>
-          <h4>A — DNS Geo-Routing with Async Carts</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>A — DNS Geo-Routing with Async Carts</h4>
+          </div>
           <p>DNS routing reacts slowly because of resolver caching and TTL behavior, even with low TTLs, so failover can leave users hitting a dead region for minutes. More importantly, asynchronous cross-region replication means two regions can both sell the last unit before they hear about each other, and discovering that at checkout means <strong>cancelled orders and refunds</strong>. <strong>Caveat:</strong> eventually consistent carts are fine, and often the right choice for the cart itself; the problem is applying the same model to inventory and checkout.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Client-Side Region Selection with Sticky Sessions</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Client-Side Region Selection with Sticky Sessions</h4>
+          </div>
           <p>Keeping carts in pod memory makes the pod a single point of failure for the user's cart, and sticky sessions undermine load distribution and rolling deploys. Letting the client choose the region adds a control and trust problem (stale measurements, no central way to drain a region, hard observability), and failover relies on a store that is not part of the primary design. <strong>Caveat:</strong> client-side latency probing can feed hints into a central routing decision, but the platform should keep control of routing.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📍</div>
-          <h4>D — Single Primary Region for Writes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📍</span>
+            <h4>D — Single Primary Region for Writes</h4>
+          </div>
           <p>Funneling every write to one region guarantees consistency but makes <strong>checkout and cart latency poor for distant users</strong>, and multi-AZ does not protect against the loss of the entire region. The primary becomes both a bottleneck and a regional single point of failure, and failover requires a risky promotion with possible data loss from asynchronous replication. <strong>Caveat:</strong> this is a simple and valid design for early-stage systems or user bases concentrated in one geography, and it can be a stepping stone to option B.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Global L7 + Stateless Services + Strong Store ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Global L7 + Stateless Services + Strong Store ✓</h4>
+          </div>
           <p>A global L7 load balancer with health checks and geo-routing to the nearest healthy region; stateless services; carts in a strongly consistent, globally replicated store (or a cache with robust confli</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — DNS Geo-Routing + Async Carts</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — DNS Geo-Routing + Async Carts</h4>
+          </div>
           <p>Content-heavy or browse-focused experiences where eventual consistency is acceptable everywhere and the cost of a conflict is low.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Global L7 + Stateless + Strong Store</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Global L7 + Stateless + Strong Store</h4>
+          </div>
           <p>Global e-commerce and similar systems that need low-latency browsing, strict correctness for inventory and payments, and regional fault tolerance.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Client Routing + Sticky Sessions</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Client Routing + Sticky Sessions</h4>
+          </div>
           <p>Latency-sensitive client experiences (games, real-time apps) with a stable session model, where a lost session is cheap and the client app is under your control.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Single Primary Region</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Single Primary Region</h4>
+          </div>
           <p>Early-stage products or single-geography user bases where simplicity matters more than cross-region latency, as a stepping stone to multi-region.</p>
         </div>
 

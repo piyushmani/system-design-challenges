@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>A — Unified Cluster with Lifecycle Tiers</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>A — Unified Cluster with Lifecycle Tiers</h4>
+          </div>
           <p>One engine and one source of truth is operationally attractive, and modern engines can push cold data to object storage. But ingest, hot queries and months-long scans still share one cluster, so a heavy analytical query can hurt the 100 ms SLA, and there is no independent replay log for reprocessing. Keeping three years on replicated cluster nodes also costs far more than columnar files on object storage. <strong>Caveat:</strong> at lower volumes (tens of thousands of events per second or less) or shorter retention, this is a sensible, simpler choice.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔀</div>
-          <h4>C — Synchronous Dual-Write to Hot and Cold</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>C — Synchronous Dual-Write to Hot and Cold</h4>
+          </div>
           <p>There is no atomic commit across two stores, so a failure between the two writes leaves the tiers permanently inconsistent. Writing to object storage per event (or per tiny batch) creates a huge number of small files, which makes cold queries slow and expensive, and producers inherit the tail latency of the slowest store. Without a durable log there is also nothing to replay when something goes wrong.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌍</div>
-          <h4>D — Decentralized Edge Tiering</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌍</span>
+            <h4>D — Decentralized Edge Tiering</h4>
+          </div>
           <p>Nothing in the requirements asks for multi-region reads. Ephemeral regional caches lose data on restart, periodic cross-region replication adds lag and inconsistency, and aggregating across regions on the fly increases latency and cost for exactly the queries that should be simple. It is worth considering only when users and data are genuinely regional with data-residency rules.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Polyglot Tiers with a Log-First Pipeline ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Polyglot Tiers with a Log-First Pipeline ✓</h4>
+          </div>
           <p>Implement a polyglot tiered architecture: maintain a highly responsive hot store (like a time-series database or Kafka with hot indices) for recent 24-hour queries, writing events to it synchronously</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Unified Cluster</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Unified Cluster</h4>
+          </div>
           <p>Moderate volume or short retention, a small team, and tolerance for one shared failure domain. The simplest option when the scale does not justify multiple systems.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Polyglot Tiers</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Polyglot Tiers</h4>
+          </div>
           <p>High-volume ingest with a strict hot-query SLA, long and cheap retention, independent scaling of storage and compute, and a need to replay or rebuild tiers.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Synchronous Dual-Write</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Synchronous Dual-Write</h4>
+          </div>
           <p>Low-volume pipelines where the archive must be durable before acknowledgement, and writes can go through a single batching writer so small files stay manageable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Edge Tiering</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Edge Tiering</h4>
+          </div>
           <p>Genuinely multi-region data with residency rules or local-latency needs, where regional queries dominate and cross-region queries are rare.</p>
         </div>
 

@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📈</div>
-          <h4>A — Scale Up Redis and Add Replicas</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📈</span>
+            <h4>A — Scale Up Redis and Add Replicas</h4>
+          </div>
           <p>A bigger node raises the ceiling but does not remove the hotspot: one sorted-set key still lives on one shard, and Redis executes commands serially on a single thread. Vertical scaling is bounded and costly, and strongly consistent replicas with synchronous invalidation add latency to every write, making timeouts worse. It treats the symptom, not the skew. <strong>Caveat:</strong> useful as a quick stopgap while the real fix is built.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>B — SQL Row Locks and Serializable Transactions</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>B — SQL Row Locks and Serializable Transactions</h4>
+          </div>
           <p>Serializable transactions with row-level locking turn the hot row into a lock queue: every viral-post event waits behind the previous one, which is the worst possible response to extreme skew. Partitioning by post_id range does not split a single hot row. Throughput falls, deadlocks and retries rise, and the audit database becomes the bottleneck for the live product. Exact accuracy for a trending list is unnecessary, and the cost is severe.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🚦</div>
-          <h4>C — Gateway Throttling and Client Backoff</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🚦</span>
+            <h4>C — Gateway Throttling and Client Backoff</h4>
+          </div>
           <p>Rate limiting engagement events degrades the product: legitimate likes and comments are rejected, and counts become systematically wrong for exactly the most popular posts. Pushing retries onto clients with exponential backoff creates retry storms and tail latency. Coalescing is a sound idea (and is part of the best answer), but it must be done through durable aggregation, not by dropping or delaying user actions. <strong>Caveat:</strong> rate limiting is appropriate for abuse protection, not as the scaling mechanism.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Decouple Ingestion with a Log and Keyed Stream Aggregation ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Decouple Ingestion with a Log and Keyed Stream Aggregation ✓</h4>
+          </div>
           <p>Separate data ingestion from materialization: record events in a durable append-only log (like Kafka), and leverage stateful, keyed stream processing to compute per-post aggregations. Materialize thes</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Scale Up Redis + Sync Replicas</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Scale Up Redis + Sync Replicas</h4>
+          </div>
           <p>Moderate skew where the hottest key's rate fits within one shard's throughput, or as a short-term stopgap while a redesign is built.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — SQL Row Locks, Serializable</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — SQL Row Locks, Serializable</h4>
+          </div>
           <p>Low-volume systems where exact counts with relational guarantees matter more than scale, such as financial counters.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Throttling + Client Backoff</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Throttling + Client Backoff</h4>
+          </div>
           <p>Abuse and bot protection, and protecting backends from overload, as a safety net rather than the primary design.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Log + Keyed Stream Aggregation</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Log + Keyed Stream Aggregation</h4>
+          </div>
           <p>Heavily skewed, high-volume event streams that feed rankings, counters or dashboards and can tolerate seconds of lag.</p>
         </div>
 

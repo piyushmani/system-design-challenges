@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🗣️</div>
-          <h4>A — Gossip for Everything</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗣️</span>
+            <h4>A — Gossip for Everything</h4>
+          </div>
           <p>Eventual consistency cannot guarantee that two nodes never believe they both own the same shard, or that a revoked auth token is rejected everywhere. CRDTs resolve conflicts, but they merge them <em>after the fact</em>, and ownership is a mutual-exclusion problem rather than a mergeable value. <strong>Caveat:</strong> for membership, feature flags and metrics this is exactly the right tool, which is why it forms half of the hybrid.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏛️</div>
-          <h4>B — Regional Raft as the Sole Source of Truth</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>B — Regional Raft as the Sole Source of Truth</h4>
+          </div>
           <p>Making a compact regional Raft cluster the source for membership and failure detection concentrates load and risk. 2,000 nodes heartbeating into a small group is a bottleneck, remote regions see long latencies and false suspicions over lossy links, and a regional outage removes the control plane for everyone. <strong>Caveat:</strong> using Raft for ownership and critical metadata is right; it is the use of Raft for membership and fan-out that does not scale.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🎲</div>
-          <h4>D — Client-Driven Eventual Consistency</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🎲</span>
+            <h4>D — Client-Driven Eventual Consistency</h4>
+          </div>
           <p>Pushing conflict resolution to clients spreads consistency logic across many implementations, and push-only gossip with high fanout spends scarce inter-region bandwidth while converging more slowly than push/pull. With no consensus there is no safe answer for ownership or token revocation. <strong>Caveat:</strong> an append-only log for reconciliation is a good idea for audit and repair, but it does not make concurrent decisions consistent.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Hybrid Gossip Plus Raft ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Hybrid Gossip Plus Raft ✓</h4>
+          </div>
           <p>Hybrid: gossip (SWIM with push/pull anti-entropy) for fast membership and large-scale non-critical data such as metrics and feature flags (CRDTs or versioning), plus a small Raft group for strongly co</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Gossip Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Gossip Only</h4>
+          </div>
           <p>Membership, failure detection, metrics and non-critical flags in very large clusters where eventual convergence is enough (as in Cassandra and the Serf layer in Consul).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Regional Raft with Gossip Broadcast</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Regional Raft with Gossip Broadcast</h4>
+          </div>
           <p>Smaller clusters in one region, where the control plane is compact and a single metadata store is acceptable. Not for thousands of nodes across lossy links.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Hybrid Gossip + Raft</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hybrid Gossip + Raft</h4>
+          </div>
           <p>Large, multi-region clusters with a mix of high-volume soft state and a small set of critical, exclusive state.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Client Eventual Consistency</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Client Eventual Consistency</h4>
+          </div>
           <p>Edge and offline-first applications where nodes are often disconnected and the data model is naturally mergeable. Not for ownership or auth decisions.</p>
         </div>
 

@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🌍</div>
-          <h4>A — Global Synchronous Cross-Region Commits</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌍</span>
+            <h4>A — Global Synchronous Cross-Region Commits</h4>
+          </div>
           <p>It gives the simplest mental model and strong consistency, but <strong>every write pays the cost of a cross-region quorum</strong>. Inter-continental round trips commonly range from tens to a few hundred milliseconds, which makes a 100 ms p99.95 target unrealistic for global user bases and leaves little room for retries. Partitions between regions can also stall commits. <strong>Caveat:</strong> viable when the footprint is regional (for example regions within one continent) and the latency budget allows it.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏠</div>
-          <h4>B — Single Primary Region + Async Read Replicas</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏠</span>
+            <h4>B — Single Primary Region + Async Read Replicas</h4>
+          </div>
           <p>All writes go to one region, so users elsewhere pay long round trips (violating the latency SLO), and the primary region is a concentrated availability risk. Replicas are stale, so sticky routing or compensations are needed, and when a primary fails over to an async replica, recently acknowledged writes can be lost, which in a wallet means lost updates. Compensating transactions are a poor substitute for preventing double-spend. <strong>Caveat:</strong> a reasonable, simpler design when users are concentrated near one region and the SLA is looser.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧪</div>
-          <h4>D — Cache + Event Log with Optimistic Success</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧪</span>
+            <h4>D — Cache + Event Log with Optimistic Success</h4>
+          </div>
           <p>Acknowledging before validating against the authoritative balance makes <strong>double-spending possible</strong>: two concurrent debits can both succeed, and reconciliation later produces negative balances or clawbacks. That directly violates the system's most important SLI. Eventual consistency is acceptable for read-side projections, not for the decision to approve a spend. <strong>Caveat:</strong> suitable for low-value or non-monetary counters (for example loyalty points with tolerant policies), or as a read cache in front of the authoritative write path.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Per-Shard Raft Groups with Regionally Placed Leaders ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Per-Shard Raft Groups with Regionally Placed Leaders ✓</h4>
+          </div>
           <p>Partition accounts by key and establish leader-based consensus (e.g., Raft) for each shard within every region: utilize synchronous replication among local replicas for the leader of each shard to gua</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Global Synchronous Commits</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Global Synchronous Commits</h4>
+          </div>
           <p>Users within one continent or tightly grouped regions, a relaxed latency budget, and a preference for the simplest strongly consistent model.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Single Primary + Async Replicas</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Single Primary + Async Replicas</h4>
+          </div>
           <p>Users concentrated near one region, moderate availability targets, and read-heavy traffic where stale reads are tolerable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Per-Shard Raft + Regional Leaders</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Per-Shard Raft + Regional Leaders</h4>
+          </div>
           <p>Global user base, strict per-account correctness, tight latency SLOs, and a team able to operate a sharded consensus system or a managed equivalent.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Cache + Event Log, Optimistic</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Cache + Event Log, Optimistic</h4>
+          </div>
           <p>Non-monetary or low-risk counters and read-side projections where temporary inconsistency is acceptable and corrections are cheap.</p>
         </div>
 

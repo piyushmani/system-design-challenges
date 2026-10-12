@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>A — Separate Services on One Shared Database</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>A — Separate Services on One Shared Database</h4>
+          </div>
           <p>A shared database does give you ACID transactions across inventory, orders and payments, so invariants are well protected. But it is a <strong>distributed monolith</strong>: services are coupled through shared schemas and migrations, cannot be deployed independently, and still contend for the same database during a surge, so the latency problem and the single point of failure remain. It also violates data ownership (the single-responsibility and dependency-inversion intent of SOLID). <strong>Caveat:</strong> as a transitional step it is acceptable, but it does not deliver the scalability or fault isolation Ethan wants.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📡</div>
-          <h4>B — Pure Choreography with Eventual Consistency</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📡</span>
+            <h4>B — Pure Choreography with Eventual Consistency</h4>
+          </div>
           <p>Event-driven choreography scales well and is a good fit for non-critical flows, but the option explicitly <strong>prioritizes throughput over immediate consistency</strong> and relies on compensating transactions to fix conflicts. For stock and money that means overselling and double charging are tolerated and cleaned up afterwards, which is the exact behaviour Ethan needs to eliminate. With no orchestrator, the overall flow is also implicit, harder to debug, and prone to cyclic event dependencies. <strong>Caveat:</strong> choreography is a sound choice for side effects such as notifications or analytics that sit after the critical path.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>D — Modular Monolith Replicated Behind a Load Balancer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>D — Modular Monolith Replicated Behind a Load Balancer</h4>
+          </div>
           <p>A modular monolith is a legitimate and often wise <em>first step</em>: clean module boundaries and dependency injection make later extraction easy. As the end state here it falls short. Under a surge, optimistic locking with application retries tends to <strong>amplify contention</strong> (retry storms), duplicate-charge protection still needs idempotency keys with the payment provider, and scaling is all-or-nothing, so one slow dependency (the payment gateway) can exhaust threads for the entire application. <strong>Caveat:</strong> if the team is small and traffic is moderate, this is the best <em>starting</em> point on the path to C.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Bounded Contexts with a Saga Orchestrator and Single-Writer Ledger ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Bounded Contexts with a Saga Orchestrator and Single-Writer Ledger ✓</h4>
+          </div>
           <p>Break down into smaller bounded contexts with well-defined APIs. Employ a saga orchestrator backed by durable command queues: the orchestrator dispatches idempotent commands to inventory, payment, and</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Services + Shared DB</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Services + Shared DB</h4>
+          </div>
           <p>A short-lived transitional state while extracting code, with a clear plan to separate data ownership soon. Not a target architecture.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Pure Choreography</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Pure Choreography</h4>
+          </div>
           <p>Loosely coupled, non-critical reactions (notifications, search indexing, analytics) where eventual consistency is acceptable and no money or stock invariant is at stake.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Saga Orchestrator + Ledger</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Saga Orchestrator + Ledger</h4>
+          </div>
           <p>Multi-service business transactions with hard invariants (payments, inventory), high traffic, and a need for clear end-to-end visibility and controlled failure handling.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Modular Monolith</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Modular Monolith</h4>
+          </div>
           <p>Small to mid-size teams and moderate traffic, or as the first stage of an incremental extraction, especially when the platform maturity for many services is not there yet.</p>
         </div>
 

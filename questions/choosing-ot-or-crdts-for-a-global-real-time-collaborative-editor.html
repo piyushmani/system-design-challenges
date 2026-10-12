@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📝</div>
-          <h4>A — Centralized OT Service</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📝</span>
+            <h4>A — Centralized OT Service</h4>
+          </div>
           <p>OT gives a single, strictly ordered history per document and compact operations, and it is proven at scale. But correctness depends on a central transformation pipeline: edits need server acknowledgement, a regional outage stalls the documents it owns, and multi-region active-active needs sticky document-to-region ownership. Long offline sessions are expensive to rebase, and transformation functions are notoriously hard to get right. <strong>Caveat:</strong> if users are almost always online and documents are mostly text, OT is simpler and has lower metadata overhead, so it is a good choice there.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🕸️</div>
-          <h4>C — Pure Peer-to-Peer CRDT Gossip</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>C — Pure Peer-to-Peer CRDT Gossip</h4>
+          </div>
           <p>There is no authoritative store, so durability depends on a peer being online, and there is no central point for tenant-level authorization, audit trails or compaction. A WebRTC mesh needs NAT traversal and relay servers, and its connection count grows quadratically with participants. It suits small private sessions, not a multi-tenant SaaS with compliance needs.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">👑</div>
-          <h4>D — Per-Document Leader/Lease</h4>
+          <div class="strategy-header">
+            <span class="s-icon">👑</span>
+            <h4>D — Per-Document Leader/Lease</h4>
+          </div>
           <p>A leader gives a clean serialization point, but every edit pays a round trip to that leader (poor for global users), failover creates a pause while a new lease is established, and popular documents create hot leaders. Offline edits still need a merge strategy (OT or CRDT) when they rejoin, so this option does not remove the hard problem, it only relocates it. Leases also need fencing to prevent two leaders acting at once.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — CRDTs with a Durable Server Log ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — CRDTs with a Durable Server Log ✓</h4>
+          </div>
           <p>Implement CRDTs backed by a server-side durable append log and delta synchronization: clients execute CRDT logic locally and while offline to merge changes. The servers supply reliable causal broadcas</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Centralized OT</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Centralized OT</h4>
+          </div>
           <p>Mostly online users, text-centric documents, strict single ordered history required, and a team using a mature OT implementation.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — CRDT + Server Log</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — CRDT + Server Log</h4>
+          </div>
           <p>Offline or local-first editing, multi-region active-active deployment, rich or structured content, and tolerance for extra metadata in exchange for availability.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — P2P CRDT Gossip</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — P2P CRDT Gossip</h4>
+          </div>
           <p>Small, private, ad-hoc sessions with no compliance or audit requirements and a desire to minimize server cost.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Leader/Lease per Document</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Leader/Lease per Document</h4>
+          </div>
           <p>Low-edit-rate structured resources where strict serialization matters more than latency and users are close to the leader.</p>
         </div>
 

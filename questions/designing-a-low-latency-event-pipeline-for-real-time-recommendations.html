@@ -102,23 +102,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>A — Independent Microservices</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>A — Independent Microservices</h4>
+          </div>
           <p>Microservices define team ownership and deployment boundaries, which are valuable. But each microservice that processes events still needs a parallel processing model inside it — typically option C. Microservices are an <strong>organizational and deployment</strong> boundary, not a stream-processing strategy. If each service consumes and analyzes the full feed on its own, every service pays the full ingestion cost, state is duplicated, and nothing partitions the work or keeps a user's events in order. Each service would still need a parallel processing model inside it, which is exactly option C.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🎯</div>
-          <h4>B — Centralized Engine</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🎯</span>
+            <h4>B — Centralized Engine</h4>
+          </div>
           <p>A single processing engine is a <strong>throughput ceiling and a single point of failure</strong>. Vertical scaling quickly runs out of headroom at hundreds of thousands of events/sec, queues build up during spikes, and latency keeps growing. One crash stops recommendations for every user.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📜</div>
-          <h4>D — Event Sourcing</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📜</span>
+            <h4>D — Event Sourcing</h4>
+          </div>
           <p>Event sourcing is valuable when the event history IS the business truth — audit trails, order lifecycles, financial ledgers. The append-only log in option C already provides replay capability; event sourcing adds the constraint that the log is the primary system of record, which is overkill for clickstream telemetry. Event sourcing is a <strong>state-persistence pattern</strong>. It's great for auditability, temporal queries, and rebuilding state, but on its own it doesn't say how processing is parallelized or made fast. Subscribers replaying an unpartitioned log are slow, and treating noisy clickstream data as a system of record adds storage and schema-evolution burden. The useful part, a durable and replayable log, is already included in option C's partitioned stream.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Partitioned Parallel Stream Processing ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Partitioned Parallel Stream Processing ✓</h4>
+          </div>
           <p>Partition the event stream (e.g., by user ID) and run many stream-processor instances in parallel, each owning a subset of partitions.</p>
         </div>
 
@@ -149,23 +157,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Independent Microservices</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Independent Microservices</h4>
+          </div>
           <p>When separate teams own clearly distinct capabilities (fraud scoring, recommendations, inventory) that need their own deploy cycles. Each service should still use partitioned parallel processing inside it.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Centralized Engine</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Centralized Engine</h4>
+          </div>
           <p>Low-volume pipelines (a few hundred events/sec), prototypes, or workloads that need strict global ordering, where simplicity matters more than scale.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Partitioned Parallel Processing</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Partitioned Parallel Processing</h4>
+          </div>
           <p>High-volume, latency-sensitive workloads where events can be grouped by a key: clickstream personalization, fraud detection, IoT telemetry, real-time metrics.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Event Sourcing</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Event Sourcing</h4>
+          </div>
           <p>Domains where the event history <em>is</em> the business truth and auditability matters: banking ledgers, order lifecycles, inventory reservations.</p>
         </div>
 

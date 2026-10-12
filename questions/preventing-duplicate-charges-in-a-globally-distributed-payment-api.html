@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🌐</div>
-          <h4>A — Single Global Relational Database</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>A — Single Global Relational Database</h4>
+          </div>
           <p>A unique constraint is simple and strictly consistent, but every request in every region pays a cross-region round trip to one primary, and a regional outage or partition makes the charge API unavailable. Holding a transaction open while calling the payment processor is also dangerous (locks, connection exhaustion). <strong>Caveat:</strong> in a single-region system, or when each region owns its own customers' data, a relational unique constraint is an excellent choice and is still the ideal ledger-level backstop inside option B.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏛️</div>
-          <h4>C — Global Consensus for Every Charge</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>C — Global Consensus for Every Charge</h4>
+          </div>
           <p>Paxos or Raft gives a linearizable log, but every charge pays cross-region commit latency, the leader limits throughput, and the system loses availability without a quorum. It also does not deliver the promised exactly-once result, because the call to an external processor is outside the consensus group, so you need idempotent effects anyway. It is heavy machinery for a deduplication problem.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📬</div>
-          <h4>D — Acknowledge First, Deduplicate and Refund Later</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📬</span>
+            <h4>D — Acknowledge First, Deduplicate and Refund Later</h4>
+          </div>
           <p>Acknowledging before the charge is processed means the app cannot tell the user whether the payment succeeded or was declined, and payments need a synchronous outcome. Duplicates are charged first and refunded afterwards, which means fees, visible double debits, chargebacks, support load and regulatory exposure. Asynchronous processing is fine for receipts, ledger projections and webhooks, but not as the deduplication mechanism.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Idempotency Keys with Atomic Conditional Writes ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Idempotency Keys with Atomic Conditional Writes ✓</h4>
+          </div>
           <p>Require clients to provide idempotency keys and store them in a partitioned, persistent key-value store (such as region-local DynamoDB, Redis, or Cassandra). Use atomic conditional writes (like PutIfA</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Global Relational DB</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Global Relational DB</h4>
+          </div>
           <p>Single-region or low-volume systems with a relational ledger where simplicity and strict constraints matter more than cross-region latency.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Regional KV + Conditional Writes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Regional KV + Conditional Writes</h4>
+          </div>
           <p>Multi-region, high-throughput APIs with unreliable clients and external side effects. The standard design for payments and order creation.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Global Consensus</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Global Consensus</h4>
+          </div>
           <p>Rare cases needing a globally linearizable sequence for other reasons (for example global unique allocation) at a low request rate.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Async Ack + Refunds</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Async Ack + Refunds</h4>
+          </div>
           <p>Non-financial side effects such as emails or notifications, where duplicates are cheap to compensate. Not suitable for charging money.</p>
         </div>
 

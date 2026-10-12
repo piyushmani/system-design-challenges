@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🏢</div>
-          <h4>A — Centralized Heartbeat Collector</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏢</span>
+            <h4>A — Centralized Heartbeat Collector</h4>
+          </div>
           <p>Simple, easy to debug, and cheap at 5,000 nodes, so it is a respectable choice for single-region or small fleets. But it fails the cross-region requirement: it judges health from one vantage point, so a partition between a region and the collector makes every worker there look dead, causing mass eviction exactly when the system is stressed. A 3-second timeout on 1-second heartbeats tolerates only about two lost beats, and WAN jitter will cause false positives. Making the collector highly available (regional collectors, quorum) is possible but starts to recreate the complexity of a distributed detector. <strong>Caveat:</strong> a central store is still very useful for <em>history and visibility</em>, just not as the sole liveness authority.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">☸️</div>
-          <h4>C — Orchestrator-Native Probes Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">☸️</span>
+            <h4>C — Orchestrator-Native Probes Only</h4>
+          </div>
           <p>Readiness and liveness probes answer 'is this container healthy?' at coarse granularity (a default probe period of 10 s with failure thresholds, and node-failure detection and eviction measured in tens of seconds to minutes by default), well outside a 5-second target. They also run from the node's own kubelet, so they do not detect a node that is partitioned from its <em>peers or routers</em>, and they do not cover transient workers that are not managed as pods. Cross-region partial outages are essentially invisible to them. <strong>Caveat:</strong> keep them; they are the right tool for restarting hung processes and gating rollouts, but not as the routing failure detector.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📡</div>
-          <h4>D — Low-Rate Push with Quorum Eviction</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📡</span>
+            <h4>D — Low-Rate Push with Quorum Eviction</h4>
+          </div>
           <p>A 5-second heartbeat interval means you need at least two or three missed beats (10–15 s) to be safe before declaring a node dead, which misses the 5-second target by 2–3×. Adding exponential backoff makes detection even slower, and heartbeats through a time-series pipeline add ingestion and query lag. The leader-quorum idea (confirm before evicting) is good and reduces false positives, but it adds latency and a leader dependency. <strong>Caveat:</strong> this pattern suits <em>observability and capacity planning</em>, or use cases where 15–30 s detection is acceptable.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — SWIM-Style Gossip Detection ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — SWIM-Style Gossip Detection ✓</h4>
+          </div>
           <p>Decentralized SWIM-style gossip failure detector: peers probe randomly and use indirect probes and suspicion (optionally phi-accrual) tuned to about 5 seconds, with no single point of failure.</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Centralized Collector</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Centralized Collector</h4>
+          </div>
           <p>Single-region or small fleets (hundreds of nodes) where simplicity and a central audit trail matter more than partition tolerance, ideally with regional collectors.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — SWIM Gossip</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — SWIM Gossip</h4>
+          </div>
           <p>Large, multi-region fleets of transient nodes that need fast, partition-tolerant failure detection with low overhead.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Orchestrator Probes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Orchestrator Probes</h4>
+          </div>
           <p>Container workloads where seconds-to-minutes detection is acceptable and the orchestrator already owns routing. Best used to restart hung processes.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Low-Rate Push + Quorum</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Low-Rate Push + Quorum</h4>
+          </div>
           <p>Observability-driven liveness for long-lived services where 15–30 s detection suffices, or as a complement for capacity dashboards.</p>
         </div>
 

@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">💾</div>
-          <h4>A — Leader fsync-First, Async Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">💾</span>
+            <h4>A — Leader fsync-First, Async Replication</h4>
+          </div>
           <p>Fast and simple, but acknowledging before any follower has the data means a leader crash or datacenter loss can lose acknowledged writes (RPO greater than zero). That directly violates the requirement. Local fsync protects only against process crashes, not machine or site loss, and asynchronous failover needs promotion logic that risks divergent histories.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏛️</div>
-          <h4>B — Centralized WAL Service</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>B — Centralized WAL Service</h4>
+          </div>
           <p>It can be durable, but it makes every partition's write path depend on one shared service: an extra network hop on each write, a shared blast radius (an overloaded log cluster degrades all partitions), and a log service that itself needs consensus, so the problem has moved rather than gone away. Leaders still need fencing. Shared-log designs can work at very large scale with a dedicated platform team, but they add operational complexity beyond what these requirements justify.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📨</div>
-          <h4>D — External Distributed Log (Kafka-Style) as WAL</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📨</span>
+            <h4>D — External Distributed Log (Kafka-Style) as WAL</h4>
+          </div>
           <p>Durable when configured with acks=all and a minimum in-sync replica count of 2 or more, but it adds a second replicated system to every write: another network hop and batching delay that threatens p95 under 10 ms, two leader-election domains (database leader and log-partition leader) that must be fenced against each other, and offset-versus-state reconciliation during recovery. Kafka also relies on replication rather than per-write fsync for durability by default, and you now operate and observe two stacks.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Per-Partition Consensus-Replicated WAL (Raft) ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Per-Partition Consensus-Replicated WAL (Raft) ✓</h4>
+          </div>
           <p>Per-partition consensus-replicated WAL: Each partition employs a leader-based consensus algorithm (such as Raft) that writes to a local WAL and replicates the entries across a majority of the replicas</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Leader fsync, Async Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Leader fsync, Async Replication</h4>
+          </div>
           <p>Caches, non-critical stores, or systems where losing the last moments of data on failover is acceptable, and as the base for an asynchronous disaster-recovery copy.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Centralized WAL Service</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Centralized WAL Service</h4>
+          </div>
           <p>A platform team building a shared-log foundation for many services, with the staffing to run it, isolate tenants, and engineer it for very high availability.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Per-Partition Raft WAL</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Per-Partition Raft WAL</h4>
+          </div>
           <p>The default for strongly consistent stores that need zero acknowledged-write loss and automatic failover, such as metadata services and transactional key-value databases.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — External Log (Kafka-Style)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — External Log (Kafka-Style)</h4>
+          </div>
           <p>Event-sourced systems where the log is the system of record and state is rebuilt from it, and where the latency budget is looser than 10 ms.</p>
         </div>
 

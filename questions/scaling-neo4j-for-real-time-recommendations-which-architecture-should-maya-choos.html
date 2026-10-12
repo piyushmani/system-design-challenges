@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🧠</div>
-          <h4>A — Single Large Neo4j Cluster</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧠</span>
+            <h4>A — Single Large Neo4j Cluster</h4>
+          </div>
           <p>Neo4j causal clustering scales <em>reads</em> with secondaries, but all writes go through one leader and every member holds the full graph, so vertical limits and page-cache pressure appear at 50 million users with dense connections. Running GDS algorithms or deep traversals per request makes tail latency depend on graph shape and concurrent load; a few heavy queries can starve the rest. It is simple and fine at smaller scale, but it couples expensive computation to user-facing latency. <strong>Caveat:</strong> for shallow, limited queries (friends-of-friends with caps) on a modest graph, a well-tuned cluster can serve 100 ms reads with no extra layer.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧩</div>
-          <h4>B — Shard Across Multiple Neo4j Clusters</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>B — Shard Across Multiple Neo4j Clusters</h4>
+          </div>
           <p>Graphs are hard to partition: friend-of-friend traversals cross shard boundaries constantly, so synchronous RPC merges add network hops and amplify tail latency (the slowest shard sets the latency). Rebalancing and cross-shard consistency add major operational cost, and popular users create hot shards. <strong>Caveat:</strong> sharding by tenant or region works when queries stay inside one partition, which friend recommendations do not.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗃️</div>
-          <h4>D — Cassandra + Batch GDS</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗃️</span>
+            <h4>D — Cassandra + Batch GDS</h4>
+          </div>
           <p>Cassandra scales writes well, but it is not a graph engine, so traversals must be reimplemented in application code or batch jobs. More importantly, multi-minute staleness violates the explicit <strong>under 30 seconds</strong> freshness requirement. It trades a stated requirement for simplicity.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Neo4j Write Model + Precomputed Serving Layer (CQRS) ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Neo4j Write Model + Precomputed Serving Layer (CQRS) ✓</h4>
+          </div>
           <p>Maintain Neo4j as the primary, strongly consistent database for writes. Route updates through Kafka into asynchronous pipelines that execute incremental graph-embedding or GDS jobs, and then store the</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Single Neo4j Cluster</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Neo4j Cluster</h4>
+          </div>
           <p>Small to mid-sized graphs, shallow queries with strict limits, and modest traffic where simplicity matters more than extreme scale.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Sharded Neo4j Clusters</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Sharded Neo4j Clusters</h4>
+          </div>
           <p>Graphs that partition naturally (by tenant, region, or domain) so most queries stay inside one shard; not for highly interconnected social graphs.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — CQRS with Serving Layer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — CQRS with Serving Layer</h4>
+          </div>
           <p>Large, highly connected graphs with strict read-latency SLAs and near-real-time updates, where heavy computation can be incremental or batched.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Cassandra + Batch</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Cassandra + Batch</h4>
+          </div>
           <p>Write-heavy event or wide-row workloads with relaxed freshness (hours) and little need for traversals; not for real-time recommendations.</p>
         </div>
 

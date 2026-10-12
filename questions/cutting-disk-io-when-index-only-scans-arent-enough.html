@@ -100,23 +100,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">⚡</div>
-          <h4>A — In-Memory Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — In-Memory Cache</h4>
+          </div>
           <p>A result cache works well for <strong>repeated identical queries</strong>. With many filter combinations, each unique query is its own cache key, so hit rates stay low and every miss still pays for the full disk-heavy scan. Correctly invalidating aggregated results as orders change is also hard.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧩</div>
-          <h4>B — Sharding</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>B — Sharding</h4>
+          </div>
           <p>Sharding spreads data and I/O across nodes, but each query still scans the same total volume of wide rows, now with <strong>scatter-gather</strong> overhead for aggregations. It's a major operational project (rebalancing, cross-shard queries, resharding) that addresses storage and write scale, not inefficient read patterns.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏛️</div>
-          <h4>C — Columnar Database</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>C — Columnar Database</h4>
+          </div>
           <p>Columnar stores (ClickHouse, DuckDB, Redshift, BigQuery) are <strong>purpose-built for exactly this workload</strong> and would eliminate the I/O problem at its root. They read only the columns each query needs, compress aggressively, and handle ad-hoc filter combinations that a pre-aggregated view cannot support. The trade-off is operational: a new data store, a sync pipeline (CDC or batch ETL), and a separate query interface. <strong>If the dashboard's filter requirements outgrow the materialized view's grouped dimensions, or if non-additive aggregates are needed, a columnar store becomes the right next step.</strong> For Arjun's current needs — known aggregate patterns with bounded staleness — the materialized view is a lower-cost starting point inside the existing database.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Materialized View ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Materialized View ✓</h4>
+          </div>
           <p>Create a materialized view that precomputes and stores the aggregated results, with its own indexes.</p>
         </div>
 
@@ -147,23 +155,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — In-Memory Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — In-Memory Cache</h4>
+          </div>
           <p>Hot, repeated, identical queries (e.g., homepage stats, top-N lists) with a small set of keys and tolerance for brief staleness.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Sharding</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Sharding</h4>
+          </div>
           <p>Data volume or write throughput is more than a single primary can handle, and queries naturally go to one shard by tenant or region.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Columnar Database</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Columnar Database</h4>
+          </div>
           <p>Large-scale, ad-hoc analytics over billions of rows, where precomputation can't anticipate the queries.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Materialized View</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Materialized View</h4>
+          </div>
           <p>Repeated aggregate or reporting queries over large tables, where results can be minutes old and the query patterns are known.</p>
         </div>
 

@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🗂️</div>
-          <h4>A — Centralized Strongly Consistent Registry</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗂️</span>
+            <h4>A — Centralized Strongly Consistent Registry</h4>
+          </div>
           <p>Consul and etcd are excellent <strong>sources of truth</strong>, but a strongly consistent store is a CP system: during partitions or leader elections reads and writes can stall, and discovery doesn't need that guarantee. Clients must implement caching, watching, load balancing and health handling per language, and the registry provides no request-level observability. <strong>Caveat:</strong> a registry often works well as the catalog behind a mesh control plane. The weakness is making every client depend on it directly.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌐</div>
-          <h4>B — DNS with Short TTLs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>B — DNS with Short TTLs</h4>
+          </div>
           <p>DNS is robust and universal, but TTL-based propagation is slow relative to hundreds of scale events per minute, and caches in resolvers, runtimes (for example JVM) and clients often ignore or exceed TTLs. Load balancing is per-connection and not health-aware at request level, and it provides no service-level metrics. Very short TTLs multiply DNS load. <strong>Caveat:</strong> DNS is a good fit for coarse region-level traffic steering and for bootstrapping the control plane itself.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗣️</div>
-          <h4>D — Gossip-Based Peer-to-Peer Discovery</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗣️</span>
+            <h4>D — Gossip-Based Peer-to-Peer Discovery</h4>
+          </div>
           <p>Gossip (SWIM-style) has no central dependency and scales well, but convergence is <strong>probabilistic</strong> and failure detection can produce false positives under load. It offers weak observability and no built-in L7 routing or policy, every client must embed a membership agent, and gossip across WANs is chatty and hard to secure and tune. <strong>Caveat:</strong> it is well suited to cluster membership for data stores and peer systems, not as the routing layer for a multi-region service fleet.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Sidecar Proxy with an xDS Control Plane ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Sidecar Proxy with an xDS Control Plane ✓</h4>
+          </div>
           <p>A sidecar proxy architecture (using tools like Envoy) paired with a control plane responsible for pushing xDS updates directly to the local proxies. Applications communicate exclusively through their</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Central Registry</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Central Registry</h4>
+          </div>
           <p>Moderate scale where a service catalog, health checks and key-value config are needed without adopting a full mesh. Often used as the source of truth behind a control plane.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — DNS with Short TTL</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — DNS with Short TTL</h4>
+          </div>
           <p>Coarse region-level routing, stable services, legacy clients, and bootstrapping other discovery systems.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Sidecar + xDS</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Sidecar + xDS</h4>
+          </div>
           <p>High churn, strict SLAs, multi-region deployments, and a need for L7 policy, observability and fail-static behavior.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Gossip P2P</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Gossip P2P</h4>
+          </div>
           <p>Cluster membership among peers (for example data stores) in small to mid-sized clusters, where no central operations team or L7 routing is needed.</p>
         </div>
 

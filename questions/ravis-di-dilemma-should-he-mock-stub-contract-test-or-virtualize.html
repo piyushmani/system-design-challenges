@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🎭</div>
-          <h4>A — Mocks and Fakes with Staging Integration</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🎭</span>
+            <h4>A — Mocks and Fakes with Staging Integration</h4>
+          </div>
           <p>Unit tests are fast, but hand-written mocks <strong>drift from the real services</strong> because nothing verifies them, and the real check happens late, in a shared staging environment that is often slow, flaky, and a release bottleneck. Contract breaks surface after merge rather than before. <strong>Caveat:</strong> DI with fakes is still the right tool for unit-testing domain logic, and it is part of the recommended strategy.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🐳</div>
-          <h4>B — Testcontainers for Everything on Every PR</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🐳</span>
+            <h4>B — Testcontainers for Everything on Every PR</h4>
+          </div>
           <p>Real binaries give high realism, but running <strong>other teams' microservices</strong> in every PR needs their images, versions, and configuration, making CI slow, resource-heavy, and flaky, and it ties your pipeline to their release cadence. It also leaves open the question of <em>which</em> version of a dependency to test against, which undermines independent deployment. <strong>Caveat:</strong> Testcontainers is excellent for dependencies you own, such as the database, broker, or cache.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧪</div>
-          <h4>D — Central Service-Virtualization Proxy</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧪</span>
+            <h4>D — Central Service-Virtualization Proxy</h4>
+          </div>
           <p>Virtualization is strong for simulating latency, errors, and partial failures deterministically. But a <strong>shared central proxy</strong> is itself shared CI infrastructure that can fail or become a bottleneck, and its behaviors are unverified against real providers, so a wrong assumption is baked in and never checked. It does not tell you whether a provider changed. <strong>Caveat:</strong> tools such as WireMock or Toxiproxy are very useful inside the isolated fault-injection stage of option C.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Consumer-Driven Contracts with DI and Staged Integration ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Consumer-Driven Contracts with DI and Staged Integration ✓</h4>
+          </div>
           <p>Use consumer-driven contract testing (such as Pact) together with DI: generate verified provider stubs for fast CI runs, and run lean integration tests against real providers in a separate pipeline st</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Mocks/Fakes + Staging</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Mocks/Fakes + Staging</h4>
+          </div>
           <p>A small system with few dependencies and a stable, well-maintained staging environment, or for unit-testing pure domain logic.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Testcontainers for Everything</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Testcontainers for Everything</h4>
+          </div>
           <p>A monolith or small team where all dependencies are owned and light enough to run in CI, or for dependencies such as databases and brokers that the team owns.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Consumer-Driven Contracts + Staged Integration</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Consumer-Driven Contracts + Staged Integration</h4>
+          </div>
           <p>A microservices ecosystem with multiple teams that want fast CI, independent releases, and early detection of breaking interface changes.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Central Service Virtualization</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Central Service Virtualization</h4>
+          </div>
           <p>Simulating hard-to-reproduce behaviors (latency, errors, rate limits) in performance and chaos testing, or when real providers are unavailable or costly.</p>
         </div>
 

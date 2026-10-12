@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🌉</div>
-          <h4>A — Stretched 5-Node ZooKeeper Across Two DCs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌉</span>
+            <h4>A — Stretched 5-Node ZooKeeper Across Two DCs</h4>
+          </div>
           <p>ZooKeeper is safe, but this topology fixes neither problem. With 3 nodes in one DC and 2 in the other, losing the 3-node DC loses quorum, so you still cannot survive a full-DC loss symmetrically. Every write (including session heartbeats and election znodes) needs acknowledgements from 3 of 5 nodes, so at least one cross-DC round trip is on the path. Session timeouts must be inflated to tolerate WAN jitter, which slows failure detection and makes failover less predictable. A genuinely stretched quorum needs a third site.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⏱️</div>
-          <h4>C — Lease-Based Election without Quorum Consensus</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>C — Lease-Based Election without Quorum Consensus</h4>
+          </div>
           <p>Leases depend on bounded clock drift and process pauses. A leader that stalls (GC pause, VM freeze) can resume after its lease expired and keep acting while a new leader has been elected, giving two leaders. A single metadata service also becomes the trust anchor and a single point of failure. Leases are safe only when backed by a linearizable store and combined with <strong>fencing tokens</strong>, which at that point looks like option B. Explicitly avoiding quorum consensus contradicts the strong-safety requirement.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🕸️</div>
-          <h4>D — Leaderless with Optimistic Assignment and CRDTs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>D — Leaderless with Optimistic Assignment and CRDTs</h4>
+          </div>
           <p>Assigning a job to exactly one worker is an exclusivity constraint, which is a mutual-exclusion problem, not a mergeable-state problem. CRDTs converge state eventually but cannot prevent two nodes from acting on the same job before they converge, and compensating actions cannot undo side effects that already happened. Partition ownership by consistent hashing still needs agreement on membership, which reintroduces coordination. This is appropriate for idempotent, commutative work (metrics aggregation, cache warming), not strict single assignment.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Local-Quorum Raft Control Plane with Fenced Leadership ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Local-Quorum Raft Control Plane with Fenced Leadership ✓</h4>
+          </div>
           <p>Operate a Raft-based control plane, such as Consul or etcd, as an odd-numbered cluster situated entirely within the primary data center to maintain a local majority. Asynchronously replicate the state</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Stretched ZooKeeper</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Stretched ZooKeeper</h4>
+          </div>
           <p>Three or more sites with low inter-site latency (for example metro-area), where a quorum across sites is acceptable and each site failure is survivable by the remaining majority.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Local Raft + DR Replica</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Local Raft + DR Replica</h4>
+          </div>
           <p>Two DCs with high inter-DC latency, strict single-leader safety, and an acceptable human-approved or witness-gated DC failover.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Leases without Quorum</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Leases without Quorum</h4>
+          </div>
           <p>Efficiency-only exclusivity (avoiding duplicate cache refreshes), where double execution is harmless. Add fencing and a linearizable backing store if correctness matters.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Leaderless + CRDTs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Leaderless + CRDTs</h4>
+          </div>
           <p>Idempotent, commutative workloads (counters, metrics, replicated state) that tolerate temporary duplicates and converge by design.</p>
         </div>
 

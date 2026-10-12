@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔄</div>
-          <h4>A — Traditional Rolling Deployment</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>A — Traditional Rolling Deployment</h4>
+          </div>
           <p>Running the migration <em>before</em> the code is the correct expand-first order, and rolling replacement is a sound baseline for low-risk changes. For this case, however, instances are replaced by <strong>percentage of servers, not a chosen cohort of users</strong>, so the first 10% already carries real exposure. Health checks detect crashes, not wrong behaviour such as subtle payment errors or a latency regression on one path. Rollback means rolling forward or back again, which takes minutes, not seconds. <strong>Caveat:</strong> adding a flag and metric-gated steps to a rolling deploy moves it toward option C.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔵</div>
-          <h4>B — Blue-Green Deployment</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔵</span>
+            <h4>B — Blue-Green Deployment</h4>
+          </div>
           <p>Blue-green gives an excellent instant app-tier rollback, but it fits this case poorly. The database is normally <strong>shared</strong>, so 'apply the DB changes there' is not isolated: the migration affects blue as well, which is exactly why it must be backward compatible. Switching <strong>100% of traffic at once</strong> exposes everyone to any defect, the green environment starts with cold caches and connection pools, and you pay for duplicate capacity. <strong>Caveat:</strong> it works well for stateless, lower-risk releases, and can be combined with canary routing (send 1 to 5% to green first).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🛑</div>
-          <h4>D — Maintenance Window with Synchronized Deployment</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>D — Maintenance Window with Synchronized Deployment</h4>
+          </div>
           <p>Taking a payment API offline means lost revenue and broken SLAs, and it is unnecessary for a backward-compatible change. Applying migration and code <strong>simultaneously</strong> removes the ability to roll either back independently, and relying entirely on QA assumes that pre-production reproduces production load and data, which it rarely does. <strong>Caveat:</strong> a window is justified only for changes that cannot be made backward compatible, which is not Maya's case.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Canary Release with Feature Flags and Expand-Contract Migration ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Canary Release with Feature Flags and Expand-Contract Migration ✓</h4>
+          </div>
           <p>Canary release with feature flags and gradual traffic shifting: deploy the new code to a small percentage of users (1-5%), enabling the feature flag only for them. Monitor key metrics and slowly incre</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Rolling Deployment</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Rolling Deployment</h4>
+          </div>
           <p>Low-risk, backward-compatible changes to stateless services where mixed versions are safe and instance-level health checks are an adequate safety net.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Blue-Green</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Blue-Green</h4>
+          </div>
           <p>Stateless releases that need instant whole-environment fallback and are well covered by smoke tests, especially when combined with a small initial traffic slice.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Canary + Flags + Expand-Contract</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Canary + Flags + Expand-Contract</h4>
+          </div>
           <p>High-risk or high-stakes changes (payments, authentication, core data paths) where limited exposure, metric gating and instant rollback justify the extra tooling.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Maintenance Window</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Maintenance Window</h4>
+          </div>
           <p>Breaking changes with no backward-compatible path (for example a major data model change), where a short planned outage is cheaper than a long dual-write migration.</p>
         </div>
 

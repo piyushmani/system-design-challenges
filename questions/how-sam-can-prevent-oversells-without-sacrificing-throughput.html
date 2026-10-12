@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>A — Pessimistic Locking + Vertical Scaling</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Pessimistic Locking + Vertical Scaling</h4>
+          </div>
           <p>This is the design that is already failing. The lock is held for the whole transaction, and every extra millisecond of network or application time multiplies queueing on a hot row. <strong>Bigger hardware does not help</strong>, because contention on one row is serialization, not a resource shortage. Connection pooling and short timeouts reduce the damage but convert queueing into timeouts, so users still see failures. <strong>Caveat:</strong> for modest traffic with no hot rows, this is the simplest correct design, and it remains a fine fallback.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗝️</div>
-          <h4>B — Redis Distributed Lock (Redlock)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗝️</span>
+            <h4>B — Redis Distributed Lock (Redlock)</h4>
+          </div>
           <p>This moves the queue from the database to Redis and <strong>adds a network hop</strong>, yet the database row is still updated under contention. It also weakens safety: a lock can expire during a GC pause or network delay while its holder keeps going, and without <strong>fencing tokens</strong> two writers can proceed at once (Martin Kleppmann's well-known critique of Redlock). Distributed locks are reasonable for efficiency (avoiding duplicate work) but risky as the only guard for a correctness rule such as never overselling.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔁</div>
-          <h4>C — Optimistic Concurrency (CAS + Retries)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔁</span>
+            <h4>C — Optimistic Concurrency (CAS + Retries)</h4>
+          </div>
           <p>Optimistic control shines when conflicts are rare. On a flash-sale hot row, <strong>many writers collide on every attempt</strong>: one compare-and-swap wins per round and the rest retry, so wasted work grows with concurrency and backoff stretches tail latency. A per-instance in-memory queue does not coordinate across instances, so it cannot stop cross-instance collisions. <strong>Caveat:</strong> for ordinary, low-contention SKUs, OCC is cheap and correct, and a single atomic conditional <code>UPDATE ... WHERE available >= qty</code> is even simpler.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Sharded Single-Writer Inventory Service ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Sharded Single-Writer Inventory Service ✓</h4>
+          </div>
           <p>Build a sharded, single-writer inventory service. Distribute SKUs across nodes and route every update to the owning shard, which applies changes sequentially through a local queue or a partitioned dur</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Pessimistic Locking + Vertical Scaling</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Pessimistic Locking + Vertical Scaling</h4>
+          </div>
           <p>Moderate traffic, evenly spread across many rows, where a single database can comfortably handle the load. The simplest correct approach, especially when transactions are short.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Redis Redlock</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Redis Redlock</h4>
+          </div>
           <p>Coordinating work for efficiency (avoiding duplicate jobs or thundering herds) where an occasional double execution is harmless. Not a sole guard for hard invariants.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Optimistic CAS + Retries</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Optimistic CAS + Retries</h4>
+          </div>
           <p>Low-contention updates (many different rows, rare conflicts), or a single atomic conditional update on a moderately busy row. Poor fit for flash-sale hot keys.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Sharded Single-Writer Service</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Sharded Single-Writer Service</h4>
+          </div>
           <p>Extreme write contention on a small set of keys, strict never-oversell requirement, and a team able to run a stateful, partitioned service with a durable log.</p>
         </div>
 

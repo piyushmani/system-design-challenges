@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🌲</div>
-          <h4>B — B-Tree Engine with Cross-Region Sync</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌲</span>
+            <h4>B — B-Tree Engine with Cross-Region Sync</h4>
+          </div>
           <p>B-trees excel at point reads and range scans, but this option fights the workload at 200,000 small writes per second: <strong>in-place page updates cause random IO</strong>, page splits and double-write or WAL overhead, and per-commit <code>fsync</code> caps throughput unless heavily group-committed. TTL expiry becomes row-by-row deletes that bloat pages and require purge or vacuum. Synchronous replication <em>across regions</em> also contradicts the stated allowance for asynchronous inter-region replication and adds tens to hundreds of milliseconds to every write. <strong>Caveat:</strong> a strong choice for read-dominated, update-in-place OLTP with heavy range queries.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧊</div>
-          <h4>C — LSM Hot Tier + B-Tree/Columnar Cold Tier</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧊</span>
+            <h4>C — LSM Hot Tier + B-Tree/Columnar Cold Tier</h4>
+          </div>
           <p>A hybrid is a legitimate evolution, but it adds <strong>a second storage format, a conversion pipeline and a tiered read path</strong> (hot first, then cold) with consistency windows during migration, all of which add failure modes and operational load. The scenario asks only for <em>infrequent</em> range scans, so the benefit does not yet justify the complexity. <strong>Caveat:</strong> becomes attractive when historical data dominates storage cost or analytical scans become a first-class workload.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📜</div>
-          <h4>D — Kafka Log + Separate Read Index</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📜</span>
+            <h4>D — Kafka Log + Separate Read Index</h4>
+          </div>
           <p>A log is great for durable ingest and replay, but it is <strong>not a point-lookup store</strong>, so every read depends on a second system that must be built, scaled and kept in sync. Synchronous index updates couple write latency to the index (and cap throughput), while asynchronous updates give up the read-after-write consistency the scenario asks for within a region. The index itself still has to be an LSM or B-tree, so the core engine decision is simply deferred. <strong>Caveat:</strong> a good complement when many downstream consumers need replayable streams.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>A — LSM-Tree with Regional Raft ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — LSM-Tree with Regional Raft ✓</h4>
+          </div>
           <p>Run an LSM-tree engine (RocksDB-style) per partition with a memtable, write-ahead log, Bloom filters and background compaction. Replicate shards with leader-based Raft inside the region for strong reg</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — LSM + Regional Raft</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — LSM + Regional Raft</h4>
+          </div>
           <p>Write-heavy, small-record workloads with mostly point reads, TTL and strong regional consistency, such as event stores, time-series, messaging and metadata services.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — B-Tree + Sync Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — B-Tree + Sync Replication</h4>
+          </div>
           <p>Read-dominated or update-in-place OLTP workloads with heavy range queries and moderate write rates (orders, accounts, inventory), where predictable read latency matters most.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Hybrid LSM + Cold Tier</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hybrid LSM + Cold Tier</h4>
+          </div>
           <p>Data volumes where cold history dominates cost, or analytical scans become important, so a columnar or compact cold tier pays back its added complexity.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Kafka + Read Index</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Kafka + Read Index</h4>
+          </div>
           <p>Many downstream consumers need replayable, ordered event streams (stream processing, CDC, auditing) alongside, not instead of, an indexed serving store.</p>
         </div>
 

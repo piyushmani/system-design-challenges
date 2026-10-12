@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🏝️</div>
-          <h4>B — Dedicated Vertically Scaled Shard</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏝️</span>
+            <h4>B — Dedicated Vertically Scaled Shard</h4>
+          </div>
           <p>Isolation fixes the <em>blast radius</em> (other users are safe) but not the <strong>bottleneck</strong>: the key still lives on a single leader, bounded by the biggest machine you can buy, and the next viral account needs the same manual treatment. Failover of one huge node is also slow. <strong>Caveat:</strong> as a complement it is valuable. Moving the top few accounts to isolated capacity is a cheap safety net while salting is rolled out.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>C — Global Lock / Consensus Sequencer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>C — Global Lock / Consensus Sequencer</h4>
+          </div>
           <p>Serializing every write through a lock or a consensus round <strong>adds coordination latency to each write and caps throughput at the sequencer's rate</strong>. It concentrates the very contention you are trying to remove and creates a new single point of failure. The problem here was never conflicting writes; it was too many writes for one partition. <strong>Caveat:</strong> it is only justified for data that needs strict global ordering (ledger entries), which counters and tallies do not.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🚦</div>
-          <h4>D — Rate Limiting + Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🚦</span>
+            <h4>D — Rate Limiting + Queue</h4>
+          </div>
           <p>This protects the database but does not serve the demand. Throttling a celebrity's legitimate traffic degrades the product for the user who matters most, and the queue still drains into the same hot partition, so backlog and staleness grow during spikes. <strong>Caveat:</strong> as a <em>last line of defense</em> (per-tenant quotas, load shedding for abusive traffic) it is essential and cheap, so keep it alongside salting.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>A — Key Salting (Write Sharding) ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Key Salting (Write Sharding) ✓</h4>
+          </div>
           <p>Key salting: spread writes for the hot logical key across N sub-keys on different shards using a random or deterministic suffix, aggregate on read through a cache or service, and detect hot keys dynam</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Key Salting</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Key Salting</h4>
+          </div>
           <p>Write-hot keys holding commutative or appendable data (counters, tallies, feeds) where eventual consistency is fine and the load exceeds what one partition can absorb.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Dedicated Shard</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Dedicated Shard</h4>
+          </div>
           <p>A few known whales needing contractual isolation or strong consistency, or as a stopgap while a sharding fix is rolled out.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Global Lock / Sequencer</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Global Lock / Sequencer</h4>
+          </div>
           <p>Rare, low-volume, strictly ordered updates (ledgers, unique-resource allocation), never a high-rate hot counter.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Rate Limit + Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Rate Limit + Queue</h4>
+          </div>
           <p>Protecting shared infrastructure from abusive or unexpected spikes, as a safety net on top of a scaling fix.</p>
         </div>
 

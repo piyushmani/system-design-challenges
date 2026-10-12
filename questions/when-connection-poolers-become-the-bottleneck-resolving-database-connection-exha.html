@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔼</div>
-          <h4>A — Raise max_connections + Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔼</span>
+            <h4>A — Raise max_connections + Queue</h4>
+          </div>
           <p>Each Postgres connection is a separate OS process with its own memory, and more concurrent backends mean more context switching plus lock-manager and snapshot contention. Raising the limit can <strong>lower</strong> total throughput precisely during the flash-sale peak and risks memory exhaustion (OOM). Application-side queuing is a good idea, but without a shared pooler each pod still queues and connects independently, so the fan-in problem remains and failover still triggers a mass reconnect. <strong>Caveat:</strong> a modest increase is a fine stopgap while the pooler is rolled out.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">☁️</div>
-          <h4>C — Managed Proxy (e.g., RDS Proxy)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">☁️</span>
+            <h4>C — Managed Proxy (e.g., RDS Proxy)</h4>
+          </div>
           <p>A managed proxy is a legitimate option and a close second, particularly if the database already runs on AWS and the team wants minimal operations. The catch is <strong>connection pinning</strong>: session-level <code>SET</code> statements and certain prepared-statement usage can pin a client to one server connection, which erodes multiplexing exactly where this workload leans on them. It is also tied to one cloud provider, adds hourly cost and an extra network hop, and offers less control over pool tuning and metrics than a self-managed pooler. <strong>Caveat:</strong> if session state can be removed and the stack is already on AWS, it can be the lower-effort choice.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📨</div>
-          <h4>D — Async Writes via Message Broker</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📨</span>
+            <h4>D — Async Writes via Message Broker</h4>
+          </div>
           <p>Queue-based writes smooth bursts and cut concurrent clients, but this is an <strong>application re-architecture, not a connection fix</strong>. Checkout and inventory flows usually need synchronous, read-your-writes behavior, so eventual consistency leaks into the user experience. It also adds a broker to operate, needs idempotent consumers, still requires pooling on the worker side, and does nothing for read traffic, which the exhausted connections also serve. <strong>Caveat:</strong> a good complement for genuinely deferrable work (emails, analytics, ledger projections).</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — External Transaction-Mode Pooler (PgBouncer) ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — External Transaction-Mode Pooler (PgBouncer) ✓</h4>
+          </div>
           <p>Deploy an external, horizontally scalable pooler such as PgBouncer in transaction-pooling mode in front of Postgres: run several instances behind a load-balanced service with health checks, shrink the</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Raise Limit + Queue</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Raise Limit + Queue</h4>
+          </div>
           <p>As a short-term stopgap, or for small systems with a handful of app instances where total connections are well below the limit and bursts are modest. Combine with sensible app-side timeouts.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — External Pooler</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — External Pooler</h4>
+          </div>
           <p>Many pods or functions each hold their own pool, transactions are short, and the team wants a cloud-agnostic, tunable solution with rapid failover. Best when session state can be moved into transactions.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Managed Proxy</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Managed Proxy</h4>
+          </div>
           <p>The database is already on AWS (RDS or Aurora), the team prefers a managed service with minimal operations, and the workload avoids session-level state that causes pinning.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Async Writes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Async Writes</h4>
+          </div>
           <p>Workloads with genuinely deferrable writes (event ingestion, notifications, analytics) where eventual consistency is acceptable and burst smoothing is the main goal.</p>
         </div>
 

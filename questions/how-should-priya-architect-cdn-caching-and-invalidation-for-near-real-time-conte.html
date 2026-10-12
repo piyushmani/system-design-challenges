@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">⏱️</div>
-          <h4>A — Very Short TTLs (3–5 Seconds)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>A — Very Short TTLs (3–5 Seconds)</h4>
+          </div>
           <p>Simple, and a short TTL does give 'seconds' freshness with no extra infrastructure. But it turns freshness into a polling problem: every PoP re-requests every hot object every few seconds whether or not anything changed. Without a shield and request collapsing, each expiry window can send a burst to the origin, and the option explicitly accepts increased origin traffic during surges, the opposite of the shielding requirement. There is also no fast path for urgent corrections (such as a pricing error) beyond waiting out the TTL.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧹</div>
-          <h4>B — Long TTLs with Blocking Purge Before Commit</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧹</span>
+            <h4>B — Long TTLs with Blocking Purge Before Commit</h4>
+          </div>
           <p>Wrong order and wrong coupling. Purging <em>before</em> the database commit lets a concurrent request re-cache the old price right after the purge. Blocking the write on the CDN API ties price updates to CDN availability, latency, and rate limits (purge speed varies widely by vendor). If a purge fails or is slow, long TTLs keep wrong prices live for hours, a pricing-integrity risk. Long TTLs with purge is a sound idea only when purges happen after commit, asynchronously, with retries, and with a short TTL backstop.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧮</div>
-          <h4>D — No CDN Caching for Price and Stock; Edge Compute</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>D — No CDN Caching for Price and Stock; Edge Compute</h4>
+          </div>
           <p>Edge functions are great for personalization, redirects, A/B tests, and light transformation. But computing price and stock at the edge on every request still needs authoritative data, so each request becomes a call to a central store (origin load and hot keys, now at flash-sale volume) or to an edge key-value store that is itself eventually consistent and needs propagation. You lose the cache's collapse-and-offload property exactly when you need it, pay per-request compute at peak, and add complexity.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Moderate TTL + Stale-While-Revalidate + Origin Shield + Event-Driven Tag Purge ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Moderate TTL + Stale-While-Revalidate + Origin Shield + Event-Driven Tag Purge ✓</h4>
+          </div>
           <p>Apply moderate TTLs (ranging from tens of seconds to several minutes) in combination with a &#x27;stale-while-revalidate&#x27; caching strategy. Implement an origin shield (a tiered caching layer) to safeguard</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Very Short TTLs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Very Short TTLs</h4>
+          </div>
           <p>Low-traffic or small catalogs where the origin can absorb periodic revalidation easily, or when the CDN offers no usable purge API.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Long TTL + Blocking Purge</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Long TTL + Blocking Purge</h4>
+          </div>
           <p>Rarely as described. A long-TTL-plus-purge model suits infrequently changing content (such as articles) when purges are post-commit, asynchronous, and retried.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Moderate TTL + SWR + Shield + Tag Purge</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Moderate TTL + SWR + Shield + Tag Purge</h4>
+          </div>
           <p>Global catalogs with frequent price and stock changes and spiky traffic, where both freshness in seconds and origin protection are required.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">✅</div>
-          <h4>D — Edge Compute, No Caching</h4>
+          <div class="strategy-header">
+            <span class="s-icon">✅</span>
+            <h4>D — Edge Compute, No Caching</h4>
+          </div>
           <p>Per-request logic that genuinely differs by user or region (personalization, geo rules, A/B tests, edge authentication), with data replicated to the edge.</p>
         </div>
 

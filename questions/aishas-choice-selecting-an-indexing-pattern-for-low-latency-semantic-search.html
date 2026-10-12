@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔗</div>
-          <h4>A — Synchronous Write-Through</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>A — Synchronous Write-Through</h4>
+          </div>
           <p>Embedding generation in the request path adds model inference latency to every write, and the write now fails or slows whenever the embedding service or vector DB is degraded, so <strong>availability is coupled</strong> to the weakest dependency. The promised 'immediate consistency' is also weaker than it looks: many vector indexes expose new vectors only after a refresh or segment flush, and a dual write to two stores is still not atomic. <strong>Caveat:</strong> for small catalogs, admin tools, or prototypes with low write rates, where simplicity beats resilience, it works.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔀</div>
-          <h4>C — Hybrid Fast Path</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>C — Hybrid Fast Path</h4>
+          </div>
           <p>It solves a problem the SLO does not have, because one-minute freshness is already met by the async path. The cost is real: two indexing paths to test and monitor, flag management, and races where the sync and async paths write different versions of the same item (which demands strict versioning). <strong>Caveat:</strong> it is reasonable only if a small subset truly needs sub-second visibility, and even then it is often simpler to speed up the async path with a priority topic.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧮</div>
-          <h4>D — Query-Time Merge</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>D — Query-Time Merge</h4>
+          </div>
           <p>This pushes cost onto the read path, exactly where the 100 ms budget is tightest: extra embedding calls, a second search, and score merging on every query (cross-source score normalization is hard). During ingestion spikes the unindexed set grows, so query latency grows with write volume, and caching becomes difficult because results depend on that set. <strong>Caveat:</strong> a small, bounded 'delta index' of very recent items (not query-time embedding) is a legitimate optimization on top of the async pipeline.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Asynchronous Streaming Pipeline ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Asynchronous Streaming Pipeline ✓</h4>
+          </div>
           <p>Asynchronous streaming pipeline: persist metadata, publish an event to a durable broker (Kafka), and let independent consumers embed and idempotently upsert into the vector DB.</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Synchronous Write-Through</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous Write-Through</h4>
+          </div>
           <p>Small catalogs, low write rates, admin-driven updates, or prototypes where immediate visibility matters and the embedding and vector services are highly available.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Async Streaming Pipeline</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Async Streaming Pipeline</h4>
+          </div>
           <p>Medium to large catalogs with continuous updates, minute-level freshness, multi-region requirements, and a need to isolate failures and absorb spikes.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Hybrid Fast Path</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hybrid Fast Path</h4>
+          </div>
           <p>A small, well-defined subset (flash promotions, compliance takedowns) needs seconds-level visibility and the team can afford two paths with strict versioning.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Query-Time Merge</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Query-Time Merge</h4>
+          </div>
           <p>Short-lived delta windows (items added in the last few minutes) kept as a small bounded side index, or very low query volume where the extra read cost is acceptable.</p>
         </div>
 

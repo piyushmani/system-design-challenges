@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>A — In-Process Locked Map</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — In-Process Locked Map</h4>
+          </div>
           <p>Locks make a single process thread-safe, but they do nothing across <strong>many instances</strong>. Each instance holds its own partial view of the counter until the next flush, so the fleet can overspend a quota (every instance thinks there is room left) or throttle wrongly. Coarse locks also serialize all customers on one lock, and an instance crash loses everything not yet flushed. <strong>Caveat:</strong> local counters with periodic sync are a valid approximation for soft limits (such as coarse burst protection) where small overshoot is acceptable, but not for strict billing.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🎯</div>
-          <h4>B — Sticky Routing with Single-Threaded Actors</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🎯</span>
+            <h4>B — Sticky Routing with Single-Threaded Actors</h4>
+          </div>
           <p>This gives strong per-customer ordering without locks, and it is a legitimate pattern (actor and shard-per-key designs). But it adds <strong>operational complexity</strong>: consistent hashing, rebalancing, and a way to prevent two instances from owning the same customer during failover. A hot customer overloads a single instance, and an instance crash loses in-memory state unless it is persisted. <strong>Caveat:</strong> if you already run such a platform (Akka or Orleans style sharding) with durable state, it can meet the requirement; for a stateless API fleet it is more machinery than an atomic store.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>D — SQL Row Locks per Increment</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>D — SQL Row Locks per Increment</h4>
+          </div>
           <p>Row-level locking and serializable transactions are correct but <strong>too slow at this scale</strong>. Every request becomes a write transaction, hot customers create lock queues, and p99 latency grows with contention. Serializable isolation adds aborts and retries that further inflate tail latency, and millions of writes per minute strain the primary and its WAL. <strong>Caveat:</strong> the database is the right home for the durable, reconciled record of usage (through batching or an event stream), just not for the per-request hot path.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Atomic Redis Counters ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Atomic Redis Counters ✓</h4>
+          </div>
           <p>Offload counters to a dedicated external store such as Redis using atomic INCR/INCRBY, with a brief TTL-based local cache for fast reads (falling back to Redis when needed), Redis Cluster and replicat</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — In-Process Locked Map</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — In-Process Locked Map</h4>
+          </div>
           <p>Soft limits and approximate metrics where small overshoot is acceptable, such as local burst protection layered in front of a global limiter.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Sticky Routing with Actors</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Sticky Routing with Actors</h4>
+          </div>
           <p>Systems already built around shard-per-key actors with durable state and strong per-entity ordering needs, such as stateful gaming or workflow engines.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Redis Atomic Counters</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Redis Atomic Counters</h4>
+          </div>
           <p>Hard quotas and rate limits on a stateless, horizontally scaled API fleet that needs sub-10 ms responses and a cheap, atomic shared counter.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — SQL Row Locks</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — SQL Row Locks</h4>
+          </div>
           <p>Low-volume systems where the database is the system of record and request rates are modest, or as the durable ledger behind a faster counter.</p>
         </div>
 

@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🛑</div>
-          <h4>A — Scheduled Downtime Migration</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>A — Scheduled Downtime Migration</h4>
+          </div>
           <p>A write lock on a payments primary while the denormalized table is populated is an outage by definition, and it is likely to exceed the monthly budget of about 4.3 minutes. It also makes rollback hard: once schema and data are migrated, reverting means another lock-and-restore window, and a mid-migration failure leaves the system half-migrated. It does give a single code path, but that simplicity is bought with the exact risks (downtime and an irreversible cutover) the scenario says to avoid.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗄️</div>
-          <h4>C — New Cluster via Async Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>C — New Cluster via Async Replication</h4>
+          </div>
           <p>Asynchronous replication means the new cluster always lags the old one, so cutting over either loses the lag window or requires a write freeze. For payments, <em>eventual consistency during the transition</em> can mean a stale balance or a duplicate charge. Rollback needs reverse replication, which usually does not exist, so writes made on the new cluster are stranded. Replicating into a different schema also needs a transformation layer, so the schema change itself is still a separate problem. Cluster swaps suit engine upgrades or region moves, not adding a column.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🐢</div>
-          <h4>D — Lazy Read-Repair Migration</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🐢</span>
+            <h4>D — Lazy Read-Repair Migration</h4>
+          </div>
           <p>Read-repair turns every read of an old-format record into a write, adding write amplification on the hot payments path at the riskiest moment. Records that are never read stay in the old format indefinitely, so the old format can never be safely retired, and blue and green end up reading each other's formats. A denormalized table is also not something you can populate record by record on demand. Thirty seconds of stickiness covers only a sliver of a deployment, and rollback is dangerous if green rewrote records into a shape blue cannot read.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Expand/Contract with Dual Writes ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Expand/Contract with Dual Writes ✓</h4>
+          </div>
           <p>Implement only backwards-compatible changes to the schema (adding columns/tables), roll out the green deployment to a fraction of users via an API gateway canary, utilize feature flags, and conduct du</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Scheduled Downtime</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Scheduled Downtime</h4>
+          </div>
           <p>Internal or low-traffic systems with a maintenance window, a small dataset and no hard availability target, where a single code path matters more than uptime.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Expand/Contract + Dual Writes</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Expand/Contract + Dual Writes</h4>
+          </div>
           <p>Business-critical, always-on systems (payments, orders, trading) that need zero downtime, fast rollback and verification on real traffic. The default for most production schema changes.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — New Cluster via Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — New Cluster via Replication</h4>
+          </div>
           <p>Engine or major-version upgrades, region moves or re-platforming where the whole database is replaced, with a rehearsed cutover and a reverse-replication plan.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Lazy Read-Repair</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Lazy Read-Repair</h4>
+          </div>
           <p>Large, low-risk datasets where records are migrated opportunistically and a background sweeper finishes the job, such as non-critical document stores with a version field.</p>
         </div>
 

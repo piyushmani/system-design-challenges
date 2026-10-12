@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">⏱️</div>
-          <h4>A — Very Short TTL or No-Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>A — Very Short TTL or No-Cache</h4>
+          </div>
           <p>Freshness is excellent, but the <strong>hit ratio collapses</strong>: with N PoPs and a TTL of a few seconds, each popular object triggers a revalidation per PoP every few seconds, and every conditional GET still pays an origin round trip. At billions of requests per day this overloads the origin and adds latency for users. <strong>Caveat:</strong> short TTLs are appropriate for a small set of genuinely volatile objects (for example live availability counters), not as the global policy.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🛑</div>
-          <h4>B — Synchronous Purge with Global Acknowledgment</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>B — Synchronous Purge with Global Acknowledgment</h4>
+          </div>
           <p>Waiting for every PoP to acknowledge ties publishing to the <strong>slowest or partitioned PoP</strong>, which makes the control plane brittle and creates a tail-latency and availability coupling. It also gives a false sense of strong consistency: in-flight requests, client caches and intermediate proxies are outside the guarantee. <strong>Caveat:</strong> track purge completion for audit and alerting, but do not gate publishing on it.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔑</div>
-          <h4>D — Multi-CDN with Content-Hash URLs and No Purging</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔑</span>
+            <h4>D — Multi-CDN with Content-Hash URLs and No Purging</h4>
+          </div>
           <p>Content-hashed URLs are excellent for immutable assets (and should be used for video and thumbnails), but metadata referenced through stable URLs still needs invalidation. Takedown by rotating keys is blunt: it can break unrelated content under the same key, and DNS steering depends on DNS TTLs, which are not 'seconds'. Multi-CDN also multiplies operational complexity and configuration drift. <strong>Caveat:</strong> a strong complement to option C for assets, but not a complete answer.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Long TTL + Stale-While-Revalidate + Async Invalidation + Takedown Path ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Long TTL + Stale-While-Revalidate + Async Invalidation + Takedown Path ✓</h4>
+          </div>
           <p>Leverage long TTLs in conjunction with cache-control directives like stale-while-revalidate to allow background conditional revalidation at the edge. Supplement this with a best-effort pub/sub invalid</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Very Short TTL / No-Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Very Short TTL / No-Cache</h4>
+          </div>
           <p>A small set of highly volatile, low-volume objects where freshness outweighs cost. Per-user or real-time data is often better served outside the CDN cache.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Synchronous Global Purge</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Synchronous Global Purge</h4>
+          </div>
           <p>Rare, compliance-driven cases with small catalogs where explicit confirmation is required. Even then, run it asynchronously for audit rather than gating publication.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Long TTL + SWR + Async Purge</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Long TTL + SWR + Async Purge</h4>
+          </div>
           <p>Large catalogs with mixed mutable and immutable content, strict latency goals, and takedown requirements, which is this scenario.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Multi-CDN + Hashed URLs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Multi-CDN + Hashed URLs</h4>
+          </div>
           <p>Immutable assets, build artifacts, static sites and video segments with versioned URLs, or when multi-CDN resilience is a business requirement.</p>
         </div>
 

@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>A — Synchronous Serializable Write to One Primary</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>A — Synchronous Serializable Write to One Primary</h4>
+          </div>
           <p>This is the most obviously correct design and the least scalable. Popular SKUs become <strong>hot rows</strong> where serializable transactions conflict and retry, one primary caps write throughput far below 50k per second at peak, and users in distant regions pay cross-region round trips, which threatens the 200 ms target. The primary is also a single point of failure for availability. <strong>Caveat:</strong> for modest volumes, or when correctness outweighs latency (for example a small, regional ticketing system), this is the simplest right answer.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📬</div>
-          <h4>B — Pure Accept-and-Process (202 + Polling)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📬</span>
+            <h4>B — Pure Accept-and-Process (202 + Polling)</h4>
+          </div>
           <p>It is excellent at absorbing load, but it <strong>does not secure the item at accept time</strong>. The customer learns later whether stock existed, which means rejections or cancellations after the user believed the order was placed, directly contradicting the 'immediate and reliable confirmation' requirement. Polling or push adds UX complexity as well. <strong>Caveat:</strong> a good fit when stock is effectively unlimited or backorders are acceptable. Combined with a synchronous reservation step, it becomes option C.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧾</div>
-          <h4>D — Append-Only Store + Batch Inventory Adjustment</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧾</span>
+            <h4>D — Append-Only Store + Batch Inventory Adjustment</h4>
+          </div>
           <p>It is fast and available, but it accepts overselling by design: inventory is only reconciled in periodic batches, so under heavy demand many orders are confirmed against stock that does not exist. The compensation and cancellation workflows that follow harm customer trust and create support cost, which the requirements explicitly say must be rare. <strong>Caveat:</strong> acceptable where the cost of oversell is small or stock is replenishable (digital goods, made-to-order items).</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Atomic Cache Reservation + Asynchronous Durable Commit ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Atomic Cache Reservation + Asynchronous Durable Commit ✓</h4>
+          </div>
           <p>Execute a fast atomic reservation in a distributed cache coupled with an asynchronous persistent commit: the API performs an atomic reservation using a rapid distributed cache (e.g., a Redis Lua scrip</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Serializable Write to Primary</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Serializable Write to Primary</h4>
+          </div>
           <p>Moderate traffic, a single region or close users, and correctness matters more than latency. The simplest option when scale does not demand more.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — 202 Accepted + Polling</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — 202 Accepted + Polling</h4>
+          </div>
           <p>Long-running or non-contended work where the client does not need an immediate decision, or stock is effectively unlimited.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Atomic Cache Reservation + Async Commit</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Atomic Cache Reservation + Async Commit</h4>
+          </div>
           <p>Scarce, contended inventory at high request rates where customers need an immediate guarantee. Requires careful durability, expiry, and reconciliation design.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Append-Only + Batch Adjust</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Append-Only + Batch Adjust</h4>
+          </div>
           <p>Oversell is cheap or impossible to matter (digital goods, backorders, made-to-order), and throughput and availability dominate.</p>
         </div>
 

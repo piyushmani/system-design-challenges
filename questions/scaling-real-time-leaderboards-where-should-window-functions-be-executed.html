@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔥</div>
-          <h4>A — Window Functions on the Primary</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔥</span>
+            <h4>A — Window Functions on the Primary</h4>
+          </div>
           <p>At 100k writes per second the primary is already busy. Window functions must <strong>scan and sort large row sets</strong> (a global dense rank over millions of users touches every user's total), which consumes CPU, memory, and I/O and competes with transactional work, causing latency spikes and vacuum pressure. Read replicas help with isolation but not with per-query cost. <strong>Caveat:</strong> at much smaller scale (thousands of users, modest write rate) a replica with good indexes is perfectly fine and the simplest option.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌙</div>
-          <h4>B — Nightly Batch</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌙</span>
+            <h4>B — Nightly Batch</h4>
+          </div>
           <p>Operationally simple and cheap, but it <strong>violates the core requirement</strong>: up to 24 hours of staleness against a 5-second target. <strong>Caveat:</strong> batch is still valuable as a <em>reconciliation</em> layer, where a nightly job recomputes totals from the source of truth to correct drift in the streaming path.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>D — Materialized Views in Postgres</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>D — Materialized Views in Postgres</h4>
+          </div>
           <p>Native Postgres materialized views are refreshed by <strong>recomputing the whole query</strong>, so refreshing a millions-of-users ranking every 1-5 seconds is not feasible and adds exactly the load you are trying to avoid. A replica cannot refresh them at all because it is read-only. Incremental options (TimescaleDB continuous aggregates, pg_ivm) work for sums and counts over time buckets, but rank-style window functions cannot be maintained incrementally, and everything still shares the same cluster's resources and write ingest. <strong>Caveat:</strong> continuous aggregates are a good fit for per-user rolling sums at moderate ingest rates, as a stepping stone.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — CDC + Analytical Store ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — CDC + Analytical Store ✓</h4>
+          </div>
           <p>Stream changes with CDC into a read-optimized analytical store (ClickHouse, Druid, Snowflake), run the window functions there, and accept eventual consistency with lag monitoring and backfills.</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Window Functions on Primary</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Window Functions on Primary</h4>
+          </div>
           <p>A small user base or modest write rate where an indexed query on a replica meets the SLA and operational simplicity matters most.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Nightly Batch</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Nightly Batch</h4>
+          </div>
           <p>Daily or weekly reports, billing summaries, or leaderboards where hours of staleness are acceptable (for example, season-end standings).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — CDC + Analytical Store</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — CDC + Analytical Store</h4>
+          </div>
           <p>High write rates and large user bases that need second-level freshness and sub-second queries while the OLTP database must be protected.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Postgres Materialized Views</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Postgres Materialized Views</h4>
+          </div>
           <p>Moderate scale, a requirement to stay inside Postgres, and aggregations that can be maintained incrementally (sums or counts per time bucket), for example with TimescaleDB continuous aggregates.</p>
         </div>
 

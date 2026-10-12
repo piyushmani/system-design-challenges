@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🏢</div>
-          <h4>A — Centralized Warehouse with Nightly ETL</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏢</span>
+            <h4>A — Centralized Warehouse with Nightly ETL</h4>
+          </div>
           <p>A nightly batch cannot meet <strong>near-real-time analytics</strong> and is far too slow for Checkout's price and inventory validation (the data is up to a day old, and a warehouse is not an OLTP read path). It also moves ownership to a central team, which becomes a bottleneck for every schema change and contradicts Data Mesh principles. <strong>Caveat:</strong> a central warehouse is still a good <em>consumer</em> of data products for governed reporting; it is just not the sharing mechanism.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔗</div>
-          <h4>C — Synchronous API Sharing</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>C — Synchronous API Sharing</h4>
+          </div>
           <p>Direct API calls give fresh data and strong semantics but create <strong>tight runtime coupling</strong>: Checkout's latency and availability become the product of its dependencies' latency and availability, and traffic spikes in Checkout propagate to Pricing and Inventory. Analytics and reporting would have to poll OLTP APIs, which does not scale. <strong>Caveat:</strong> synchronous APIs remain the right tool for authoritative operations (reserve stock, place an order) and for request-time reads that must be exactly current.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏞️</div>
-          <h4>D — Shared Lakehouse via CDC</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏞️</span>
+            <h4>D — Shared Lakehouse via CDC</h4>
+          </div>
           <p>CDC into a lakehouse is excellent for analytics, but as the <strong>serving layer for operational reads</strong> it falls short: table formats like Iceberg and Delta are optimized for scans and commits measured in seconds to minutes, not for point lookups in single-digit milliseconds. Raw CDC also exposes internal table schemas rather than a stable contract, and a centralized lakehouse tends to re-centralize ownership. <strong>Caveat:</strong> it works well as one of the <em>consumers</em> of option B's event streams, which is how most mesh implementations feed analytics.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Event-Driven Data Products ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Event-Driven Data Products ✓</h4>
+          </div>
           <p>Decentralized, event-driven data products: domains publish change events under strict contracts to a central streaming platform; consumers such as Checkout maintain local materialized views or stream</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Centralized Warehouse</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Centralized Warehouse</h4>
+          </div>
           <p>Governed, batch-oriented reporting where hours of latency are acceptable and a central team curates a small set of conformed dimensions. Best as a consumer of data products.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Event-Driven Data Products</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Event-Driven Data Products</h4>
+          </div>
           <p>Multi-team organizations where several consumers need the same domain data at different latencies, domains must own their contracts, and request-time reads must not depend on other services being up.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Synchronous APIs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Synchronous APIs</h4>
+          </div>
           <p>Authoritative operations and request-time reads that must be exactly current (reserve stock, charge a payment), or small systems where one or two consumers do not justify a streaming platform.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Lakehouse via CDC</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Lakehouse via CDC</h4>
+          </div>
           <p>Analytics and ML workloads, historical queries and legacy sources that cannot publish events. Not for millisecond operational reads.</p>
         </div>
 

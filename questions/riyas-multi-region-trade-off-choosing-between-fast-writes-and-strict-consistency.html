@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>A — Single Primary with Fully Synchronous Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Single Primary with Fully Synchronous Replication</h4>
+          </div>
           <p>Strong consistency is more than the requirements ask for, and it is bought with both of the constraints that matter. Every write waits for the <strong>slowest region</strong>, so APAC users alone can blow the 150 ms budget. Availability becomes the <strong>product of all regions</strong> (for example three regions at 99.95% each yield about 99.85%, below the 99.99% target), because a single unreachable region blocks every write. The single primary also becomes a regional single point of failure. <strong>Caveat:</strong> it is the right model for data that truly cannot diverge, such as balances.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⏱️</div>
-          <h4>B — Active-Active with Basic Last-Write-Wins</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>B — Active-Active with Basic Last-Write-Wins</h4>
+          </div>
           <p>The topology and speed are right, but the conflict rule violates a stated requirement. Basic LWW discards the losing write silently, and if timestamps come from wall clocks, <strong>clock skew decides the winner</strong>. At row granularity it also drops unrelated changes (a theme change overwritten by a language change made a moment earlier). That is precisely the 'dropped updates' outcome Riya cannot accept. <strong>Caveat:</strong> adding versioning, field-level merge and conflict logging to this design effectively turns it into option C.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌐</div>
-          <h4>D — Globally Distributed Strongly Consistent Database</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>D — Globally Distributed Strongly Consistent Database</h4>
+          </div>
           <p>Spanner or CockroachDB can reach the availability target and provide excellent correctness, but a cross-region write must reach a <strong>majority of replicas</strong> before it commits. With replicas on three continents, commit latency approaches or exceeds the 150 ms budget for some users, and running globally consensus-backed storage at 10k writes/s is materially more expensive. It buys linearizability that the requirements explicitly say is unnecessary for preferences. <strong>Caveat:</strong> it is a strong choice if the same platform also holds data that does need global transactions, or if regions are geographically closer together.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Regional Primaries with Async Replication, Versioned Updates and Repair ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Regional Primaries with Async Replication, Versioned Updates and Repair ✓</h4>
+          </div>
           <p>A local primary for each region (writes are processed locally) coupled with asynchronous replication to other locations. Utilize client-side session affinity for read-your-writes guarantees, alongside</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Single Primary + Full Sync</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Primary + Full Sync</h4>
+          </div>
           <p>Small deployments in nearby regions with low write rates, or data that must never diverge and where higher write latency and lower availability are acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Active-Active + Basic LWW</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Active-Active + Basic LWW</h4>
+          </div>
           <p>Data where a lost concurrent write is harmless (telemetry, last-seen timestamps, cache-like state) and simplicity matters more than preserving every edit.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Regional Primaries + Async + Versioning</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Regional Primaries + Async + Versioning</h4>
+          </div>
           <p>Read-heavy, single-author data (preferences, profiles, feature settings) that needs low latency everywhere, tolerates short staleness, and must not silently lose updates.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Global Strongly Consistent DB</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Global Strongly Consistent DB</h4>
+          </div>
           <p>Data that needs cross-region transactions or linearizability (financial or entitlement data, global uniqueness), where regions are close enough that quorum latency is acceptable.</p>
         </div>
 

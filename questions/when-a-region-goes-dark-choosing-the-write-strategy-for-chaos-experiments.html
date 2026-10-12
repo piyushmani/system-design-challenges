@@ -102,23 +102,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔀</div>
-          <h4>A — Active-Active with CRDTs for Everything</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>A — Active-Active with CRDTs for Everything</h4>
+          </div>
           <p>Active-active is the right replication topology, and CRDTs are a good tool, but the option's key assumption, <strong>making all data types conflict-free</strong>, does not hold for real profile data. Two concurrent renames of a display name have no semantic merge; a CRDT only guarantees <em>convergence</em> (typically by silently keeping one value), not <em>preservation of user intent</em>. The option also says nothing about durability of acknowledged writes or about how divergence is surfaced, which are two of Ethan's explicit goals. <strong>Caveat:</strong> for genuinely mergeable data (counters, sets, flags) CRDTs are excellent, and they fit inside option C.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔒</div>
-          <h4>B — Single Primary with Synchronous Quorum Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>B — Single Primary with Synchronous Quorum Replication</h4>
+          </div>
           <p>This gives strong consistency and near-zero RPO, but it pays for them in exactly the dimensions Ethan prioritises. Every write from a distant region pays a <strong>cross-region round trip</strong>, and during a partition the side that cannot reach the quorum or the primary is <strong>blocked or failing</strong>. Failover on a full region loss works, but it is slow compared with simply continuing to accept writes locally. <strong>Caveat:</strong> this is the correct choice for the financial or invariant-bound data that Ethan's scenario explicitly excludes.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🚫</div>
-          <h4>D — Strict Write Rejection (HTTP 503)</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🚫</span>
+            <h4>D — Strict Write Rejection (HTTP 503)</h4>
+          </div>
           <p>This is the simplest model to reason about, since there is one authoritative copy and nothing to reconcile, but it deliberately <strong>gives up availability</strong> for every user whose home region is impaired. The option also contradicts itself: it says to steer writes to healthy regions, then to refuse them when the home region is down. In practice, in-flight writes, client retries and failover state still need handling, so 'no reconciliation' is not really achievable, and a wave of 503s tends to trigger client retry storms. <strong>Caveat:</strong> steering writes to a healthy region is a useful mitigation, but refusing them is the opposite of the stated availability goal.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Local Durable Writes with Async Replication and Observable Reconciliation ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Local Durable Writes with Async Replication and Observable Reconciliation ✓</h4>
+          </div>
           <p>Local durable writes with async replication: locally acknowledge and log writes in the isolated region (e.g., using a local write-ahead log or Kafka), and asynchronously sync/merge them to the global</p>
         </div>
 
@@ -149,23 +157,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Active-Active + CRDTs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Active-Active + CRDTs</h4>
+          </div>
           <p>The data is naturally mergeable (counters, sets, presence, collaborative structures), you accept silent convergence, and you have the expertise to model it. Often used as a component inside a larger design.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Single Primary + Sync Quorum</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Single Primary + Sync Quorum</h4>
+          </div>
           <p>Financial, inventory or uniqueness-bound data where a lost or conflicting write is unacceptable and the business accepts higher latency and reduced availability during partitions.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Local Durable + Async Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Local Durable + Async Replication</h4>
+          </div>
           <p>User-scoped, non-financial data in a multi-region SaaS where availability and latency matter most, some staleness is acceptable, and reconciliation must be visible and controllable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Strict Write Rejection</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Strict Write Rejection</h4>
+          </div>
           <p>Short, planned degradation modes for data that must have a single authority, or as a temporary safety valve for a specific entity class while a regional failover completes.</p>
         </div>
 

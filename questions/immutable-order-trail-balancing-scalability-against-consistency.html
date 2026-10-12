@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🏛️</div>
-          <h4>B — Relational DB with In-Place Updates</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>B — Relational DB with In-Place Updates</h4>
+          </div>
           <p>Strongly consistent relational databases are an excellent default with simple transactional semantics, but this design records history <em>indirectly</em>. Soft deletes and in-place updates make the audit trail a side effect, and transaction logs (WAL or binlog) are operational recovery artifacts that rotate and get archived, not a queryable, tamper-evident audit record. Synchronous replication adds write latency, and the single primary stays the write and availability bottleneck during sales spikes. <strong>Caveat:</strong> an append-only <code>order_events</code> table written in the same transaction as the state row is a good approximation at moderate scale.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🪣</div>
-          <h4>C — Blob Store plus NoSQL Index</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🪣</span>
+            <h4>C — Blob Store plus NoSQL Index</h4>
+          </div>
           <p>Writes to two systems are not atomic: if the blob write succeeds and the index update fails (or the reverse), the audit trail and the current state diverge, and 'synchronous' dual writes inflate latency and failure modes. One object per event is expensive at high request volume (per-request costs, small-file problem) and querying a stream of changes is awkward. Object storage is excellent as the <em>archive</em> for an event log (with Object Lock), just not as the primary write path.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📝</div>
-          <h4>D — MVCC Document DB with Archived Versions</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📝</span>
+            <h4>D — MVCC Document DB with Archived Versions</h4>
+          </div>
           <p>Keeping only the latest version in the primary store and archiving older versions makes history a second-class, hard-to-query citizen, which fails the audit and reconstruction needs. MVCC is a concurrency-control mechanism, not an audit design; old versions are garbage-collected by design. Client-side optimistic concurrency with custom merge logic pushes conflict handling into every writer, which is risky for payment-related state transitions.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>A — Immutable Event Store with CQRS ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Immutable Event Store with CQRS ✓</h4>
+          </div>
           <p>Append-only, immutable event store (a partitioned log such as Kafka, or a dedicated event store): emit an event per state transition, let consumers build asynchronous read models (CQRS), use snapshots</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Event Store + CQRS</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Event Store + CQRS</h4>
+          </div>
           <p>Audit, replay, and independent downstream consumers are core requirements, write volume is high or bursty, and the team can operate a log platform.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Relational In-Place Updates</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Relational In-Place Updates</h4>
+          </div>
           <p>Moderate scale, a single team, strong consistency needs, and audit needs that an in-transaction append-only events table can satisfy.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Blob Store + NoSQL Index</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Blob Store + NoSQL Index</h4>
+          </div>
           <p>Long-term archival of events or large payloads (documents, files), as a complement to a primary log rather than as the write path.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — MVCC Document DB</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — MVCC Document DB</h4>
+          </div>
           <p>Document-centric domains where versions are user-facing (such as content editing) and audit requirements are lightweight.</p>
         </div>
 

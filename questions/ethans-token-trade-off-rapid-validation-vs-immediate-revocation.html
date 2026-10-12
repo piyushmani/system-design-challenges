@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📞</div>
-          <h4>B — Opaque Tokens with Per-Request Introspection</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📞</span>
+            <h4>B — Opaque Tokens with Per-Request Introspection</h4>
+          </div>
           <p>It has the strongest revocation semantics (immediate) and keeps resource services simple, but it puts the auth server on the critical path of every call across hundreds of services. That adds a network hop and tail latency, couples availability (an auth blip becomes a platform-wide outage), and forces capacity to match total API QPS. This is exactly the latency and single-point-of-failure problem the scenario rules out.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📡</div>
-          <h4>C — Opaque Tokens, Redis Cache and Pub/Sub Eviction</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📡</span>
+            <h4>C — Opaque Tokens, Redis Cache and Pub/Sub Eviction</h4>
+          </div>
           <p>A respectable pattern, but each request still makes a network call to a shared cache, so latency and availability depend on Redis. Redis pub/sub is fire-and-forget: a missed message leaves a revoked token cached until the TTL anyway, so correctness is really bounded by the TTL. Cache failures trigger introspection storms on the auth server, and you operate three moving parts (cache, channel, auth) where option A relies on expiry alone.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🚫</div>
-          <h4>D — JWTs Plus a Global Blacklist</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🚫</span>
+            <h4>D — JWTs Plus a Global Blacklist</h4>
+          </div>
           <p>Faster revocation than expiry alone, but it reintroduces the dependency it tries to avoid: either a central lookup on every request (latency and a single point of failure) or a replicated in-memory copy with its own propagation lag. The list must retain entries until each token's expiry, and when synchronization breaks you face a fail-open versus fail-closed dilemma. That is more complexity than the 2-minute requirement needs.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>A — Short-Lived JWTs with Rotating Refresh Tokens ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Short-Lived JWTs with Rotating Refresh Tokens ✓</h4>
+          </div>
           <p>Issue brief-duration signed JWT access tokens (for instance, with a 1 to 2-minute Time-To-Live) that are validated locally by each resource service utilizing the authentication server&#x27;s public keys. E</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Short JWT + Rotating Refresh</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Short JWT + Rotating Refresh</h4>
+          </div>
           <p>High-QPS microservice platforms where revocation within a bounded window (minutes) is acceptable. The default choice for this scenario.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Introspection on Every Request</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Introspection on Every Request</h4>
+          </div>
           <p>Low-QPS or highest-risk APIs that need immediate revocation, or when opaque tokens are required for privacy. Usually fronted by a gateway with carefully bounded caching.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Opaque + Redis Cache + Pub/Sub</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Opaque + Redis Cache + Pub/Sub</h4>
+          </div>
           <p>Opaque tokens are mandated and you can operate a highly available cache, with revocation in seconds valued more than simplicity.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — JWT + Global Blacklist</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — JWT + Global Blacklist</h4>
+          </div>
           <p>An instant 'kill switch' is needed for specific tokens (for example a compromised device), layered on top of short TTLs rather than replacing them.</p>
         </div>
 

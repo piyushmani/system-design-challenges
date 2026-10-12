@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📉</div>
-          <h4>A — OFFSET/LIMIT with Replicas</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📉</span>
+            <h4>A — OFFSET/LIMIT with Replicas</h4>
+          </div>
           <p>OFFSET forces the database to <strong>scan and discard</strong> all skipped rows, so cost grows linearly with depth and deep pages become slow and spiky. Under concurrent writes the offset window shifts, so users see <strong>duplicates or skipped items</strong>. Replicas add capacity but also add lag, and they do not change the per-query cost. <strong>Caveat:</strong> OFFSET is fine for small, mostly static datasets, admin tools and shallow, page-numbered lists.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⚡</div>
-          <h4>C — Redis Sorted Sets per Feed</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Redis Sorted Sets per Feed</h4>
+          </div>
           <p>Sorted sets give very fast range reads, and this is a real pattern for precomputed feeds. But it adds a <strong>second source of truth</strong> that must be kept in sync with edits and deletes through asynchronous workers, so drift, ordering mismatches and repair jobs become your problem. Memory cost for millions of items per feed can be high, and Redis availability becomes part of the feed's availability. <strong>Caveat:</strong> for ranked, fan-out-on-write feeds, a cache tier in front of keyset pagination (for the first pages) can be a worthwhile optimization once the database path is solid.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗂️</div>
-          <h4>D — Materialized Page Snapshots</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗂️</span>
+            <h4>D — Materialized Page Snapshots</h4>
+          </div>
           <p>Page-index snapshots are cheap to serve, but they are inherently <strong>stale and fragile under writes</strong>: inserting one post shifts every later page, so either snapshots refresh constantly (cost) or users see overlaps and gaps between pages generated at different times. Storage and invalidation grow with the number of feeds and pages. <strong>Caveat:</strong> caching the first page or two of a very hot feed is effective, because most users never scroll deeper.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Keyset (Cursor) Pagination ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Keyset (Cursor) Pagination ✓</h4>
+          </div>
           <p>Use keyset (cursor-based) pagination: an opaque cursor encodes a composite sort key (for example created_at DESC, id DESC) and stateless keyset queries fetch the next page. Reads go to replicas, with</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — OFFSET/LIMIT</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — OFFSET/LIMIT</h4>
+          </div>
           <p>Small or rarely changing datasets, admin tables and UIs that need numbered pages and random access at shallow depth.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Keyset Cursor</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Keyset Cursor</h4>
+          </div>
           <p>Large, write-heavy, append-mostly feeds with infinite scroll and API clients (mobile, web) that need predictable cost at any depth.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Redis Sorted Sets</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Redis Sorted Sets</h4>
+          </div>
           <p>Ranked or fan-out-on-write feeds where ordering is computed (scores, personalization) and sub-millisecond reads justify the cost of a derived store.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Page Snapshots</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Page Snapshots</h4>
+          </div>
           <p>Very hot, widely shared feeds or public timelines where the first pages are requested by many users and slight staleness is acceptable.</p>
         </div>
 

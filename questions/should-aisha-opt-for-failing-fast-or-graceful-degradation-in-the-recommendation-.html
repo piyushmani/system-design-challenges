@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">⚡</div>
-          <h4>A — Fail-Fast Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Fail-Fast Only</h4>
+          </div>
           <p>Short timeouts are good, and fail-fast is correct for critical operations, but surfacing a 503 or empty response for an optional widget makes every dependency hiccup user-visible. With no cache or fallback, the feature's availability is roughly the <em>product</em> of its dependencies' availability (three dependencies at 99.9% each gives about 99.7% before any other failure). Paging operators immediately on every miss also creates alert noise. <strong>Caveat:</strong> fail-fast is the right model for the <em>internal</em> calls (which is why D uses short timeouts and breakers) and for checkout-critical paths.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🐢</div>
-          <h4>B — Full Graceful Degradation with Long Timeouts</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🐢</span>
+            <h4>B — Full Graceful Degradation with Long Timeouts</h4>
+          </div>
           <p>Waiting longer with aggressive retries is the classic recipe for a <strong>retry storm</strong>: when a dependency slows down, retries multiply load on it, threads and connections pile up, and latency blows through the 200 ms budget, turning a partial failure into a cascading outage. Reducing alerts to cut noise hides exactly the signals (fallback rate, breaker trips) operators need. The fallback idea is right; the long timeouts, aggressive retries, and muted observability are the problem. <strong>Caveat:</strong> a fallback ladder is a core part of the best answer, but it must be paired with tight timeouts and breakers.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔄</div>
-          <h4>C — Async Enrichment</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>C — Async Enrichment</h4>
+          </div>
           <p>Rendering the PDP immediately and filling recommendations later is a legitimate <em>front-end</em> technique that keeps the main content fast, and it complements D. On its own it moves the problem rather than solving it: the enrichment worker still calls the same slow dependencies and needs timeouts, breakers, and fallbacks; WebSockets or polling add connection and operational overhead at scale; placeholders can cause layout shift; and the page still needs a policy for what to show if enrichment never arrives. <strong>Caveat:</strong> loading the widget in a separate lightweight request after first paint is a good addition once D's protections exist.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>D — Circuit-Breaker Hybrid ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Circuit-Breaker Hybrid ✓</h4>
+          </div>
           <p>Circuit-breaker hybrid: short per-dependency timeouts plus circuit breakers, fast fallback to stale or simplified recommendations, budgeted retries and background cache refresh, with full metrics, tra</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Fail-Fast Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Fail-Fast Only</h4>
+          </div>
           <p>Critical paths where a wrong or partial answer is worse than an error (payments, checkout, inventory reservation), or internal calls where the caller has its own fallback.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Long Timeouts + Retries</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Long Timeouts + Retries</h4>
+          </div>
           <p>Hardly ever as described. Use only its fallback idea, together with tight timeouts and budgeted retries.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Async Enrichment</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Async Enrichment</h4>
+          </div>
           <p>Heavy or slow enrichment (for example ML personalization that takes seconds) that is not needed for first paint, layered on top of D.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Breaker Hybrid</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Breaker Hybrid</h4>
+          </div>
           <p>Non-critical features on user-facing, latency-bound paths with several downstream dependencies. The default recommendation for this PDP.</p>
         </div>
 

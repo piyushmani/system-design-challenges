@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🏛️</div>
-          <h4>A — Keep the Monolithic Gateway and Scale It</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>A — Keep the Monolithic Gateway and Scale It</h4>
+          </div>
           <p>Horizontal scaling adds capacity but does not change the architecture's problems: all teams still deploy through one component, every request still passes through the heaviest feature set, and one bad change or hot path can degrade all traffic. Caching and breakers help with surges but do not address coordination cost or the latency of in-gateway aggregation. <strong>Caveat:</strong> a reasonable stopgap while migrating, and fine for small organizations with few teams.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🕸️</div>
-          <h4>C — Federated GraphQL Gateway</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>C — Federated GraphQL Gateway</h4>
+          </div>
           <p>Federation gives clients flexible queries and a unified schema, reduces over-fetching, and lets teams own subgraphs. But the router is still a central component on the critical path: query planning, entity resolution, and N+1 fan-out add latency and variance; schema composition and governance require cross-team coordination; and performance work (persisted queries, caching, depth and cost limits) is specialized. It also suits read-heavy views better than the strict-SLO, write-oriented checkout flow. <strong>Caveat:</strong> GraphQL works well <em>inside</em> a BFF (for example for browse experiences), just not as a substitute for splitting responsibilities.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌐</div>
-          <h4>D — Edge-First with Micro-Gateways and Async Flows</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>D — Edge-First with Micro-Gateways and Async Flows</h4>
+          </div>
           <p>Edge caching for read-heavy catalog traffic is valuable and is typically part of a mature setup, but checkout is personalized, write-heavy, and mostly uncacheable, so the edge helps little there. Sidecar micro-gateways for writes add per-service operational surface (configuration, upgrades, policy drift), and pushing aggregation to asynchronous flows does not work for responses the client needs synchronously. It tackles pieces of the problem but leaves ownership of client-specific composition unclear and creates a patchwork of mechanisms to operate. <strong>Caveat:</strong> adopt the edge-caching and async ideas <em>on top of</em> B for browse traffic and non-critical aggregation.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Thin Edge Gateway + BFFs ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Thin Edge Gateway + BFFs ✓</h4>
+          </div>
           <p>Slim the gateway into an edge layer (TLS, routing, global rate-limit and auth policy) and add per-client Backend-for-Frontends (BFFs); push composition and aggregation into the BFFs or backend service</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Scale the Monolith</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Scale the Monolith</h4>
+          </div>
           <p>Small organizations or early-stage systems with few teams and modest traffic, or as a temporary state during migration.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Thin Edge + BFFs</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Thin Edge + BFFs</h4>
+          </div>
           <p>Many teams, multiple client types, strict latency SLOs, and a need for independent deployment. The default for this scenario.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Federated GraphQL</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Federated GraphQL</h4>
+          </div>
           <p>Read-heavy, graph-shaped data access across many domains (catalog, content, profile) where client flexibility matters more than strict per-call latency, preferably behind a BFF.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Edge-First + Micro-Gateways</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Edge-First + Micro-Gateways</h4>
+          </div>
           <p>Global read-heavy traffic with large cacheable fractions (catalog, content), combined with a thin edge and BFFs.</p>
         </div>
 

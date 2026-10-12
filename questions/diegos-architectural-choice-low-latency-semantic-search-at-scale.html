@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🏢</div>
-          <h4>A — Single Region, Synchronous Dual Write</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏢</span>
+            <h4>A — Single Region, Synchronous Dual Write</h4>
+          </div>
           <p>There is no true 'unified transaction' across a SQL database and a vector DB (it would need two-phase commit or leaves a dual-write gap), and synchronous writes tie catalog availability to the vector tier. A single primary region also means users on other continents pay cross-region round trips (often 100 to 250 ms) on every search, which alone threatens the 150 ms target, and active-passive DR wastes capacity and fails over slowly. <strong>Caveat:</strong> it is the simplest to reason about for a single-market catalog with relaxed latency and a clear DR objective.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌍</div>
-          <h4>B — Product-ID Partitions per Region</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌍</span>
+            <h4>B — Product-ID Partitions per Region</h4>
+          </div>
           <p>ANN search finds <em>nearest neighbors across the whole catalog</em>, but partitioning by product ID scatters similar items across every partition. A local-first search always returns some local top-K, so the 'fallback on local miss' never triggers and recall silently drops, while correct recall would need scatter-gather across all regions, which destroys local latency. Asynchronous replication also leaves each region's subset stale in different ways. <strong>Caveat:</strong> sharding <em>within</em> a region is normal and necessary for 200M vectors, but each region should hold a full replica of the index.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧊</div>
-          <h4>D — Ephemeral In-Memory ANN</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧊</span>
+            <h4>D — Ephemeral In-Memory ANN</h4>
+          </div>
           <p>Embedding at read time puts model inference on every query's critical path, and rebuilding in-memory indexes of 200M vectors is slow and produces cold-start latency spikes and coverage gaps while it runs. Without a durable index, DR means rebuilding from scratch, and consistency is loose. <strong>Caveat:</strong> caching <em>query</em> embeddings is a valid optimization, and ephemeral ANN nodes are fine for experiments or very small catalogs.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Hybrid Retrieval with Graceful Degradation ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Hybrid Retrieval with Graceful Degradation ✓</h4>
+          </div>
           <p>Hybrid retrieval: SQL for metadata, a lexical index for fast fresh candidates, async Kafka-fed embedding and ANN indexing, semantic re-ranking of the candidates, lexical-only fallback when vectors deg</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Single Region + Sync Dual Write</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Region + Sync Dual Write</h4>
+          </div>
           <p>Single-market catalogs of small to mid size with relaxed latency targets, where strong consistency and simplicity outweigh global availability.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Product-ID Partitions per Region</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Product-ID Partitions per Region</h4>
+          </div>
           <p>Data that is naturally partitioned by region or tenant and queried only within that partition (for example local inventory per country), not global similarity search.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Hybrid Retrieval</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hybrid Retrieval</h4>
+          </div>
           <p>Large global catalogs needing low-latency local reads, high availability, and continuous catalog updates, where search must degrade gracefully.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Ephemeral In-Memory ANN</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Ephemeral In-Memory ANN</h4>
+          </div>
           <p>Prototypes, offline experimentation, or small short-lived datasets where the cost of a durable index is not justified.</p>
         </div>
 

@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🎯</div>
-          <h4>A — One Hash Entry per Node + Central Coordinator</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🎯</span>
+            <h4>A — One Hash Entry per Node + Central Coordinator</h4>
+          </div>
           <p>With a single point per physical node the ring segments are very uneven (the largest arc is expected to be about ln N times the average), so some nodes are chronically hot. When a node leaves, its entire range falls onto one successor, which can double that node's load and cascade. A central coordinator pushing topology to all clients is a metadata bottleneck and a single point of failure, and synchronous immediate migration adds tail-latency spikes during every change. It also has no replication, so each node loss loses sessions.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏆</div>
-          <h4>C — Rendezvous Hashing + Central etcd + No Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏆</span>
+            <h4>C — Rendezvous Hashing + Central etcd + No Replication</h4>
+          </div>
           <p>Rendezvous (highest-random-weight) hashing is an excellent algorithm: minimal disruption, uniform balance without vnodes, and easy top-R selection for replicas. This particular option, however, makes clients depend on a central store for topology (a metadata dependency, though clients can cache and watch it) and, decisively, <strong>does not replicate keys</strong>. Any node failure destroys the sessions it owned, which breaks the availability requirement. Rendezvous with replication and decentralized membership would be a valid alternative to B.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🛑</div>
-          <h4>D — Synchronous Global Rebalancing</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>D — Synchronous Global Rebalancing</h4>
+          </div>
           <p>Pausing writes for affected ranges on every topology change turns each rolling-upgrade step into a partial outage. It also needs global coordination, which becomes slower and riskier as the cluster grows 10x. The problem it solves (duplicate records during migration) is already solved cheaply by versioned values, hinted handoff, and read repair, without stopping traffic.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Virtual-Node Consistent Hashing with Replication and Gossip ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Virtual-Node Consistent Hashing with Replication and Gossip ✓</h4>
+          </div>
           <p>Ring-based consistent hashing employing multiple virtual nodes (vnodes) for each physical node, alongside a replication factor greater than one (R&gt;1). Cluster membership is managed through a gossip pr</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — 1 Point per Node + Coordinator</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — 1 Point per Node + Coordinator</h4>
+          </div>
           <p>Small, static clusters (a handful of nodes) where simplicity matters more than balance and a brief rebalance is acceptable. Not suitable for a growing, always-on fleet.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Vnodes + R&gt;1 + Gossip</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Vnodes + R&gt;1 + Gossip</h4>
+          </div>
           <p>Large or growing clusters needing continuous availability, rolling upgrades, and no central coordinator, such as session stores, key-value stores, and distributed caches.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Rendezvous + Central Store</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Rendezvous + Central Store</h4>
+          </div>
           <p>Modest node counts where simple, uniform placement is wanted. Add replication (top-R scores) and cached or decentralized membership to make it production-ready for availability.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Synchronous Global Rebalance</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Synchronous Global Rebalance</h4>
+          </div>
           <p>Strongly consistent stores where ownership transfer must be exclusive and short write pauses are acceptable, usually combined with fine-grained range-level handoff rather than global pauses.</p>
         </div>
 

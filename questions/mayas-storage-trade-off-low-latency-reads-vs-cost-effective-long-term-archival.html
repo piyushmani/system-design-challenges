@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🧱</div>
-          <h4>A — Synchronous Multi-Tier Writes with 2PC</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>A — Synchronous Multi-Tier Writes with 2PC</h4>
+          </div>
           <p>Writing every blob to three tiers before acknowledging triples write amplification at 200k events/s, makes write latency equal to the slowest tier (object store PUT latency), and multiplies failure modes (availability becomes the product of all three tiers). Object stores do not participate in XA-style 2PC, so 'absolute consistency across copies' is not realistically achievable. It also pays for cold-tier writes of data that will not be read for a year, and does not address rehydration or tier migration at all.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗃️</div>
-          <h4>B — Single Database with Built-in Tiering</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗃️</span>
+            <h4>B — Single Database with Built-in Tiering</h4>
+          </div>
           <p>Attractive for simplicity, and valid at modest scale with a mature engine. At this scale, you pay strongly consistent replication costs for payloads that only need durability, compute and storage lifecycle are coupled, and cold-tier behavior (restore semantics, retrieval cost, failure handling) is vendor-specific and opaque. Exclusive access through the database also blocks direct bulk or analytics access to the object store and increases lock-in. A DB's HSM rarely models the hours-long rehydration of archive classes cleanly.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">💨</div>
-          <h4>D — Per-Instance Hot Caches with Gossip Metadata</h4>
+          <div class="strategy-header">
+            <span class="s-icon">💨</span>
+            <h4>D — Per-Instance Hot Caches with Gossip Metadata</h4>
+          </div>
           <p>Gossiped, eventually consistent metadata directly contradicts requirement 4: a stale access-control entry is a data-leak risk, and stale location data returns wrong results. Write-behind from per-instance caches risks losing data when an instance crashes before flushing, and duplicated local caches reduce hit rates. Caches are a useful <em>addition</em> to C (an L1 read cache), not a tiering architecture.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Metadata-Centric Tiering with Versioned Pointers ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Metadata-Centric Tiering with Versioned Pointers ✓</h4>
+          </div>
           <p>A metadata-centric hybrid architecture with asynchronous payloads. During ingestion, synchronously write the metadata and a storage pointer to a compact, strongly consistent metadata database. The ful</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Synchronous Multi-Tier + 2PC</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous Multi-Tier + 2PC</h4>
+          </div>
           <p>Very small volumes with a regulatory need for immediate multi-copy writes, and only when all tiers support a real transactional protocol. Rare in practice.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Single DB with Tiering</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Single DB with Tiering</h4>
+          </div>
           <p>Moderate data sizes, a team that prefers one system to operate, and a mature database whose tiering and restore behavior has been validated.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Metadata-Centric Hybrid</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Metadata-Centric Hybrid</h4>
+          </div>
           <p>High-rate ingestion with large payloads, multiple access-latency tiers, strict metadata correctness, and a strong cost focus on old data.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Per-Instance Caches + Gossip</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Per-Instance Caches + Gossip</h4>
+          </div>
           <p>Read-heavy edge caching of immutable blobs on top of an authoritative store. Not suitable as the primary tiering design.</p>
         </div>
 

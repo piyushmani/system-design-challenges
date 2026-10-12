@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🏛️</div>
-          <h4>A — Centralized Bloom Service</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>A — Centralized Bloom Service</h4>
+          </div>
           <p>Every request pays a network round trip (and cross-region traffic pays far more), so the cheap check becomes the expensive part of the path and p99 now depends on the service's tail latency. At 50k requests per second the service is a throughput bottleneck and a single point of failure: if it is slow or down, you either fail requests or send all traffic to the database, which is the spike you wanted to avoid. Synchronous updates add write-path coupling. <strong>Caveat:</strong> a central filter is reasonable for small, single-region deployments, or as an offline job that builds snapshots distributed to instances.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧮</div>
-          <h4>C — Distributed Counting Bloom in a Strongly Consistent Store</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>C — Distributed Counting Bloom in a Strongly Consistent Store</h4>
+          </div>
           <p>This is the heaviest option: counters multiply memory several-fold (each cell holds a counter instead of one bit), strong consistency turns every account change into a synchronous distributed write, and every request still crosses the network. It buys precision (deletes, global consistency) that the use case does not need, because a false positive just costs one DB lookup. <strong>Caveat:</strong> counting or cuckoo filters are useful when deletes are frequent, but applied locally rather than as a central synchronous store.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧊</div>
-          <h4>D — No Bloom Filter, Negative Caching Only</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧊</span>
+            <h4>D — No Bloom Filter, Negative Caching Only</h4>
+          </div>
           <p>Negative caching only helps when the same invalid IDs repeat. Random or scanning traffic (enumeration attacks, typos, bots) produces mostly unique IDs, so the hit rate is low and nearly every request reaches the database, which violates the 'no spikes' requirement. It also adds a call to the global cache on every request. <strong>Caveat:</strong> it is a good complement. Put a small negative cache behind the Bloom filter to absorb the few false positives and repeated lookups.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Local Bloom Filters via Event Stream ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Local Bloom Filters via Event Stream ✓</h4>
+          </div>
           <p>Local in-memory Bloom filters in each app instance, updated asynchronously from a CDC/Kafka stream, with versioned snapshots for fast cold starts, eventual consistency, and mathematical sizing for the</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Centralized Bloom Service</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Centralized Bloom Service</h4>
+          </div>
           <p>Small deployments, a single region, or low request rates where one shared filter is simpler and the service can be co-located and highly available.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Local Filters via Event Stream</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Local Filters via Event Stream</h4>
+          </div>
           <p>High request rates, many instances, multi-region deployments, and a need for microsecond checks with bounded staleness. This is the standard pattern for pre-database screening.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Distributed Counting Bloom</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Distributed Counting Bloom</h4>
+          </div>
           <p>Rare cases needing a precise, deletable, globally consistent membership structure that can tolerate network-bound latency (for example low-QPS governance checks).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — No Bloom, Negative Cache</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — No Bloom, Negative Cache</h4>
+          </div>
           <p>Low or moderate traffic where invalid IDs are few and repeated (typos, retries), or as a complementary layer behind a Bloom filter.</p>
         </div>
 

@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">🔀</div>
-          <h4>A — Multi-Master with Async Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>A — Multi-Master with Async Replication</h4>
+          </div>
           <p>Multi-master replication optimizes for availability by <strong>letting every site accept writes</strong> and reconciling later. That is exactly the behavior that caused Maya's incident, and merging after the fact cannot un-charge a customer or un-ship an order. It suits commutative data (counters, carts, presence), not money movement under exactly-once requirements. <strong>Caveat:</strong> useful for non-critical, conflict-tolerant data alongside the consensus core.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">⚖️</div>
-          <h4>B — Central External Arbiter</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚖️</span>
+            <h4>B — Central External Arbiter</h4>
+          </div>
           <p>A single external arbiter becomes a <strong>single point of failure and a new split-brain surface</strong>: if it is unreachable, no node can become leader (or nodes disagree about whether it is reachable), and if it is itself replicated, it is just a consensus cluster you now operate separately. The 'majority plus arbiter' rule also mixes two authorities without a clear safety argument. <strong>Caveat:</strong> a lightweight witness <em>is</em> sound when it is a voting member of the same quorum (for example the 1-node site in a 2 | 2 | 1 layout).</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🏢</div>
-          <h4>D — Per-DC Leaders with Async Cross-DC Replication</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🏢</span>
+            <h4>D — Per-DC Leaders with Async Cross-DC Replication</h4>
+          </div>
           <p>Per-data-center leaders with asynchronous cross-site replication <strong>permit split-brain by design</strong>: during a partition both sides keep committing, and reconciliation jobs discover duplicates only after money has moved. Local synchronous replication to 2 nodes is also not a majority of the cluster, so it protects against node loss, not partitions. <strong>Caveat:</strong> acceptable for geo-local ownership of disjoint entities, not for a global exactly-once ledger.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Majority-Quorum Consensus with Fencing ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Majority-Quorum Consensus with Fencing ✓</h4>
+          </div>
           <p>Move the cluster to a strict majority-quorum consensus protocol (Raft or Paxos) with leader leases and fencing tokens based on monotonically increasing epochs, so a deposed leader cannot commit, accep</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Multi-Master Async</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Multi-Master Async</h4>
+          </div>
           <p>Geo-distributed data that is commutative or conflict-tolerant (shopping carts, presence, counters, collaborative documents) where local availability and latency matter more than a single global order.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — External Arbiter</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — External Arbiter</h4>
+          </div>
           <p>Two-site setups that need a third lightweight voter, but only when the witness is a real voting member of the same quorum and is itself highly available.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Quorum + Fencing</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Quorum + Fencing</h4>
+          </div>
           <p>Money movement, inventory, order state and any workload that needs linearizable, exactly-once effects, where losing write availability on a minority partition is acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Per-DC Leaders</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Per-DC Leaders</h4>
+          </div>
           <p>Data with clear geographic ownership (each leader owns disjoint entities, such as per-region user data) where cross-region reads may be stale and no entity is written from two regions.</p>
         </div>
 

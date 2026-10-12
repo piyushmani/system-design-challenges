@@ -104,23 +104,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📇</div>
-          <h4>A — Broad Composite Index on the OLTP Table</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📇</span>
+            <h4>A — Broad Composite Index on the OLTP Table</h4>
+          </div>
           <p>A wide index <strong>adds write amplification</strong> to every insert and update on a 1.2-billion-row table and consumes memory and storage. It only helps queries that match its leading columns, so ad-hoc cohort and funnel queries with varied filters still scan large ranges. And everything still runs on the primary, so analytics keep competing with checkout. <strong>Caveat:</strong> a narrow, targeted index for one known hot query can be a valid short-term fix.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🗓️</div>
-          <h4>B — Partitioning Plus Daily Summary Tables</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🗓️</span>
+            <h4>B — Partitioning Plus Daily Summary Tables</h4>
+          </div>
           <p>Partition pruning helps time-window queries, and summaries speed up fixed aggregations, but <strong>the heavy queries still run on the OLTP database</strong>. Daily batch summaries are not near-real-time and cannot answer new ad-hoc questions, and sharding by customer is a large migration. <strong>Caveat:</strong> partitioning is good hygiene for retention and archival, and daily summaries suit stable reports, so both complement option C.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🧾</div>
-          <h4>D — Synchronous Write-Through Read Model</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🧾</span>
+            <h4>D — Synchronous Write-Through Read Model</h4>
+          </div>
           <p>Updating a read model <strong>inside the checkout write path</strong> makes the critical path slower and couples checkout availability to the key-value store. A transaction spanning a relational database and a separate store is a dual write, not an atomic transaction. And a key-value store serves pre-shaped lookups, not ad-hoc aggregates, cohorts, or funnels. <strong>Caveat:</strong> a precomputed read model is a good fit for a small set of fixed, hot metrics, ideally fed asynchronously (for example from CDC) instead of inside the transaction.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Columnar OLAP Store Fed by CDC ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Columnar OLAP Store Fed by CDC ✓</h4>
+          </div>
           <p>Redirect dashboard and analytical workloads to a dedicated columnar OLAP store (such as Pinot, Redshift, or ClickHouse). Feed it using change data capture (CDC) or a near-real-time ETL pipeline (for e</p>
         </div>
 
@@ -151,23 +159,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Broad Composite Index</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Broad Composite Index</h4>
+          </div>
           <p>A single known, repeated query on a moderately sized table where the extra write cost is acceptable and no separate analytics platform is warranted.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Partitioning + Daily Summaries</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Partitioning + Daily Summaries</h4>
+          </div>
           <p>Stable, fixed daily or weekly reports, plus data lifecycle management (retention, archival) on large tables. Complements, but does not replace, an analytics store.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Columnar OLAP via CDC</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Columnar OLAP via CDC</h4>
+          </div>
           <p>Large datasets with ad-hoc and near-real-time analytical queries that must not affect transactional performance, and a team that can operate a data pipeline.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Synchronous Write-Through Read Model</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Synchronous Write-Through Read Model</h4>
+          </div>
           <p>A few fixed, hot lookups that must be strongly consistent with the write, at modest scale, where adding latency to the write path is acceptable.</p>
         </div>
 

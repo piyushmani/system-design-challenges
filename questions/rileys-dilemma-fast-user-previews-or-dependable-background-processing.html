@@ -103,23 +103,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">⏳</div>
-          <h4>A — Single Synchronous Lambda</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⏳</span>
+            <h4>A — Single Synchronous Lambda</h4>
+          </div>
           <p>This couples the user-visible response to the slowest work. API Gateway's default integration timeout is about 29 seconds while the work can take minutes, so 'hoping most executions finish in time' guarantees timeouts, client retries that duplicate work, and wasted compute. A spike multiplies long-running concurrent executions, and there is no fault isolation: a failure in face detection also fails the preview. It violates the sub-500 ms preview goal outright.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🌊</div>
-          <h4>C — DynamoDB Streams as the Job Trigger</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🌊</span>
+            <h4>C — DynamoDB Streams as the Job Trigger</h4>
+          </div>
           <p>Workable, but the wrong tool for a job queue. It ties workflow triggering to table writes, and Streams processing is shard-based: one poison record can stall its shard until retries are exhausted (you must configure bisect-on-error, a retry limit, and an on-failure destination). Records are retained for only 24 hours. The per-shard ordering it advertises is something this workload does not need, and it is the very property that makes a single failure block later records. SQS gives per-message retries, visibility timeouts, a DLQ, and redrive. <strong>Use Streams for CDC and derived views, not as a work queue.</strong></p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔀</div>
-          <h4>D — Step Functions with API Awaiting Completion</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>D — Step Functions with API Awaiting Completion</h4>
+          </div>
           <p>Great orchestration and observability (execution history, per-step retry and catch, Map state for parallel resizing), but the design has the API await a callback or poll the workflow. That re-couples request latency to a long process, and synchronous Express workflows are capped at five minutes. Standard workflows are billed per state transition, which can be costly for very high volumes of small jobs. <strong>Best placed behind the queue</strong> as the engine of the heavy path, not as the front door.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>B — Dual-Path: Sync Preview + Async Queue Workers ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Dual-Path: Sync Preview + Async Queue Workers ✓</h4>
+          </div>
           <p>Implement a dual-path process: use a lightweight synchronous Lambda (API Gateway -&gt; Lambda) to quickly generate and return the preview along with saving metadata. Then, send a message to SQS (or Event</p>
         </div>
 
@@ -150,23 +158,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Single Sync Lambda</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Sync Lambda</h4>
+          </div>
           <p>Tiny, bounded jobs that reliably finish in about a second or two (for example a single thumbnail), where simplicity matters more than resilience.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Sync Preview + SQS Workers</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Sync Preview + SQS Workers</h4>
+          </div>
           <p>A user-visible fast response plus heavy background work that must survive spikes and failures. The default pattern for upload-then-process systems.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — DynamoDB Streams</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — DynamoDB Streams</h4>
+          </div>
           <p>Change-data-capture needs: audit trails, derived views, or per-key ordered reactions to table changes. Not for general job queues.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Step Functions in Front</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Step Functions in Front</h4>
+          </div>
           <p>Multi-stage workflows with branching, parallel fan-out, long waits, or human approval, especially when a visual execution history is valuable. Often combined with option B.</p>
         </div>
 

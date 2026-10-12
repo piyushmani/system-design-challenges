@@ -102,23 +102,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📡</div>
-          <h4>A — Centralized Long-Polling Service</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📡</span>
+            <h4>A — Centralized Long-Polling Service</h4>
+          </div>
           <p>Long-polling solves <em>update propagation</em>. But if each evaluation calls the central service, every request pays network latency and the flag service becomes a <strong>critical dependency on the hot path</strong>: if it goes down, the whole app degrades. It also means holding hundreds of open connections. The only way to make it fast is to cache locally, which turns it into option C.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🔗</div>
-          <h4>B — Decentralized with Webhooks</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>B — Decentralized with Webhooks</h4>
+          </div>
           <p>Spreading flag ownership across services leaves <strong>no single source of truth</strong> for auditing, targeting rules, or kill switches. Webhooks are fire-and-forget: a missed or failed delivery leaves an instance silently out of sync, and every service has to build its own retries, ordering, and security for incoming callbacks.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">🕸️</div>
-          <h4>D — Peer-to-Peer Mesh</h4>
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>D — Peer-to-Peer Mesh</h4>
+          </div>
           <p>Gossip protocols are <strong>eventually consistent</strong>, with unpredictable convergence time, and they're hard to debug ('why does instance 47 still have the old value?'). In autoscaled environments instances constantly join and leave, and there's no clean audit trail of who changed what. That's a lot of complexity for a problem a central store solves simply.</p>
         </div>
         <div class="strategy-item" style="border-color:#34d39940;">
-          <div class="s-icon">⚡</div>
-          <h4>C — Local In-Memory Cache with Periodic Refresh ✓</h4>
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Local In-Memory Cache with Periodic Refresh ✓</h4>
+          </div>
           <p>Keep flag rules in a local in-memory cache inside each application instance, refreshed every few seconds from a central flag store.</p>
         </div>
 
@@ -149,23 +157,31 @@
 
       <div class="strategy-grid">
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>A — Centralized Long-Polling</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Centralized Long-Polling</h4>
+          </div>
           <p>Client-side or edge apps with few instances, where one long-lived connection is cheap. Also works as the update channel that feeds a local cache, but never as the per-evaluation path.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>B — Decentralized Webhooks</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Decentralized Webhooks</h4>
+          </div>
           <p>Small systems where each team fully owns its flags and there are no cross-service rollouts, or for notifying external systems (CI/CD, Slack) about flag changes.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>C — Local Cache + Refresh</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Local Cache + Refresh</h4>
+          </div>
           <p>The default for server-side applications at any scale. Flags are read far more often than they change, and a few seconds of staleness is acceptable.</p>
         </div>
         <div class="strategy-item">
-          <div class="s-icon">📌</div>
-          <h4>D — Peer-to-Peer Mesh</h4>
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Peer-to-Peer Mesh</h4>
+          </div>
           <p>Rarely appropriate. Only for disconnected or edge environments (e.g., offline-capable devices) that can't reach a central store.</p>
         </div>
 

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arjun&#x27;s Trade-offs in Real-Time Vector Indexing — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">12 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Vector Databases</span>
+      <span class="tag tag--green">Real-time Indexing</span>
+      <span class="tag tag--amber">AI/ML infrastructure</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Arjun&#x27;s Trade-offs in Real-Time Vector Indexing</h1>
+      <p class="q-scenario"><strong>Arjun</strong> is a backend engineer building a social app with <strong>semantic search</strong> over user-created posts. The platform takes about <strong>2,000 writes per second</strong>, needs <strong>search latency under 200 ms</strong>, and wants new posts <strong>searchable within seconds</strong>. <strong>PostgreSQL</strong> is the source of truth, and a <strong>vector database</strong> (a managed service, or self-hosted FAISS/HNSW) will power semantic search. Embeddings come from a <strong>model service that adds tens to hundreds of milliseconds per call</strong> and can slow down or fail. He must choose an ingestion and serving strategy that balances <strong>write latency, index freshness, availability and operating cost</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Synchronous vector insertion: each write request blocks until the embedding is computed and upserted into the vector DB; if the vector DB is down the write fails, which gives read-after-write visibility and strict consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Dual-write from the application: write to PostgreSQL and call the vector DB in the same request without a distributed transaction; if either fails the request still succeeds, and a background job periodically reconciles.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Asynchronous event-driven ingestion: write only to PostgreSQL and publish a change event (CDC or application events) to a durable log such as Kafka; a pipeline computes embeddings and upserts them into the vector DB, with fallback reads for the newest items, idempotent processing, retries with a DLQ, and consumer-lag monitoring.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Scheduled bulk reindexing: accumulate changes and rebuild or batch-load the index every 5–15 minutes, keeping the live index read-only between runs.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Async Event-Driven Ingestion</h3>
+        <p>The vector index is a <strong>derived view</strong> of PostgreSQL, so it should be fed the way any derived view is fed reliably: from a <strong>durable change stream</strong>, asynchronously, with idempotent consumers. That keeps the user-facing write path as fast and available as PostgreSQL alone, still delivers 'searchable within seconds' (typically a few seconds end to end when consumers keep up), and turns every failure (embedding outage, vector DB slowdown, bad record) into a recoverable lag rather than a lost write or a failed request. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Write path stays fast and available:</strong> The API commits to PostgreSQL (plus an outbox row, or the WAL for CDC) and returns. Embedding latency and vector DB outages never block or fail user writes, so write availability equals that of the primary database.</li>
+          <li><strong>No dual-write inconsistency:</strong> One atomic commit is the source of truth for both the row and the event (transactional outbox or WAL-based CDC), so the index cannot permanently diverge because one of two separate writes failed.</li>
+          <li><strong>Absorbs bursts with backpressure:</strong> Kafka buffers spikes above 2,000 writes per second, consumers batch embeddings (efficient on GPUs and cheaper per call), and the vector DB is upserted in bulk at a rate it can sustain. Lag becomes a visible, alertable number.</li>
+          <li><strong>Recoverable and replayable:</strong> Idempotent upserts keyed by record ID with a version guard allow safe retries and replays, a DLQ isolates poison messages, and a new embedding model or index can be rebuilt by replaying the log or re-reading PostgreSQL.</li>
+          <li><strong>Freshness without perfection:</strong> A fallback for the newest items (a recent-window lexical or DB query merged into the results) hides the few seconds of lag, so users see their own post immediately, even before it is vector-indexed.</li>
+        </ul>
+        <p>A well-designed pipeline includes a <strong>transactional outbox or CDC</strong>, <strong>idempotent versioned upserts</strong>, <strong>micro-batched embedding</strong>, <strong>retries with a DLQ</strong>, <strong>tombstone handling</strong>, <strong>a recent-items fallback</strong> and <strong>lag-based alerting</strong>. Track end-to-end freshness (commit to searchable), consumer lag, DLQ rate and the share of queries served from the fallback; if freshness exceeds your SLO, scale consumers or embedding capacity before changing the architecture.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>A — Synchronous Insertion</h4>
+          </div>
+          <p>This couples write latency and availability to two extra systems, the embedding model and the vector DB. Every write pays the embedding call (tens to hundreds of milliseconds) plus the upsert, and any outage or slowdown in either one fails user posts, so write availability becomes the <em>product</em> of all three systems. A failure after the PostgreSQL commit still leaves inconsistent state unless you add compensation. <strong>Caveat:</strong> acceptable for small internal tools with low write volume and a strict need for immediate visibility.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">✂️</span>
+            <h4>B — Application-Level Dual Write</h4>
+          </div>
+          <p>Two independent writes without a transaction will diverge: a crash between them, a timeout that actually succeeded, or concurrent updates applied in different orders leave PostgreSQL and the index silently inconsistent. 'Succeed anyway and reconcile later' means search can miss posts or show deleted ones until the periodic job catches up, and the reconciler has to scan everything. <strong>Caveat:</strong> the instinct is right but the mechanism is wrong. Turn the second write into an event emitted from the same transaction (the outbox pattern) and you have option C.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🗓️</span>
+            <h4>D — Scheduled Bulk Reindex</h4>
+          </div>
+          <p>A 5–15 minute refresh violates the 'visible within seconds' goal outright, and large rebuilds consume heavy compute in bursts, creating load spikes on PostgreSQL and the vector DB. A read-only index between runs also means edits and deletes stay stale for the same window. <strong>Caveat:</strong> bulk reindexing is the right tool for <em>backfills</em>, embedding-model upgrades and disaster recovery (build a new index, then swap an alias), just not for steady-state freshness.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Async Event-Driven Ingestion ✓</h4>
+          </div>
+          <p>Asynchronous event-driven ingestion: write only to PostgreSQL and publish a change event (CDC or application events) to a durable log such as Kafka; a pipeline computes embeddings and upserts them int</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Latency</th><th>Write Availability</th><th>Search Freshness</th><th>Consistency / Drift Risk</th><th>Operational Cost</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Synchronous Insertion</td><td>High (adds embedding and upsert) ❌</td><td>Low (all three systems must be up) ❌</td><td>Immediate ✅</td><td>Strong unless a partial failure occurs ⚠</td><td>Medium ⚠</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Application Dual Write</td><td>Medium ⚠</td><td>Medium, but silently inconsistent ⚠</td><td>Seconds, if both writes succeed ⚠</td><td>High drift, silent ❌</td><td>Medium ⚠</td><td>Low to medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Async Event-Driven Ingestion ✓</td><td>Low (PostgreSQL only) ✅</td><td>High ✅</td><td>Seconds (lag-bound) ✅</td><td>Low (replayable, idempotent) ✅</td><td>Medium (batching helps) ⚠</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">D — Scheduled Bulk Reindex</td><td>Low ✅</td><td>High ✅</td><td>Minutes ❌</td><td>Stale between runs ❌</td><td>Bursty and high ⚠</td><td>Low ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous Insertion</h4>
+          </div>
+          <p>Low-volume internal tools where immediate read-after-write search matters, the embedding step is fast and stable, and blocking writes during an outage is acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Application Dual Write</h4>
+          </div>
+          <p>Prototypes, or cases where occasional search drift is acceptable and a periodic full reconciliation is enough. Better replaced by an outbox later.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Async Event-Driven Ingestion</h4>
+          </div>
+          <p>Production systems with high write volume, strict write availability, a freshness target of seconds, and a source-of-truth database separate from the search index.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Scheduled Bulk Reindex</h4>
+          </div>
+          <p>Backfills, embedding-model upgrades, disaster recovery, or datasets that change slowly and tolerate minutes to hours of staleness.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Search Read Path with Recent-Items Fallback</h3>
+        <p>The query is embedded once, vector results are merged with a small recent-items lookup that covers the few seconds before ingestion catches up, and results are filtered against the source of truth:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant S as Search API
+    participant E as Embedding Service
+    participant V as Vector DB
+    participant P as PostgreSQL
+    C-&gt;&gt;S: 1. Search query
+    S-&gt;&gt;E: 2. Embed query
+    E--&gt;&gt;S: Query vector
+    par Vector search
+        S-&gt;&gt;V: 3a. Top-k nearest neighbors
+    and Fresh-items lookup
+        S-&gt;&gt;P: 3b. Recent posts (last few minutes, full-text)
+    end
+    V--&gt;&gt;S: Candidates
+    P--&gt;&gt;S: Fresh candidates
+    S-&gt;&gt;P: 4. Fetch rows, drop deleted or hidden posts
+    S--&gt;&gt;C: 5. Merged and re-ranked results">sequenceDiagram
+    participant C as Client
+    participant S as Search API
+    participant E as Embedding Service
+    participant V as Vector DB
+    participant P as PostgreSQL
+    C-&gt;&gt;S: 1. Search query
+    S-&gt;&gt;E: 2. Embed query
+    E--&gt;&gt;S: Query vector
+    par Vector search
+        S-&gt;&gt;V: 3a. Top-k nearest neighbors
+    and Fresh-items lookup
+        S-&gt;&gt;P: 3b. Recent posts (last few minutes, full-text)
+    end
+    V--&gt;&gt;S: Candidates
+    P--&gt;&gt;S: Fresh candidates
+    S-&gt;&gt;P: 4. Fetch rows, drop deleted or hidden posts
+    S--&gt;&gt;C: 5. Merged and re-ranked results</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Outbox Producer, Idempotent Consumer and Search with Fallback</h3>
+        <p>Writes commit the row and an outbox event atomically, the consumer micro-batches embeddings and applies versioned idempotent upserts with retries and a DLQ, and search merges vector results with a recent-items query:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---------- Producer: atomic write with outbox ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">createOrUpdatePost</span>(post):</span>
+<span class="line">    db.<span class="tk-kw">begin</span>()</span>
+<span class="line">    row <span class="tk-op">=</span> db.<span class="tk-fn">upsert</span>(<span class="tk-str">&quot;posts&quot;</span>, post)                              <span class="tk-com">// bumps row.version</span></span>
+<span class="line">    db.<span class="tk-fn">insert</span>(<span class="tk-str">&quot;outbox&quot;</span>, { aggregateId <span class="tk-op">=</span> row.id, version <span class="tk-op">=</span> row.version, type <span class="tk-op">=</span> <span class="tk-str">&quot;POST_UPSERTED&quot;</span> })</span>
+<span class="line">    db.<span class="tk-fn">commit</span>()                                                 <span class="tk-com">// one atomic commit: row + event</span></span>
+<span class="line">    <span class="tk-kw">return</span> row                                                  <span class="tk-com">// no embedding or vector DB call here</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">deletePost</span>(postId):</span>
+<span class="line">    db.<span class="tk-kw">begin</span>()</span>
+<span class="line">    db.<span class="tk-fn">update</span>(<span class="tk-str">&quot;posts&quot;</span>, postId, { deleted <span class="tk-op">=</span> <span class="tk-lit">true</span> })</span>
+<span class="line">    db.<span class="tk-fn">insert</span>(<span class="tk-str">&quot;outbox&quot;</span>, { aggregateId <span class="tk-op">=</span> postId, version <span class="tk-op">=</span> <span class="tk-fn">nextVersion</span>(postId), type <span class="tk-op">=</span> <span class="tk-str">&quot;POST_DELETED&quot;</span> })</span>
+<span class="line">    db.<span class="tk-fn">commit</span>()</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---------- Consumer: micro-batch, embed, upsert ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">consumeLoop</span>():</span>
+<span class="line">    <span class="tk-kw">while</span> <span class="tk-lit">true</span>:</span>
+<span class="line">        batch <span class="tk-op">=</span> kafka.<span class="tk-fn">poll</span>(maxRecords <span class="tk-op">=</span> <span class="tk-num">128</span>, maxWait <span class="tk-op">=</span> <span class="tk-num">200ms</span>)  <span class="tk-com">// partitioned by post_id: per-post ordering</span></span>
+<span class="line">        <span class="tk-kw">if</span> batch.<span class="tk-fn">isEmpty</span>(): <span class="tk-kw">continue</span></span>
+<span class="line"></span>
+<span class="line">        upserts <span class="tk-op">=</span> [e <span class="tk-kw">for</span> e <span class="tk-kw">in</span> batch <span class="tk-kw">if</span> e.type <span class="tk-op">==</span> <span class="tk-str">&quot;POST_UPSERTED&quot;</span>]</span>
+<span class="line">        deletes <span class="tk-op">=</span> [e <span class="tk-kw">for</span> e <span class="tk-kw">in</span> batch <span class="tk-kw">if</span> e.type <span class="tk-op">==</span> <span class="tk-str">&quot;POST_DELETED&quot;</span>]</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            texts   <span class="tk-op">=</span> db.<span class="tk-fn">fetchTexts</span>(ids <span class="tk-op">=</span> upserts.<span class="tk-fn">map</span>(e <span class="tk-op">=&gt;</span> e.aggregateId))   <span class="tk-com">// read latest text from the source of truth</span></span>
+<span class="line">            vectors <span class="tk-op">=</span> <span class="tk-fn">withRetry</span>(<span class="tk-num">3</span>, <span class="tk-fn">exponentialWithJitter</span>(),</span>
+<span class="line">                                call <span class="tk-op">=</span> embeddingService.<span class="tk-fn">embedBatch</span>(texts, model <span class="tk-op">=</span> MODEL_V))</span>
+<span class="line">            vectorDb.<span class="tk-fn">upsertBatch</span>(</span>
+<span class="line">                [{ id <span class="tk-op">=</span> e.aggregateId, vector <span class="tk-op">=</span> vectors[i], version <span class="tk-op">=</span> e.version, modelVersion <span class="tk-op">=</span> MODEL_V }</span>
+<span class="line">                 <span class="tk-kw">for</span> i, e <span class="tk-kw">in</span> <span class="tk-fn">enumerate</span>(upserts)],</span>
+<span class="line">                onlyIfNewerVersion <span class="tk-op">=</span> <span class="tk-lit">true</span>)                                    <span class="tk-com">// ignore stale or replayed events</span></span>
+<span class="line">            vectorDb.<span class="tk-fn">deleteBatch</span>(deletes.<span class="tk-fn">map</span>(e <span class="tk-op">=&gt;</span> e.aggregateId))             <span class="tk-com">// tombstones propagate quickly</span></span>
+<span class="line">            kafka.<span class="tk-fn">commit</span>(batch)</span>
+<span class="line">        <span class="tk-kw">catch</span> (PermanentError err):                                           <span class="tk-com">// bad payload, schema error</span></span>
+<span class="line">            dlq.<span class="tk-fn">send</span>(batch, err)</span>
+<span class="line">            kafka.<span class="tk-fn">commit</span>(batch)</span>
+<span class="line">        <span class="tk-kw">catch</span> (TransientError err):                                           <span class="tk-com">// model or vector DB unavailable</span></span>
+<span class="line">            circuitBreaker.<span class="tk-fn">record</span>(err)</span>
+<span class="line">            <span class="tk-fn">sleep</span>(<span class="tk-fn">backoff</span>())                                                  <span class="tk-com">// no commit: batch is redelivered, lag grows visibly</span></span>
+<span class="line"></span>
+<span class="line">        metrics.<span class="tk-fn">gauge</span>(<span class="tk-str">&quot;consumer_lag_seconds&quot;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> batch.oldestTimestamp)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---------- Query path: vector search plus recent-items fallback ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">search</span>(query, user):</span>
+<span class="line">    qv <span class="tk-op">=</span> embeddingService.<span class="tk-fn">embed</span>(query)</span>
+<span class="line">    [candidates, fresh] <span class="tk-op">=</span> <span class="tk-kw">await</span> <span class="tk-fn">all</span>(</span>
+<span class="line">        vectorDb.<span class="tk-fn">search</span>(qv, topK <span class="tk-op">=</span> <span class="tk-num">50</span>, filter <span class="tk-op">=</span> <span class="tk-fn">visibleTo</span>(user)),</span>
+<span class="line">        db.<span class="tk-fn">query</span>(<span class="tk-str">&quot;SELECT id FROM posts WHERE created_at &gt; now() - interval &#x27;2 minutes&#x27; &quot;</span> <span class="tk-op">+</span></span>
+<span class="line">                 <span class="tk-str">&quot;AND to_tsvector(&#x27;english&#x27;, body) @@ plainto_tsquery(&#x27;english&#x27;, ?) LIMIT 20&quot;</span>, query))</span>
+<span class="line">    merged <span class="tk-op">=</span> <span class="tk-fn">dedupe</span>(candidates <span class="tk-op">+</span> fresh)</span>
+<span class="line">    rows   <span class="tk-op">=</span> db.<span class="tk-fn">fetchVisible</span>(merged.ids)                                      <span class="tk-com">// drop deleted or hidden posts</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">rerank</span>(rows, qv, query)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Dual-writing without an outbox or CDC:</strong> Two writes cannot be atomic. Emit the event from the same transaction as the row.</li>
+          <li><strong>Non-idempotent or unordered upserts:</strong> A retried or reordered event can overwrite a newer vector with an older one. Key by record ID, partition by it, and ignore events with an older version.</li>
+          <li><strong>Forgetting deletes and edits:</strong> Deleted or hidden posts that stay searchable are a privacy and trust bug. Send tombstones, filter at query time against the PostgreSQL status, and compact the index.</li>
+          <li><strong>Embedding one record at a time:</strong> Single-item calls waste GPU capacity and add latency. Micro-batch and cap concurrency to protect the model service.</li>
+          <li><strong>No lag or DLQ monitoring:</strong> Silent consumer lag means silent staleness. Alert on lag, DLQ growth and freshness-SLO burn.</li>
+          <li><strong>Mixing embedding versions:</strong> Vectors from different models are not comparable. Store the model version, and reindex into a new collection or alias when the model changes.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams build the pipeline for correctness first and then tune for freshness and cost. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define 'near real time':</strong> Set a freshness SLO (for example 95% of posts searchable within 5 seconds), and measure embedding latency, vector DB upsert throughput and query latency under load.</li>
+          <li><strong>Step 1 — Capture changes atomically:</strong> Write the row and an outbox record in one PostgreSQL transaction, or use logical-replication CDC (such as Debezium) to stream changes into Kafka.</li>
+          <li><strong>Step 2 — Process in micro-batches:</strong> Consumers group events (for example 32–128 items or 100–200 ms), call the embedding service in batches, and upsert vectors in bulk with a version guard.</li>
+          <li><strong>Step 3 — Handle failure explicitly:</strong> Use bounded retries with backoff, a DLQ with replay tooling, and a circuit breaker so an embedding outage becomes lag instead of an outage.</li>
+          <li><strong>Step 4 — Serve fresh results:</strong> Merge vector results with a small recent-items query (the last few minutes, from PostgreSQL full-text search or a delta index), filter deleted or hidden content, and re-rank.</li>
+          <li><strong>Step 5 — Reconcile and evolve:</strong> Periodically compare PostgreSQL with the index, version embeddings by model, and use bulk reindexing with an alias swap for model upgrades.</li>
+        </ul>
+        <p>Treat the vector index as a rebuildable cache of PostgreSQL, and design for lag rather than perfection.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p><strong>Keep PostgreSQL as the only synchronous write, and feed the vector index from a durable event stream.</strong> You get fast, available writes, searchable-within-seconds freshness and replayable recovery. Pair it with idempotent versioned upserts, a recent-items fallback and lag monitoring, and use bulk reindexing only for backfills and model upgrades.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

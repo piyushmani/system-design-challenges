@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nina Selecting a Scalable Token Strategy: Evaluating the Trade-offs — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">12 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Authentication Tokens</span>
+      <span class="tag tag--green">Scalability</span>
+      <span class="tag tag--amber">Security</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Nina Selecting a Scalable Token Strategy: Evaluating the Trade-offs</h1>
+      <p class="q-scenario"><strong>Nina</strong>, a platform architect at a SaaS provider, runs a public API behind <strong>regional gateways in three regions</strong> that handles about <strong>5 million requests per minute</strong> (roughly 83,000 per second). Today it uses <strong>self-contained JWT access tokens</strong> with <strong>long-lived refresh tokens</strong>. After a <strong>breach involving compromised refresh tokens</strong> and a new <strong>99.99% availability</strong> target, she must redesign the token architecture. The constraints are <strong>minimal per-request latency at the gateway</strong>, <strong>fast invalidation of compromised sessions</strong>, <strong>no global single point of failure</strong>, and <strong>manageable operating cost</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep signed, self-contained JWT access tokens with a short lifetime (5–15 minutes); extend sessions with rotating refresh tokens held server-side in a highly scalable store and invalidated if compromised; verify only signature and expiry at the gateway; keep a central revocation list only for refresh tokens and specifically flagged high-risk sessions.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Switch to opaque access tokens stored in a central, strongly consistent database, with synchronous validation against it on every API request (and short-term caching of results) for definitive revocation.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Keep JWTs but add a session_id claim, and have the gateway look it up in a globally replicated, strongly consistent session database on every request, treating that store as the final authority.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Keep long-lived JWTs and add asynchronous revocation: broadcast revocations through a global pub/sub to update regional in-memory caches, relying on token expiry and periodic syncs when a revocation is delayed.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Short-Lived JWTs + Rotating Refresh Tokens</h3>
+        <p>The constraints push toward <strong>keeping the hot path stateless and moving statefulness to the cold path</strong>. Short-lived, signed JWTs let every gateway authorize requests locally with no network call, which protects latency and availability at roughly 83,000 requests per second. Control over sessions is then exercised at the <em>refresh</em> step, where state is cheap because it happens once per token lifetime rather than once per request, using <strong>rotating, server-side refresh tokens</strong> with reuse detection. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Zero network calls per request:</strong> The gateway verifies signature, expiry, issuer and audience against cached public keys (JWKS). Latency is microseconds of CPU, there is no per-request dependency, and an outage of the auth service does not stop already-authenticated traffic.</li>
+          <li><strong>Bounded blast radius:</strong> A stolen access token is useful for at most its lifetime (5–15 minutes). A stolen refresh token is caught by <em>rotation with reuse detection</em>: if an old refresh token appears again, the whole token family is revoked and the user must re-authenticate.</li>
+          <li><strong>State only where it is cheap:</strong> Refresh traffic is a tiny fraction of API traffic (one refresh per token lifetime versus thousands of requests), so a multi-region, highly available store can hold refresh-token state without becoming a bottleneck or a global single point of failure.</li>
+          <li><strong>Targeted fast revocation:</strong> For confirmed compromises, push the session ID to a small deny-list at the gateways. Entries only need to live for the remaining access-token lifetime, so the list stays tiny, and if a push is missed the worst case is still bounded by token expiry.</li>
+          <li><strong>Aligned with current guidance:</strong> The OAuth 2.0 security best current practice (RFC 9700) recommends short-lived access tokens and either sender-constrained refresh tokens or rotation with reuse detection.</li>
+        </ul>
+        <p>A well-designed token system includes <strong>short access-token TTLs</strong>, <strong>refresh-token rotation with family revocation</strong>, <strong>sender-constraining (DPoP or mutual TLS) where feasible</strong>, <strong>a tiny TTL-bounded deny-list for incident response</strong>, and <strong>asymmetric key rotation</strong>. Track refresh-reuse detections, validation failures, JWKS cache age and time-to-revoke in drills; if time-to-revoke exceeds your policy, shorten the TTL rather than adding per-request lookups.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>B — Opaque Tokens + Central Validation</h4>
+          </div>
+          <p>Opaque tokens give definitive, instant revocation, but every request now depends on a central database. At roughly 83,000 requests per second the lookup latency and the cost of a strongly consistent store are significant, and the store becomes a <strong>global single point of failure</strong> for all API traffic, which contradicts the 99.99% and no-SPOF goals. Caching validation results brings back a revocation delay equal to the cache TTL, which undermines the reason for choosing opaque tokens. <strong>Caveat:</strong> opaque tokens with introspection suit lower-volume APIs, or privileged tokens (such as admin consoles) where instant revocation is mandatory.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>C — JWT + Global Session Lookup</h4>
+          </div>
+          <p>This pays for a per-request lookup <em>and</em> keeps JWTs, and it puts a <strong>strongly consistent, globally replicated</strong> store on the hot path, which means cross-region quorum latency or CAP-style availability trade-offs on every call. The session store becomes the final authority, so it is again a global dependency for every request. <strong>Caveat:</strong> reasonable for a small set of high-risk operations (changing payout details, for example) where a step-up session check on those routes alone is affordable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📡</span>
+            <h4>D — Long-Lived JWTs + Async Revocation</h4>
+          </div>
+          <p>Revocation here is best-effort: pub/sub delivery can be delayed or lost, a gateway that restarts or is partitioned loses its in-memory list, and the fallback is the token's expiry, which is long by design. A stolen long-lived token stays valid for hours or days wherever the message did not arrive, and the cache must remember every revocation for the full token lifetime. <strong>Caveat:</strong> pub/sub revocation is a good <em>complement</em> to short-lived tokens (it is the deny-list in option A), but not a substitute for them.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Short-Lived JWTs + Rotating Refresh Tokens ✓</h4>
+          </div>
+          <p>Keep signed, self-contained JWT access tokens with a short lifetime (5–15 minutes); extend sessions with rotating refresh tokens held server-side in a highly scalable store and invalidated if compromi</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Per-Request Latency</th><th>Revocation Speed</th><th>Availability (No Global SPOF)</th><th>Stolen-Token Exposure</th><th>Operating Cost</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Short JWT + Rotating Refresh ✓</td><td>Local, microseconds ✅</td><td>Minutes for access, immediate for refresh ⚠</td><td>High ✅</td><td>Bounded by short TTL ✅</td><td>Low ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — Opaque + Central Validation</td><td>Network lookup per request ❌</td><td>Instant without caching ✅</td><td>Low (central DB on hot path) ❌</td><td>Minimal ✅</td><td>High (consistent store at 83k RPS) ❌</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — JWT + Global Session Lookup</td><td>Lookup on every request ❌</td><td>Near-instant ✅</td><td>Low to medium (global quorum) ❌</td><td>Minimal ✅</td><td>High ❌</td><td>Medium to high ⚠</td></tr>
+            <tr><td class="tt-option">D — Long JWT + Async Revocation</td><td>Local ✅</td><td>Best-effort, uncertain ❌</td><td>High ✅</td><td>Hours or days if a message is lost ❌</td><td>Low to medium ⚠</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Short JWT + Rotating Refresh</h4>
+          </div>
+          <p>High-volume public APIs across regions that need low latency, high availability and bounded exposure. The default for most large-scale SaaS APIs.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Opaque + Central Validation</h4>
+          </div>
+          <p>Lower-volume or high-sensitivity APIs where instant, definitive revocation matters more than latency and availability, such as admin consoles, usually with a local introspection cache.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — JWT + Global Session Lookup</h4>
+          </div>
+          <p>Selected high-risk routes (payouts, credential changes) that deserve a step-up session check, in addition to stateless validation everywhere else.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Long JWT + Async Revocation</h4>
+          </div>
+          <p>As a <em>complement</em> to short-lived tokens for faster incident response (the deny-list in option A), not as a replacement for short expiry.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Request Verification and Refresh Rotation</h3>
+        <p>Gateways authorize each request locally from the JWT. State is only touched when a client refreshes, which is rare and region-local:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant G as Regional Gateway
+    participant A as Auth Service
+    participant S as Refresh Token Store
+    C-&gt;&gt;A: 1. Login (credentials plus MFA)
+    A-&gt;&gt;S: 2. Create session and refresh token (hashed)
+    A--&gt;&gt;C: 3. Access JWT (10 min) and refresh token
+    C-&gt;&gt;G: 4. API call with access JWT
+    G-&gt;&gt;G: 5. Verify signature, exp, iss, aud (cached JWKS)
+    G--&gt;&gt;C: 6. Response (no network call to auth)
+    Note over C,G: Access token expires
+    C-&gt;&gt;A: 7. Refresh with refresh token
+    A-&gt;&gt;S: 8. Atomically consume token, issue next one
+    A--&gt;&gt;C: 9. New access JWT and rotated refresh token">sequenceDiagram
+    participant C as Client
+    participant G as Regional Gateway
+    participant A as Auth Service
+    participant S as Refresh Token Store
+    C-&gt;&gt;A: 1. Login (credentials plus MFA)
+    A-&gt;&gt;S: 2. Create session and refresh token (hashed)
+    A--&gt;&gt;C: 3. Access JWT (10 min) and refresh token
+    C-&gt;&gt;G: 4. API call with access JWT
+    G-&gt;&gt;G: 5. Verify signature, exp, iss, aud (cached JWKS)
+    G--&gt;&gt;C: 6. Response (no network call to auth)
+    Note over C,G: Access token expires
+    C-&gt;&gt;A: 7. Refresh with refresh token
+    A-&gt;&gt;S: 8. Atomically consume token, issue next one
+    A--&gt;&gt;C: 9. New access JWT and rotated refresh token</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Gateway Verification and Refresh Rotation with Reuse Detection</h3>
+        <p>The gateway verifies tokens statelessly on every request with a small local deny-list; the auth service consumes each refresh token exactly once, tolerates short retry windows, and revokes the whole family when an old token reappears:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---------- Gateway: stateless verification on every request ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">authorize</span>(request):</span>
+<span class="line">    token <span class="tk-op">=</span> <span class="tk-fn">bearerToken</span>(request)</span>
+<span class="line">    header <span class="tk-op">=</span> <span class="tk-fn">decodeHeader</span>(token)</span>
+<span class="line">    <span class="tk-kw">if</span> header.alg <span class="tk-kw">not</span> <span class="tk-kw">in</span> [<span class="tk-str">&quot;ES256&quot;</span>, <span class="tk-str">&quot;EdDSA&quot;</span>]:                      <span class="tk-com">// pin algorithms, never accept &quot;none&quot;</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">401</span></span>
+<span class="line">    key <span class="tk-op">=</span> jwksCache.<span class="tk-fn">get</span>(header.kid)                               <span class="tk-com">// cached public keys, refreshed in background</span></span>
+<span class="line">    <span class="tk-kw">if</span> key <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> <span class="tk-kw">not</span> <span class="tk-fn">verifySignature</span>(token, key):</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">401</span></span>
+<span class="line">    claims <span class="tk-op">=</span> <span class="tk-fn">decodeClaims</span>(token)</span>
+<span class="line">    <span class="tk-kw">if</span> claims.iss <span class="tk-op">!=</span> ISSUER <span class="tk-kw">or</span> API_AUDIENCE <span class="tk-kw">not</span> <span class="tk-kw">in</span> claims.aud <span class="tk-kw">or</span> claims.exp <span class="tk-op">&lt;</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> CLOCK_SKEW:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">401</span></span>
+<span class="line">    <span class="tk-kw">if</span> denyList.<span class="tk-fn">contains</span>(claims.sid):                             <span class="tk-com">// tiny, local, TTL-bounded</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">401</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">forward</span>(request, identity <span class="tk-op">=</span> claims.sub, scopes <span class="tk-op">=</span> claims.scope)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---------- Auth service: refresh with rotation and reuse detection ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">refresh</span>(presentedToken, clientProof):</span>
+<span class="line">    h <span class="tk-op">=</span> <span class="tk-fn">hash</span>(presentedToken)</span>
+<span class="line">    record <span class="tk-op">=</span> tokenStore.<span class="tk-fn">get</span>(h)                                    <span class="tk-com">// keyed lookup in a multi-region store</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> record <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">401</span></span>
+<span class="line">    <span class="tk-kw">if</span> record.used:</span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> record.usedAt <span class="tk-op">&lt;=</span> GRACE_WINDOW:                 <span class="tk-com">// e.g. 10-30 s: tolerate client retries</span></span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">reissueSameSuccessor</span>(record)</span>
+<span class="line">        <span class="tk-fn">revokeFamily</span>(record.familyId)                             <span class="tk-com">// reuse detected: assume theft</span></span>
+<span class="line">        <span class="tk-fn">publishDeny</span>(record.sessionId, ttl <span class="tk-op">=</span> MAX_ACCESS_TTL)</span>
+<span class="line">        <span class="tk-fn">alert</span>(<span class="tk-str">&quot;refresh_token_reuse&quot;</span>, record.familyId)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">401</span></span>
+<span class="line">    <span class="tk-kw">if</span> record.<span class="tk-fn">expired</span>() <span class="tk-kw">or</span> record.<span class="tk-fn">sessionExpired</span>() <span class="tk-kw">or</span> <span class="tk-kw">not</span> <span class="tk-fn">verifySenderBinding</span>(record, clientProof):</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">401</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Atomically consume the token and issue its successor (compare-and-set prevents double use)</span></span>
+<span class="line">    successor <span class="tk-op">=</span> <span class="tk-fn">newRefreshToken</span>(familyId <span class="tk-op">=</span> record.familyId, sessionId <span class="tk-op">=</span> record.sessionId)</span>
+<span class="line">    ok <span class="tk-op">=</span> tokenStore.<span class="tk-fn">compareAndSet</span>(h, expect <span class="tk-op">=</span> { used: <span class="tk-lit">false</span> },</span>
+<span class="line">                                  set <span class="tk-op">=</span> { used: <span class="tk-lit">true</span>, usedAt: <span class="tk-fn">now</span>(), next: <span class="tk-fn">hash</span>(successor) })</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> ok:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">refresh</span>(presentedToken, clientProof)               <span class="tk-com">// lost a race: re-evaluate once</span></span>
+<span class="line">    tokenStore.<span class="tk-fn">put</span>(<span class="tk-fn">hash</span>(successor), { familyId: record.familyId, sessionId: record.sessionId, used: <span class="tk-lit">false</span> })</span>
+<span class="line">    <span class="tk-kw">return</span> { accessToken: <span class="tk-fn">signJwt</span>(sub <span class="tk-op">=</span> record.userId, sid <span class="tk-op">=</span> record.sessionId, ttl <span class="tk-op">=</span> 10min),</span>
+<span class="line">             refreshToken: successor }</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Long-lived access tokens:</strong> Lifetimes of hours or days turn every theft into a long-running incident and make revocation unreliable. Keep them to minutes.</li>
+          <li><strong>Refresh tokens without rotation or reuse detection:</strong> A stolen refresh token can be replayed silently for months. Use one-time-use rotation with family revocation, plus absolute and idle lifetimes.</li>
+          <li><strong>Storing refresh tokens in plain text:</strong> Store only a hash (as you would for a password), so a database leak does not hand out working tokens.</li>
+          <li><strong>Weak JWT validation:</strong> Accepting <code>alg: none</code>, skipping <code>aud</code> or <code>iss</code> checks, or letting the token choose its own key. Pin algorithms and validate every standard claim.</li>
+          <li><strong>Mishandling rotation races:</strong> Mobile retries and parallel tabs produce legitimate reuse. Use a brief grace window and scope the response to the family.</li>
+          <li><strong>Unbounded deny-lists:</strong> Entries that never expire grow forever. Expire each entry after the maximum access-token lifetime.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, token architecture is about choosing <strong>where state lives</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define the threat and the SLO:</strong> Decide the maximum acceptable exposure after a compromise (for example 5 minutes for access tokens, immediate for refresh tokens) and the availability budget for authentication.</li>
+          <li><strong>Step 1 — Shorten and sign:</strong> Issue short-lived access tokens (5–15 minutes) with asymmetric keys, <code>kid</code> rotation and a cached JWKS at every gateway.</li>
+          <li><strong>Step 2 — Rotate refresh tokens:</strong> Use one-time-use refresh tokens stored hashed, grouped into families with reuse detection, and enforce absolute and idle session lifetimes server-side.</li>
+          <li><strong>Step 3 — Sender-constrain where possible:</strong> Bind tokens to the client with DPoP or mutual TLS so a stolen token is unusable elsewhere.</li>
+          <li><strong>Step 4 — Add an incident deny-list:</strong> Distribute a small list of revoked session IDs to the gateways by push, with entries expiring after the maximum access-token lifetime. Fail toward token expiry, not toward an outage.</li>
+          <li><strong>Step 5 — Drill and monitor:</strong> Measure time-to-revoke in game days, and alert on refresh-token reuse, auth latency and JWKS cache age.</li>
+        </ul>
+        <p>Keep the per-request path stateless, and spend state on the rare refresh path.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p><strong>Make requests stateless and sessions stateful.</strong> Short-lived signed JWTs keep the gateway fast and independent, while rotating refresh tokens with reuse detection, sender-constraining and a tiny deny-list give you control where it is cheap. If instant revocation is needed for a few high-risk actions, add targeted checks on those routes rather than on every request.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

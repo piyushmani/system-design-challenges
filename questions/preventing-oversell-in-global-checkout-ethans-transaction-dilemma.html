@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preventing Oversell in Global Checkout: Ethan&#x27;s Transaction Dilemma — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">12 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Transactions</span>
+      <span class="tag tag--green">Checkout</span>
+      <span class="tag tag--amber">Concurrency</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Preventing Oversell in Global Checkout: Ethan&#x27;s Transaction Dilemma</h1>
+      <p class="q-scenario"><strong>Ethan</strong> is building checkout for a <strong>worldwide e-commerce platform</strong> that runs frequent <strong>flash sales</strong>. Orders arrive in huge bursts and many contain <strong>multiple SKUs</strong>. The hard constraints are <strong>zero overselling</strong>, <strong>checkout latency around 200 ms or less</strong>, <strong>multi-region availability</strong>, and strong <strong>observability and recovery</strong> when things fail. Inventory lives in several services, <strong>sharded by SKU</strong>. He must choose a transaction and isolation model for inventory updates that best balances strict correctness, scalability, speed and resilience in production.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A two-phase commit (XA) transaction across all SKU shards in an order, with a central coordinator locking the shards and atomically committing or aborting.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Keep all inventory in one strongly consistent global store (a single-region relational database or a globally consistent Redis cluster) and use optimistic compare-and-swap with retries to get serializability.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Assign a single writer per SKU shard with robust local transactions; for multi-SKU orders run a SAGA of local reservations that are confirmed if all succeed or compensated if any fail, with short reservation timeouts, idempotent operations, retries and asynchronous replicas for fast reads.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Use eventual consistency (CRDT-like counters or last-write-wins), allow temporary negative stock or overselling, and reconcile in the background with credits or refunds.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Per-SKU Ownership + Reservation Saga</h3>
+        <p>Zero overselling is an <strong>invariant on a single number</strong>, the stock of one SKU. The cheapest way to guarantee it is to give each SKU exactly one authoritative writer and make the decrement atomic there. A multi-SKU order then becomes a <strong>saga of local reservations</strong>: each SKU is protected on its own, and the order is all-or-nothing through confirmation and compensation. That preserves the invariant, avoids global locks, and keeps the latency path short. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Invariant enforced locally:</strong> A conditional decrement (<code>available = available - n WHERE available &gt;= n</code>) on the owning shard cannot go negative, even under heavy concurrency. No cross-shard lock or global state is needed to guarantee 'no oversell'.</li>
+          <li><strong>Low latency and high throughput:</strong> Each reservation is one short local transaction, and shards work in parallel. Latency is roughly one shard round trip plus payment, and throughput scales with the number of shards.</li>
+          <li><strong>Failure containment:</strong> A slow or failed shard affects only orders for its SKUs. Reservations carry short TTLs, so abandoned carts and crashed coordinators release stock automatically, and idempotency keys make retries safe.</li>
+          <li><strong>All-or-nothing without distributed locks:</strong> Reserving each SKU, confirming after payment and releasing on failure gives atomic business behavior for the whole basket. Reserve the scarcest SKU first to fail fast and minimize stock held in vain.</li>
+          <li><strong>A standard pattern:</strong> Hold-then-confirm with expiry is the usual model in ticketing, airline-seat and hotel booking systems, which face the same 'never sell the same unit twice' invariant.</li>
+        </ul>
+        <p>A well-designed model includes <strong>atomic conditional decrements</strong>, <strong>reservation TTLs with a sweeper</strong>, <strong>idempotency keys on every step</strong>, <strong>compensation that is retried until it succeeds</strong>, and <strong>reconciliation jobs</strong> that audit reserved + sold + available against the source of truth. Track oversell count (target zero), reservation expiry rate, saga failure rate and per-shard p99; if oversell is ever non-zero, treat it as a correctness incident rather than a tuning issue.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⛓️</span>
+            <h4>A — Two-Phase Commit (XA)</h4>
+          </div>
+          <p>2PC gives atomicity at the wrong price: locks are held through two network round trips, so hot SKUs serialize, tail latency grows with the slowest shard, and a coordinator failure can leave participants blocked in the prepared state. Availability becomes the product of every involved shard's availability, which does not fit flash-sale traffic or a 200 ms budget. <strong>Caveat:</strong> acceptable for rare, low-volume cross-shard operations inside one region.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌍</span>
+            <h4>B — Single Global Strongly Consistent Store</h4>
+          </div>
+          <p>One store can enforce the invariant simply, and CAS on a single row is correct. But all checkouts worldwide funnel through one region (cross-ocean round trips of 100–250 ms on their own), hot SKU rows become a single contention point where CAS retries multiply, and the store is a global single point of failure. A <em>globally consistent</em> cluster instead pays a cross-region quorum on every write. <strong>Caveat:</strong> fine for a single-region business with moderate traffic.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>D — Eventual Consistency / Allow Oversell</h4>
+          </div>
+          <p>This option abandons the primary requirement. Standard counter CRDTs and last-write-wins cannot enforce a lower bound: concurrent decrements in different regions each see stock available and both succeed. (Bounded counters can, but they work by pre-assigning stock 'rights' to regions, which is the escrow idea from option C.) Refunds and credits cost money and trust, and flash-sale customers told 'sorry, out of stock' after paying rarely return. <strong>Caveat:</strong> reasonable where overselling is cheap and policy-tolerated (digital goods, low-value items, deliberate overbooking).</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Per-SKU Ownership + Reservation Saga ✓</h4>
+          </div>
+          <p>Assign a single writer per SKU shard with robust local transactions; for multi-SKU orders run a SAGA of local reservations that are confirmed if all succeed or compensated if any fail, with short rese</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Oversell Protection</th><th>Checkout Latency</th><th>Multi-Region Availability</th><th>Throughput on Hot SKUs</th><th>Implementation Complexity</th><th>Failure Recovery</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Two-Phase Commit (XA)</td><td>Strong ✅</td><td>High (two round trips, locks held) ❌</td><td>Low (coordinator and all shards needed) ❌</td><td>Poor (locks serialize) ❌</td><td>High ❌</td><td>Hard (blocked prepared transactions) ❌</td></tr>
+            <tr><td class="tt-option">B — Single Global Store + CAS</td><td>Strong ✅</td><td>High for remote regions ❌</td><td>Weak (global SPOF or quorum cost) ❌</td><td>Poor (one contended row, CAS retries) ❌</td><td>Low ✅</td><td>Moderate ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Per-SKU Ownership + Saga ✓</td><td>Strong (atomic local decrement) ✅</td><td>Low locally, higher for remote buyers without quotas ⚠</td><td>Good (per-shard failure domains) ✅</td><td>Good with bucketing ⚠</td><td>Medium to high ⚠</td><td>Good (TTL expiry, compensation) ✅</td></tr>
+            <tr><td class="tt-option">D — Eventual Consistency</td><td>None, oversell by design ❌</td><td>Very low ✅</td><td>Very high ✅</td><td>Very high ✅</td><td>Medium ⚠</td><td>Costly (refunds, reputation) ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Two-Phase Commit (XA)</h4>
+          </div>
+          <p>Rare cross-shard operations inside one region that need atomicity at low throughput, such as warehouse transfers between two stock pools.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Single Global Store + CAS</h4>
+          </div>
+          <p>Single-region or moderate-traffic stores where one strongly consistent database comfortably handles peak load and most users are local.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Per-SKU Ownership + Saga</h4>
+          </div>
+          <p>High-volume, flash-sale, multi-region commerce with a strict no-oversell invariant and multi-SKU baskets.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Eventual Consistency</h4>
+          </div>
+          <p>Digital goods, low-value items, or cases where overselling is cheap, policy-tolerated and reconciled by business rules (such as planned overbooking).</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Multi-SKU Reservation Saga</h3>
+        <p>The checkout coordinator asks each SKU owner for a short-lived reservation, authorizes payment, then confirms. Any failure releases what was already reserved:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Checkout Service
+    participant A as SKU A Owner
+    participant B as SKU B Owner
+    participant P as Payment
+    C-&gt;&gt;A: 1. Reserve SKU A, qty 1 (key order42:A)
+    A--&gt;&gt;C: Reserved (TTL 5 min)
+    C-&gt;&gt;B: 2. Reserve SKU B, qty 2 (key order42:B)
+    alt All reserved
+        B--&gt;&gt;C: Reserved (TTL 5 min)
+        C-&gt;&gt;P: 3. Authorize payment
+        alt Payment OK
+            P--&gt;&gt;C: Authorized
+            C-&gt;&gt;A: 4. Confirm (sold)
+            C-&gt;&gt;B: 4. Confirm (sold)
+        else Payment failed
+            P--&gt;&gt;C: Declined
+            C-&gt;&gt;A: 5. Release reservation
+            C-&gt;&gt;B: 5. Release reservation
+        end
+    else SKU B sold out
+        B--&gt;&gt;C: Rejected
+        C-&gt;&gt;A: 5. Release reservation
+    end">sequenceDiagram
+    participant C as Checkout Service
+    participant A as SKU A Owner
+    participant B as SKU B Owner
+    participant P as Payment
+    C-&gt;&gt;A: 1. Reserve SKU A, qty 1 (key order42:A)
+    A--&gt;&gt;C: Reserved (TTL 5 min)
+    C-&gt;&gt;B: 2. Reserve SKU B, qty 2 (key order42:B)
+    alt All reserved
+        B--&gt;&gt;C: Reserved (TTL 5 min)
+        C-&gt;&gt;P: 3. Authorize payment
+        alt Payment OK
+            P--&gt;&gt;C: Authorized
+            C-&gt;&gt;A: 4. Confirm (sold)
+            C-&gt;&gt;B: 4. Confirm (sold)
+        else Payment failed
+            P--&gt;&gt;C: Declined
+            C-&gt;&gt;A: 5. Release reservation
+            C-&gt;&gt;B: 5. Release reservation
+        end
+    else SKU B sold out
+        B--&gt;&gt;C: Rejected
+        C-&gt;&gt;A: 5. Release reservation
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Atomic Reservation, Saga and Expiry Sweeper</h3>
+        <p>The SKU owner reserves with an atomic conditional decrement and idempotent release and confirm operations, the coordinator reserves scarcest-first with compensation, and a sweeper returns expired stock:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---------- SKU owner: atomic, idempotent operations ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reserve</span>(sku, reservationId, qty, ttl):</span>
+<span class="line">    existing <span class="tk-op">=</span> reservations.<span class="tk-fn">get</span>(reservationId)</span>
+<span class="line">    <span class="tk-kw">if</span> existing <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> existing.status                                  <span class="tk-com">// idempotent retry</span></span>
+<span class="line"></span>
+<span class="line">    db.<span class="tk-kw">begin</span>()</span>
+<span class="line">    updated <span class="tk-op">=</span> db.<span class="tk-fn">exec</span>(<span class="tk-str">&quot;UPDATE stock SET available = available - ? WHERE sku = ? AND available &gt;= ?&quot;</span>,</span>
+<span class="line">                      qty, sku, qty)                            <span class="tk-com">// cannot go below zero</span></span>
+<span class="line">    <span class="tk-kw">if</span> updated <span class="tk-op">==</span> <span class="tk-num">0</span>:</span>
+<span class="line">        db.<span class="tk-fn">rollback</span>()</span>
+<span class="line">        <span class="tk-kw">return</span> SOLD_OUT</span>
+<span class="line">    db.<span class="tk-fn">exec</span>(<span class="tk-str">&quot;INSERT INTO reservations(id, sku, qty, status, expires_at) &quot;</span> <span class="tk-op">+</span></span>
+<span class="line">            <span class="tk-str">&quot;VALUES (?, ?, ?, &#x27;RESERVED&#x27;, now() + ?)&quot;</span>, reservationId, sku, qty, ttl)</span>
+<span class="line">    db.<span class="tk-fn">commit</span>()</span>
+<span class="line">    <span class="tk-kw">return</span> RESERVED</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">release</span>(reservationId):</span>
+<span class="line">    db.<span class="tk-kw">begin</span>()</span>
+<span class="line">    res <span class="tk-op">=</span> db.<span class="tk-fn">query</span>(<span class="tk-str">&quot;SELECT * FROM reservations WHERE id = ? FOR UPDATE&quot;</span>, reservationId)</span>
+<span class="line">    <span class="tk-kw">if</span> res <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> res.status <span class="tk-op">!=</span> <span class="tk-str">&#x27;RESERVED&#x27;</span>:</span>
+<span class="line">        db.<span class="tk-fn">rollback</span>()</span>
+<span class="line">        <span class="tk-kw">return</span> OK                                               <span class="tk-com">// already released, expired or confirmed: no-op</span></span>
+<span class="line">    db.<span class="tk-fn">exec</span>(<span class="tk-str">&quot;UPDATE reservations SET status = &#x27;RELEASED&#x27; WHERE id = ?&quot;</span>, reservationId)</span>
+<span class="line">    db.<span class="tk-fn">exec</span>(<span class="tk-str">&quot;UPDATE stock SET available = available + ? WHERE sku = ?&quot;</span>, res.qty, res.sku)</span>
+<span class="line">    db.<span class="tk-fn">commit</span>()</span>
+<span class="line">    <span class="tk-kw">return</span> OK</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">confirm</span>(reservationId):</span>
+<span class="line">    updated <span class="tk-op">=</span> db.<span class="tk-fn">exec</span>(<span class="tk-str">&quot;UPDATE reservations SET status = &#x27;CONFIRMED&#x27; &quot;</span> <span class="tk-op">+</span></span>
+<span class="line">                      <span class="tk-str">&quot;WHERE id = ? AND status = &#x27;RESERVED&#x27;&quot;</span>, reservationId)</span>
+<span class="line">    <span class="tk-kw">if</span> updated <span class="tk-op">==</span> <span class="tk-num">1</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> OK</span>
+<span class="line">    <span class="tk-kw">return</span> reservations.<span class="tk-fn">get</span>(reservationId).status <span class="tk-op">==</span> <span class="tk-str">&#x27;CONFIRMED&#x27;</span> ? OK : EXPIRED</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---------- Checkout coordinator ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">checkout</span>(order):</span>
+<span class="line">    items <span class="tk-op">=</span> <span class="tk-fn">sortByScarcity</span>(order.items)                         <span class="tk-com">// scarcest SKU first: fail fast</span></span>
+<span class="line">    held <span class="tk-op">=</span> []</span>
+<span class="line">    <span class="tk-kw">for</span> item <span class="tk-kw">in</span> items:</span>
+<span class="line">        resId <span class="tk-op">=</span> order.id <span class="tk-op">+</span> <span class="tk-str">&quot;:&quot;</span> <span class="tk-op">+</span> item.sku</span>
+<span class="line">        result <span class="tk-op">=</span> <span class="tk-fn">withRetry</span>(<span class="tk-num">3</span>, call <span class="tk-op">=</span> <span class="tk-fn">ownerOf</span>(item.sku).<span class="tk-fn">reserve</span>(item.sku, resId, item.qty, ttl <span class="tk-op">=</span> 5min))</span>
+<span class="line">        <span class="tk-kw">if</span> result <span class="tk-op">!=</span> RESERVED:</span>
+<span class="line">            <span class="tk-kw">for</span> h <span class="tk-kw">in</span> held: <span class="tk-fn">ownerOf</span>(h.sku).<span class="tk-fn">release</span>(h.resId)      <span class="tk-com">// compensate, retried until success</span></span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">SoldOut</span>(item.sku)</span>
+<span class="line">        held.<span class="tk-fn">push</span>({ sku <span class="tk-op">=</span> item.sku, resId })</span>
+<span class="line"></span>
+<span class="line">    payment <span class="tk-op">=</span> <span class="tk-fn">authorizePayment</span>(order, idempotencyKey <span class="tk-op">=</span> order.id)</span>
+<span class="line">    <span class="tk-kw">if</span> payment.failed:</span>
+<span class="line">        <span class="tk-kw">for</span> h <span class="tk-kw">in</span> held: <span class="tk-fn">ownerOf</span>(h.sku).<span class="tk-fn">release</span>(h.resId)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">PaymentFailed</span>(order.id)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">for</span> h <span class="tk-kw">in</span> held:</span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-fn">ownerOf</span>(h.sku).<span class="tk-fn">confirm</span>(h.resId) <span class="tk-op">==</span> EXPIRED:          <span class="tk-com">// TTL passed during a slow payment</span></span>
+<span class="line">            <span class="tk-fn">voidAuthorization</span>(payment.id)</span>
+<span class="line">            <span class="tk-kw">for</span> g <span class="tk-kw">in</span> held: <span class="tk-fn">ownerOf</span>(g.sku).<span class="tk-fn">release</span>(g.resId)</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">RetryCheckout</span>(order.id)</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">Confirmed</span>(order.id)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---------- Sweeper (per shard, every few seconds) ----------</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">sweepExpired</span>():</span>
+<span class="line">    <span class="tk-kw">for</span> res <span class="tk-kw">in</span> db.<span class="tk-fn">query</span>(<span class="tk-str">&quot;SELECT id FROM reservations &quot;</span> <span class="tk-op">+</span></span>
+<span class="line">                        <span class="tk-str">&quot;WHERE status = &#x27;RESERVED&#x27; AND expires_at &lt; now() LIMIT 1000&quot;</span>):</span>
+<span class="line">        <span class="tk-fn">release</span>(res.id)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Check-then-update:</strong> Reading stock, deciding in the app and then writing back creates a race. Do the check and the decrement in one atomic conditional statement on the owner.</li>
+          <li><strong>Deciding on stale replica reads:</strong> Asynchronous replicas are for display only. Use them for 'low stock' badges, never for the final availability decision.</li>
+          <li><strong>Reservations without expiry:</strong> Crashed coordinators and abandoned carts then lock stock forever. Always set a TTL and run a sweeper.</li>
+          <li><strong>Non-idempotent compensation:</strong> A release that runs twice puts phantom stock back and causes the oversell you were avoiding. Key releases by reservation ID and make them no-ops after the first success.</li>
+          <li><strong>Reserving SKUs in arbitrary order:</strong> A large cart can hold plentiful items while it waits on a scarce one. Reserve scarce SKUs first and fail fast.</li>
+          <li><strong>No reconciliation:</strong> Bugs and lost messages cause drift between reserved, sold and available counts. Audit continuously and alert on any negative balance.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, flash-sale systems layer their protections: shed load early, reserve stock atomically, and only then touch payment. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Shield the inventory:</strong> Put a virtual waiting room or rate limiter in front of flash-sale SKUs so the reservation tier sees a bounded request rate, and fail fast with 'sold out' once the owner says so.</li>
+          <li><strong>Step 1 — One owner per SKU:</strong> Shard by SKU with one writer per shard (a leader or single-writer partition), and make the atomic conditional decrement the only way to reduce stock.</li>
+          <li><strong>Step 2 — Reserve, then pay, then confirm:</strong> Reservation with a short TTL, then payment authorization, then confirmation. Order SKUs deterministically (scarcest first) and run reservations in parallel where safe.</li>
+          <li><strong>Step 3 — Make everything idempotent:</strong> Use deterministic reservation IDs (orderId plus SKU), deduplicate on the owner, and treat 'already reserved' as success on retries.</li>
+          <li><strong>Step 4 — Scale hot SKUs and regions:</strong> Bucket hot SKUs across shards and give each region a stock quota (escrow) so most checkouts are local; rebalance quotas asynchronously.</li>
+          <li><strong>Step 5 — Audit and recover:</strong> Run a reconciler that compares reserved, sold and available against orders and payments, alert on any negative stock, and keep replay tooling for stuck sagas.</li>
+        </ul>
+        <p>Decide on the owner, display from replicas, and audit continuously.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p><strong>Make stock a single-owner, atomically decremented resource, and make orders a saga of reservations.</strong> That keeps 'never oversell' a local, cheap guarantee, avoids global locks, and degrades gracefully. Split hot SKUs and allocate regional quotas for latency, keep reservations short and idempotent, and audit constantly.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

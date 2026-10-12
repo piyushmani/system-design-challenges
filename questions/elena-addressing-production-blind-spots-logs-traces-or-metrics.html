@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elena Addressing Production Blind Spots: Logs, Traces, or Metrics? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">12 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <a href="../index.html" class="back-link">
+      <span class="arrow">←</span> All Problems
+    </a>
+
+    <div class="tags" style="margin-bottom:1.5rem">
+      <span class="tag tag--purple">Observability</span>
+      <span class="tag tag--green">Logs vs Traces</span>
+      <span class="tag tag--amber">Metrics</span>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Elena Addressing Production Blind Spots: Logs, Traces, or Metrics?</h1>
+      <p class="q-scenario"><strong>Elena</strong>, a senior backend engineer, owns a <strong>microservices payment platform</strong> handling <strong>tens of thousands of transactions per minute</strong> across <strong>hundreds of services</strong>. Users see <strong>sporadic tail-latency spikes and occasional payment failures</strong> that are hard to reproduce. Today the system centralizes raw logs, runs a basic metrics pipeline for simple SLIs, and uses a custom tracer that <strong>uniformly samples about 1%</strong> of traffic. Alerts fire without obvious causes, so on-call engineers <strong>dig through huge log volumes</strong>. She must improve observability <strong>without adding meaningful latency</strong>, while controlling cost and helping engineers find the root causes of <em>rare</em> tail failures quickly.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep synchronous structured logging for every request, sending full request and response payloads from each service to a central log cluster, relying on log queries for troubleshooting and extending retention.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Enable continuous, unsampled distributed tracing on every RPC, capturing full span payloads and stack traces and sending all traces to a central tracing backend.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Adopt SLI/SLO-based metrics alerting plus low-overhead basic tracing on all traffic, use adaptive or tail-based sampling to keep full traces for errors and slow requests, and emit structured logs with correlation IDs, forwarded asynchronously by sidecars or agents to a central store with strict retention and redaction.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Deploy sidecar agents that asynchronously ship logs and traces at a uniform probabilistic sampling rate (5–10%), keep trace and log data separate, and rely on dashboards and manual trace lookups for root-cause analysis.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: SLO Metrics + Tail-Sampled Traces</h3>
+        <p>The problem is not a lack of data. It is <strong>data that is expensive, unlinked and sampled in the wrong way</strong>. Tail failures are by definition rare, so a uniform 1% (or even 10%) sample will usually miss exactly the requests you need. The strongest design uses each signal for what it does best: <strong>metrics</strong> to detect and scope the problem (SLO burn-rate alerts), <strong>traces kept by outcome</strong> (tail-based sampling retains errors and slow requests) to find where time or failures occur, and <strong>correlated structured logs</strong> to explain why. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Samples the requests that matter:</strong> Tail-based sampling decides after a trace completes, so it can keep every trace with an error or high latency, plus a small baseline of normal ones. A 1% uniform sampler keeps about 1% of the slow requests; tail-based sampling keeps nearly all of them.</li>
+          <li><strong>Detects with signals, not guesses:</strong> SLI/SLO metrics with multi-window burn-rate alerts tell you <em>that</em> the user experience is degrading and <em>how fast</em>, at low cost and with low alert noise. Histograms show the p99 shape, and exemplars link a latency bucket directly to a trace ID.</li>
+          <li><strong>Low overhead on the request path:</strong> Metrics are cheap in-process counters, spans are exported asynchronously, and logs are shipped by agents off the critical path. Nothing synchronous waits on the observability backend.</li>
+          <li><strong>Correlated, so investigation is fast:</strong> A shared <code>trace_id</code> in every log line and metric exemplar lets an engineer move from alert, to slow trace, to culprit span, to the exact log lines in minutes instead of grepping terabytes.</li>
+          <li><strong>Cost and compliance control:</strong> Keeping full detail only for interesting traces often cuts storage by an order of magnitude or more compared with unsampled tracing and full-payload logging, and redaction keeps card numbers and personal data out of telemetry (critical for PCI scope).</li>
+        </ul>
+        <p>A well-designed pipeline includes <strong>W3C Trace Context propagation</strong>, <strong>RED and SLO burn-rate alerts</strong>, <strong>latency histograms with exemplars</strong>, <strong>tail-based sampling in a collector tier</strong>, <strong>structured logs carrying trace and span IDs</strong>, and <strong>redaction at the source</strong>. Measure how often an SLO-breaching request has a retained trace one click away; if it is not close to 100%, tune the sampling policy.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📜</span>
+            <h4>A — Full Synchronous Logging</h4>
+          </div>
+          <p>Synchronous logging puts the log backend on the request path, so a slow or unavailable log cluster slows or breaks payments. Full request and response payloads multiply cost and pull card data and personal data into logs, which is a PCI and privacy risk. Uncorrelated logs are also the hardest signal to search for a rare tail event; longer retention just extends the status quo's problem. <strong>Caveat:</strong> detailed logs are essential for <em>explaining</em> a failure once you know where to look. Keep them structured, asynchronous, redacted and correlated, and sample debug-level volume.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔬</span>
+            <h4>B — Unsampled Full Tracing</h4>
+          </div>
+          <p>100% tracing gives complete visibility, but at tens of thousands of transactions per minute across hundreds of services the span volume, CPU overhead, network egress and storage cost are enormous, and the tracing backend itself becomes a scaling and reliability concern. Most of that data describes healthy requests nobody will read. <strong>Caveat:</strong> reasonable for a small system, a short-lived deep dive on one service, or a low-volume pre-production environment.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🎲</span>
+            <h4>D — Uniform 5–10% Sampling</h4>
+          </div>
+          <p>Head-based probabilistic sampling decides before the outcome is known, so it keeps only 5–10% of the slow or failed requests too. Rare tail failures often have no retained trace at all, and cost still scales linearly with traffic. Keeping logs and traces unlinked and relying on manual lookups means every investigation starts from scratch. <strong>Caveat:</strong> a modest uniform sample remains useful as the <em>baseline</em> inside a tail-based policy, for capacity and dependency analysis.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — SLO Metrics + Tail-Sampled Traces ✓</h4>
+          </div>
+          <p>Adopt SLI/SLO-based metrics alerting plus low-overhead basic tracing on all traffic, use adaptive or tail-based sampling to keep full traces for errors and slow requests, and emit structured logs with</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Request-Path Overhead</th><th>Chance of Capturing Rare Failures</th><th>Cost at Scale</th><th>Root-Cause Speed</th><th>Compliance / PII Risk</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Full Synchronous Logging</td><td>High when synchronous ❌</td><td>Low (needle in a haystack) ❌</td><td>Very high ❌</td><td>Slow (grep at scale) ❌</td><td>High (full payloads) ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Unsampled Full Tracing</td><td>Medium to high ⚠</td><td>Very high ✅</td><td>Very high ❌</td><td>Fast per trace ✅</td><td>Medium ⚠</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — SLO Metrics + Tail Sampling ✓</td><td>Low ✅</td><td>High (errors and slow kept) ✅</td><td>Moderate ✅</td><td>Fast (alert, trace, logs) ✅</td><td>Low (redaction, retention) ✅</td><td>High (collector tier, policies) ❌</td></tr>
+            <tr><td class="tt-option">D — Uniform 5–10% Sampling</td><td>Low ✅</td><td>Low to medium (only 5–10% of failures) ❌</td><td>Moderate ⚠</td><td>Slow (manual, unlinked) ❌</td><td>Medium ⚠</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Full Synchronous Logging</h4>
+          </div>
+          <p>Small systems, or audit trails and forensic needs for specific regulated events (with redaction), rather than as the main tool for diagnosing latency.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Unsampled Full Tracing</h4>
+          </div>
+          <p>Low-traffic services, staging environments, or short, targeted deep-dive sessions on a single service or route.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — SLO Metrics + Tail Sampling</h4>
+          </div>
+          <p>High-volume, many-service production systems where tail failures matter and cost, latency and compliance must be controlled. The default for payment platforms.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Uniform 5–10% Sampling</h4>
+          </div>
+          <p>Systems where failures are common and evenly distributed, or as the baseline component inside a tail-sampling policy.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Tail-Latency Investigation Flow</h3>
+        <p>An SLO alert leads to the latency histogram, an exemplar jumps to a retained slow trace, and the trace ID finds the matching logs:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant E as On-call Engineer
+    participant M as Metrics and Alerts
+    participant T as Trace Backend
+    participant L as Log Store
+    M-&gt;&gt;E: 1. SLO burn-rate alert (payment p99 above target)
+    E-&gt;&gt;M: 2. Open latency histogram, find the slow bucket
+    M--&gt;&gt;E: 3. Exemplar with trace_id
+    E-&gt;&gt;T: 4. Open the retained slow trace
+    T--&gt;&gt;E: 5. Slowest span is the card-network call, with retries
+    E-&gt;&gt;L: 6. Query logs by trace_id
+    L--&gt;&gt;E: 7. Structured logs show timeout and retry storm
+    Note over E: Minutes from alert to root cause">sequenceDiagram
+    participant E as On-call Engineer
+    participant M as Metrics and Alerts
+    participant T as Trace Backend
+    participant L as Log Store
+    M-&gt;&gt;E: 1. SLO burn-rate alert (payment p99 above target)
+    E-&gt;&gt;M: 2. Open latency histogram, find the slow bucket
+    M--&gt;&gt;E: 3. Exemplar with trace_id
+    E-&gt;&gt;T: 4. Open the retained slow trace
+    T--&gt;&gt;E: 5. Slowest span is the card-network call, with retries
+    E-&gt;&gt;L: 6. Query logs by trace_id
+    L--&gt;&gt;E: 7. Structured logs show timeout and retry storm
+    Note over E: Minutes from alert to root cause</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Tail-Based Sampling Policy (OpenTelemetry Collector)</h3>
+        <p>An illustrative two-tier collector configuration: the first tier routes every span of a trace to the same sampler, and the second tier redacts sensitive attributes and keeps errors, slow traces, a share of critical payment traffic and a small baseline of healthy traffic:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">yaml</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com"># --- Tier 1: gateway collector (receives from agents, routes by trace ID) ---</span></span>
+<span class="line">receivers:</span>
+<span class="line">  otlp:</span>
+<span class="line">    protocols:</span>
+<span class="line">      grpc: {}</span>
+<span class="line"></span>
+<span class="line">exporters:</span>
+<span class="line">  loadbalancing:</span>
+<span class="line">    routing_key: traceID                  <span class="tk-com"># every span of a trace reaches the same sampler</span></span>
+<span class="line">    protocol:</span>
+<span class="line">      otlp:</span>
+<span class="line">        tls:</span>
+<span class="line">          insecure: <span class="tk-lit">false</span></span>
+<span class="line">    resolver:</span>
+<span class="line">      dns:</span>
+<span class="line">        hostname: otel<span class="tk-op">-</span>sampler<span class="tk-op">-</span>headless.observability.svc</span>
+<span class="line"></span>
+<span class="line">service:</span>
+<span class="line">  pipelines:</span>
+<span class="line">    traces:</span>
+<span class="line">      receivers: [otlp]</span>
+<span class="line">      exporters: [loadbalancing]</span>
+<span class="line"></span>
+<span class="line"><span class="tk-op">-</span><span class="tk-op">-</span><span class="tk-op">-</span></span>
+<span class="line"><span class="tk-com"># --- Tier 2: sampling collector (decides once the whole trace has been seen) ---</span></span>
+<span class="line">processors:</span>
+<span class="line">  memory_limiter:</span>
+<span class="line">    check_interval: <span class="tk-num">1s</span></span>
+<span class="line">    limit_percentage: <span class="tk-num">80</span></span>
+<span class="line">  attributes<span class="tk-op">/</span>redact:</span>
+<span class="line">    actions:</span>
+<span class="line">      <span class="tk-op">-</span> key: card.pan</span>
+<span class="line">        action: delete</span>
+<span class="line">      <span class="tk-op">-</span> key: http.request.header.authorization</span>
+<span class="line">        action: delete</span>
+<span class="line">  tail_sampling:</span>
+<span class="line">    decision_wait: <span class="tk-num">10s</span>                    <span class="tk-com"># time to wait for late spans</span></span>
+<span class="line">    num_traces: <span class="tk-num">200000</span></span>
+<span class="line">    expected_new_traces_per_sec: <span class="tk-num">5000</span></span>
+<span class="line">    policies:                             <span class="tk-com"># a trace is kept if ANY policy matches</span></span>
+<span class="line">      <span class="tk-op">-</span> name: keep<span class="tk-op">-</span>errors</span>
+<span class="line">        type: status_code</span>
+<span class="line">        status_code: { status_codes: [ERROR] }</span>
+<span class="line">      <span class="tk-op">-</span> name: keep<span class="tk-op">-</span>slow</span>
+<span class="line">        type: latency</span>
+<span class="line">        latency: { threshold_ms: <span class="tk-num">800</span> }    <span class="tk-com"># set just above the checkout latency SLO</span></span>
+<span class="line">      <span class="tk-op">-</span> name: sample<span class="tk-op">-</span>payment<span class="tk-op">-</span>route</span>
+<span class="line">        type: <span class="tk-kw">and</span></span>
+<span class="line">        <span class="tk-kw">and</span>:</span>
+<span class="line">          and_sub_policy:</span>
+<span class="line">            <span class="tk-op">-</span> name: payment<span class="tk-op">-</span>route</span>
+<span class="line">              type: string_attribute</span>
+<span class="line">              string_attribute: { key: http.route, values: [<span class="tk-str">&quot;/v1/payments/authorize&quot;</span>] }</span>
+<span class="line">            <span class="tk-op">-</span> name: payment<span class="tk-op">-</span>share</span>
+<span class="line">              type: probabilistic</span>
+<span class="line">              probabilistic: { sampling_percentage: <span class="tk-num">20</span> }</span>
+<span class="line">      <span class="tk-op">-</span> name: healthy<span class="tk-op">-</span>baseline</span>
+<span class="line">        type: probabilistic</span>
+<span class="line">        probabilistic: { sampling_percentage: <span class="tk-num">1</span> }</span>
+<span class="line"></span>
+<span class="line">service:</span>
+<span class="line">  pipelines:</span>
+<span class="line">    traces:</span>
+<span class="line">      receivers: [otlp]</span>
+<span class="line">      processors: [memory_limiter, attributes<span class="tk-op">/</span>redact, tail_sampling]</span>
+<span class="line">      exporters: [otlp<span class="tk-op">/</span>trace<span class="tk-op">-</span>backend]     <span class="tk-com"># exporter defined elsewhere</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Averaging latency:</strong> Means and averaged percentiles hide the tail. Use histograms and aggregate buckets (not pre-computed p99s) so percentiles stay valid across instances.</li>
+          <li><strong>Head-sampling for tail problems:</strong> Deciding at the start of a request cannot know it will be slow. Use tail-based sampling (optionally with a small head-based baseline) for error and latency analysis.</li>
+          <li><strong>Tail sampling without trace-ID routing:</strong> If spans of one trace land on different collectors, none can decide correctly and traces break. Use a load-balancing exporter keyed by trace ID.</li>
+          <li><strong>Logging sensitive data:</strong> Card numbers, tokens and personal data in logs create compliance exposure. Redact at the source and never log full payment payloads.</li>
+          <li><strong>High-cardinality metric labels:</strong> User or order IDs as labels explode the number of series. Keep those in traces and logs, and use exemplars to link.</li>
+          <li><strong>Alerting on causes instead of symptoms:</strong> CPU and queue-depth alerts create noise. Alert on SLO burn rate and use traces to find the cause.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, observability programs mature in layers: <strong>detect cheaply, retain selectively, correlate everything</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define SLIs and SLOs:</strong> For payments, pick availability and latency SLIs (successful authorizations, p99 latency against a target) and alert on multi-window burn rates rather than raw thresholds.</li>
+          <li><strong>Step 1 — Standardize instrumentation:</strong> Adopt OpenTelemetry SDKs everywhere, propagate W3C Trace Context, emit RED metrics with latency histograms, and attach exemplars.</li>
+          <li><strong>Step 2 — Correlate the logs:</strong> Switch to structured JSON logs that always include <code>trace_id</code>, <code>span_id</code>, service and version, shipped asynchronously by agents with backpressure and drop policies.</li>
+          <li><strong>Step 3 — Deploy a tail-sampling tier:</strong> Agents forward spans to a collector tier load-balanced by trace ID; policies keep errors, slow traces and critical routes plus a small baseline.</li>
+          <li><strong>Step 4 — Protect data and cost:</strong> Redact PAN, tokens and personal data at the source, set per-signal retention (short for debug logs, longer for aggregates), and budget metric cardinality.</li>
+          <li><strong>Step 5 — Close the loop:</strong> Build dashboards with exemplar links and runbooks that start at an alert and end at a trace, then use postmortems to refine sampling policies and alerts.</li>
+        </ul>
+        <p>Measure whether the next incident was explained in minutes; that is the real test.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p><strong>Detect with metrics, explain with outcome-sampled traces, and confirm with correlated logs.</strong> Tail-based sampling keeps the rare slow and failed requests that uniform sampling throws away, asynchronous shipping keeps the request path fast, and redaction plus retention controls keep cost and risk in check.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

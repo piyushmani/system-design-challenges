@@ -2437,7 +2437,16 @@ body.no-scroll {
   color: var(--red);
 }
 
-/* ── Back Link ─────────────────────────────────── */
+/* ── Question Nav Row ──────────────────────────── */
+.question-nav-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
 .back-link {
   display: inline-flex;
   align-items: center;
@@ -2447,6 +2456,10 @@ body.no-scroll {
   color: var(--text-dim);
   margin-bottom: 1.75rem;
   transition: color .2s;
+}
+
+.question-nav-row .back-link {
+  margin-bottom: 0;
 }
 
 .back-link:hover {

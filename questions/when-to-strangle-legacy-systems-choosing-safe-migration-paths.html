@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>When to Strangle Legacy Systems: Choosing Safe Migration Paths — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">18 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Strangler Fig</span>
+      <span class="tag tag--green">Legacy Migration</span>
+      <span class="tag tag--amber">Refactoring</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">When to Strangle Legacy Systems: Choosing Safe Migration Paths</h1>
+      <p class="q-scenario"><strong>Mateo</strong>, a senior backend engineer at an e-commerce company, is migrating a monolithic <strong>order management service</strong> to a new microservice using the <strong>Strangler Fig</strong> pattern. The legacy system handles about <strong>5,000 writes per second</strong> plus low-latency reads. The business demands <strong>near-zero data loss</strong>, <strong>read-after-write consistency</strong> for critical operations, strong observability, and <strong>fast rollback</strong>. He wants to migrate <strong>customer segment by segment</strong>, minimize user-facing errors, and avoid long-lived <strong>dual-write inconsistencies and data drift</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Big-bang migration: migrate the schema and data during a maintenance window, then switch all routing to the new microservice at once.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Proxy with synchronous dual-writes: route by URL path, write to both legacy and new services synchronously (using 2PC or distributed transactions), then read from the new service.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Event-driven strangulation: keep legacy as the source of truth, use CDC to build the new service&#x27;s state asynchronously, gradually route reads to the new service with eventual consistency, and reconcile drift with background jobs and compensating transactions.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Incremental strangulation with a transactional outbox and traffic mirroring: an API gateway with canary and feature flags, shadow traffic for validation, an outbox in the legacy write path feeding the new system, gradual per-segment migration, deep observability, and simple rollback.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Outbox, Shadow Traffic and Per-Segment Cutover</h3>
+        <p>The hard problem in a strangler migration is not routing. It is <strong>moving state without ever having two writers for the same entity</strong>. The outbox makes the legacy write and its event <em>atomic</em>, the gateway moves ownership one segment at a time, and shadowing proves the new service is correct before it owns anything. Here's why it stands out:</p>
+        <ul>
+          <li><strong>No dual-write bug by construction:</strong> The order row and the outbox event commit in the <em>same local transaction</em> in the legacy database. A relay (polling, or CDC on the outbox table) publishes events reliably, so the new service's state follows without a distributed transaction.</li>
+          <li><strong>Near-zero data loss:</strong> The outbox row is durable together with the business write. If the relay or Kafka is down, events wait in the table and are delivered later, in order per order ID.</li>
+          <li><strong>Safe validation before cutover:</strong> Shadow (mirrored) traffic exercises the new service with real request shapes, and comparing its responses and resulting state to legacy finds defects while users are still served by legacy.</li>
+          <li><strong>Controlled blast radius and fast rollback:</strong> Feature flags and canary routing move one customer segment at a time. Rolling back is a flag flip, provided writes made by the new service for that segment also flow back to legacy (a reverse outbox).</li>
+          <li><strong>Read-after-write where it matters:</strong> Each segment has exactly one owner at a time, and its reads and writes go to the same system, so a customer never reads from a copy that has not yet seen their write.</li>
+        </ul>
+        <p>Keep a <strong>per-segment ownership flag</strong> as the single source of truth for routing, measure <strong>outbox lag, event processing errors, shadow-diff rate, and error budget per segment</strong>, and keep the <strong>reverse sync</strong> running until a segment has been stable long enough to decommission its legacy path.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">💥</span>
+            <h4>A — Big-Bang Migration</h4>
+          </div>
+          <p>A single cutover concentrates all risk in one window: any defect in the new service hits every customer, migrating live order data must finish inside the window at 5k writes per second, and rollback after the new system has accepted writes means losing or reconciling those writes. It also gives no gradual validation. <strong>Caveat:</strong> big-bang is only reasonable for small systems that can tolerate downtime, which this one cannot.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>B — Proxy with Synchronous Dual-Writes and 2PC</h4>
+          </div>
+          <p>Dual-writes reintroduce exactly the failure the scenario wants to avoid: if one write succeeds and the other fails or times out, the systems diverge, and distributed transactions across a legacy database and a new service are rarely supported or performant. Latency and availability become the product of both systems, and the proxy becomes a correctness-critical component.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📡</span>
+            <h4>C — CDC-Only with Eventually Consistent Reads</h4>
+          </div>
+          <p>CDC from the legacy database is a good <em>building block</em> and avoids dual-writes, but this option routes reads to a copy that lags legacy writes, which violates the read-after-write requirement for critical operations. Row-level CDC also couples the new service to the legacy schema, and relying on background reconciliation and compensating transactions to fix drift treats drift as an expected condition instead of preventing it. <strong>Caveat:</strong> CDC on the outbox table is a good way to implement the relay in the best answer.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Outbox, Shadow Traffic and Per-Segment Cutover ✓</h4>
+          </div>
+          <p>Incremental strangulation with a transactional outbox and traffic mirroring: an API gateway with canary and feature flags, shadow traffic for validation, an outbox in the legacy write path feeding the</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Data Loss Risk</th><th>Read-after-Write Consistency</th><th>Rollback Speed</th><th>Dual-Write Drift Risk</th><th>Implementation Complexity</th><th>Migration Granularity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Big-Bang</td><td>High ❌</td><td>Strong at cutover ✅</td><td>Very slow ❌</td><td>None ✅</td><td>Low ✅</td><td>None (all at once) ❌</td></tr>
+            <tr><td class="tt-option">B — Sync Dual-Writes + 2PC</td><td>Medium ❌ (partial failures)</td><td>Strong only if 2PC works ⚠</td><td>Medium ⚠</td><td>Very high ❌</td><td>High ❌</td><td>Path-based only ⚠</td></tr>
+            <tr><td class="tt-option">C — CDC-Only, Eventual Reads</td><td>Low ✅</td><td>Weak ❌</td><td>Medium ⚠</td><td>Low ✅</td><td>Medium ⚠</td><td>Good ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Outbox + Mirroring + Segments ✓</td><td>Very low ✅</td><td>Strong per segment ✅</td><td>Fast (flag flip) ✅</td><td>Low ✅</td><td>High ⚠</td><td>Per segment ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Big-Bang</h4>
+          </div>
+          <p>A small, low-traffic system with a safe downtime window and a simple data model.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Sync Dual-Writes + 2PC</h4>
+          </div>
+          <p>Rarely recommended. Only for short transitional periods with a strong reconciliation process and very low write volume.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — CDC-Only, Eventual Reads</h4>
+          </div>
+          <p>Read-heavy migrations where stale reads are acceptable (catalog, search, analytics), or as a read-model building block.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Outbox + Mirroring + Segments</h4>
+          </div>
+          <p>High-volume transactional workloads that need near-zero data loss, per-segment rollout, and fast rollback (this scenario).</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Gateway Routing with Per-Segment Ownership and Shadowing</h3>
+        <p>The gateway sends each request to the segment's current owner, and mirrors it to the new service while legacy still owns the segment:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant G as API Gateway with Segment Flags
+    participant L as Legacy Order Service
+    participant N as New Order Service
+    participant D as Diff Checker
+    C-&gt;&gt;G: 1. POST /orders for a customer in segment S
+    G-&gt;&gt;G: 2. Look up the owner of segment S
+    alt Segment owned by Legacy
+        G-&gt;&gt;L: 3a. Forward request
+        L--&gt;&gt;G: Response
+        G-&gt;&gt;N: 3b. Mirror request (asynchronous, dry-run, no side effects)
+        N--&gt;&gt;D: Shadow result
+        L--&gt;&gt;D: Legacy result for comparison
+    else Segment owned by New
+        G-&gt;&gt;N: 3c. Forward request
+        N--&gt;&gt;G: Response
+    end
+    G--&gt;&gt;C: 4. Response from the owner">sequenceDiagram
+    participant C as Client
+    participant G as API Gateway with Segment Flags
+    participant L as Legacy Order Service
+    participant N as New Order Service
+    participant D as Diff Checker
+    C-&gt;&gt;G: 1. POST /orders for a customer in segment S
+    G-&gt;&gt;G: 2. Look up the owner of segment S
+    alt Segment owned by Legacy
+        G-&gt;&gt;L: 3a. Forward request
+        L--&gt;&gt;G: Response
+        G-&gt;&gt;N: 3b. Mirror request (asynchronous, dry-run, no side effects)
+        N--&gt;&gt;D: Shadow result
+        L--&gt;&gt;D: Legacy result for comparison
+    else Segment owned by New
+        G-&gt;&gt;N: 3c. Forward request
+        N--&gt;&gt;G: Response
+    end
+    G--&gt;&gt;C: 4. Response from the owner</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Outbox in the Legacy Transaction, Idempotent Consumer, Segment Routing</h3>
+        <p>The legacy write commits the order and its event together, a relay publishes it, the new service applies it idempotently by version, and the gateway routes by segment ownership with dry-run shadowing:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Legacy write path: business write and event are atomic ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">placeOrder</span>(cmd):</span>
+<span class="line">    tx <span class="tk-op">=</span> db.<span class="tk-kw">begin</span>()</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        order <span class="tk-op">=</span> tx.<span class="tk-fn">insert</span>(<span class="tk-str">&quot;orders&quot;</span>, cmd.<span class="tk-fn">toRow</span>())</span>
+<span class="line">        tx.<span class="tk-fn">insert</span>(<span class="tk-str">&quot;outbox&quot;</span>, {</span>
+<span class="line">            eventId:     <span class="tk-fn">uuid</span>(),</span>
+<span class="line">            aggregateId: order.id,</span>
+<span class="line">            version:     order.version,</span>
+<span class="line">            type:        <span class="tk-str">&quot;OrderPlaced&quot;</span>,</span>
+<span class="line">            payload:     <span class="tk-fn">serialize</span>(order)</span>
+<span class="line">        })</span>
+<span class="line">        tx.<span class="tk-fn">commit</span>()                                      <span class="tk-com">// both rows or neither</span></span>
+<span class="line">    <span class="tk-kw">catch</span> e:</span>
+<span class="line">        tx.<span class="tk-fn">rollback</span>()</span>
+<span class="line">        <span class="tk-kw">throw</span> e</span>
+<span class="line">    <span class="tk-kw">return</span> order</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Relay: CDC on the outbox table (or polling) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">relay</span>():</span>
+<span class="line">    <span class="tk-kw">for</span> row <span class="tk-kw">in</span> outbox.<span class="tk-fn">readInCommitOrder</span>(since <span class="tk-op">=</span> lastPublished):</span>
+<span class="line">        kafka.<span class="tk-fn">publish</span>(topic <span class="tk-op">=</span> <span class="tk-str">&quot;orders.events&quot;</span>, key <span class="tk-op">=</span> row.aggregateId, value <span class="tk-op">=</span> row)   <span class="tk-com">// key keeps per-order ordering</span></span>
+<span class="line">        lastPublished <span class="tk-op">=</span> row.position                     <span class="tk-com">// at-least-once: duplicates are possible</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- New service: idempotent, version-aware consumer ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onEvent</span>(evt):</span>
+<span class="line">    current <span class="tk-op">=</span> store.<span class="tk-fn">get</span>(evt.aggregateId)</span>
+<span class="line">    <span class="tk-kw">if</span> current <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> current.version <span class="tk-op">&gt;=</span> evt.version:</span>
+<span class="line">        <span class="tk-kw">return</span>                                           <span class="tk-com">// duplicate or stale, ignore</span></span>
+<span class="line">    store.<span class="tk-fn">upsert</span>(evt.aggregateId, evt.payload, version <span class="tk-op">=</span> evt.version)</span>
+<span class="line">    metrics.<span class="tk-fn">gauge</span>(<span class="tk-str">&quot;outbox_lag_ms&quot;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> evt.committedAt)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Gateway: per-segment ownership and shadowing ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">route</span>(req):</span>
+<span class="line">    segment <span class="tk-op">=</span> <span class="tk-fn">segmentOf</span>(req.customerId)</span>
+<span class="line">    owner   <span class="tk-op">=</span> flags.<span class="tk-fn">owner</span>(segment)                       <span class="tk-com">// &quot;legacy&quot; or &quot;new&quot;, single source of truth</span></span>
+<span class="line">    primary <span class="tk-op">=</span> (owner <span class="tk-op">==</span> <span class="tk-str">&quot;new&quot;</span>) ? newService : legacy</span>
+<span class="line">    resp    <span class="tk-op">=</span> primary.<span class="tk-fn">handle</span>(req)</span>
+<span class="line">    <span class="tk-kw">if</span> owner <span class="tk-op">==</span> <span class="tk-str">&quot;legacy&quot;</span> <span class="tk-kw">and</span> flags.<span class="tk-fn">shadowEnabled</span>(segment):</span>
+<span class="line">        <span class="tk-kw">async</span> <span class="tk-fn">shadow</span>(newService.<span class="tk-fn">handleDryRun</span>(req), compareWith <span class="tk-op">=</span> resp)   <span class="tk-com">// no side effects</span></span>
+<span class="line">    <span class="tk-kw">return</span> resp</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Two writers for the same entity:</strong> If both systems accept writes for an order, conflicts are unavoidable. Enforce a single owner per segment and fence in-flight writes at cutover.</li>
+          <li><strong>Publishing to Kafka directly after the DB commit:</strong> A crash between the two loses the event. Write the event to an outbox table in the same transaction and relay it.</li>
+          <li><strong>No reverse sync, so no real rollback:</strong> Once the new service has accepted writes, flipping routing back loses them unless they also reach legacy.</li>
+          <li><strong>Non-idempotent consumers:</strong> At-least-once delivery produces duplicates. Deduplicate by event ID or aggregate version.</li>
+          <li><strong>Shadow writes with real side effects:</strong> Mirrored traffic that triggers payments or emails is a production incident. Make shadow paths side-effect free.</li>
+          <li><strong>Migrating by URL path only:</strong> Path-based routing cannot express 'this customer segment owns writes in the new service'. Route by entity or segment ownership, not only by path.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, strangler migrations proceed <strong>slice by slice, with measurable gates</strong>. A typical path:</p>
+        <ul>
+          <li><strong>Step 0 — Put a facade in front:</strong> Introduce the API gateway with routing rules and flags while all traffic still goes to legacy. Add tracing and per-route metrics.</li>
+          <li><strong>Step 1 — Add the outbox and build the new read model:</strong> Emit order events from the legacy transaction, consume them in the new service, and verify state parity with automated comparisons.</li>
+          <li><strong>Step 2 — Shadow traffic:</strong> Mirror reads (and side-effect-free writes) to the new service and drive the diff rate to zero.</li>
+          <li><strong>Step 3 — Canary a small segment:</strong> Flip ownership for internal users or a low-risk segment, with reverse sync to legacy enabled and rollback rehearsed.</li>
+          <li><strong>Step 4 — Expand segment by segment:</strong> Increase coverage while watching error rate, latency, outbox lag, and reconciliation mismatches.</li>
+          <li><strong>Step 5 — Decommission:</strong> After a stable period at 100%, remove reverse sync, retire the legacy write path, and archive legacy data.</li>
+        </ul>
+        <p>Move <strong>ownership</strong> in small, reversible steps, and keep data flowing in both directions until you are certain.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Avoid both big-bang risk and dual-write drift: make the legacy write and its event <strong>atomic with an outbox</strong>, validate with <strong>shadow traffic</strong>, and migrate <strong>one segment at a time with a single owner and a rollback path</strong>.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

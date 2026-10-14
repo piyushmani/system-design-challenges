@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Selecting the right CDC approach for real-time synchronization at scale — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">17 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Change Data Capture</span>
+      <span class="tag tag--green">Real-time Sync</span>
+      <span class="tag tag--amber">Data Pipelines</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Selecting the right CDC approach for real-time synchronization at scale</h1>
+      <p class="q-scenario"><strong>Alex</strong>, a senior engineer, must distribute <strong>every modification</strong> from a busy <strong>OLTP PostgreSQL</strong> database to several downstream consumers: a <strong>search index</strong>, a <strong>real-time analytics stream</strong>, a <strong>cache-invalidation service</strong>, and numerous <strong>microservices</strong>. The pipeline needs <strong>sub-second end-to-end latency</strong>, <strong>tens of thousands of operations per second</strong>, <strong>fault tolerance with recovery</strong>, <strong>ordered updates per entity</strong>, and the ability to handle <strong>schema changes</strong>. He must choose a Change Data Capture strategy that balances scalability, availability, latency, consistency, operational overhead, and observability. What is the most appropriate approach?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Utilize log-driven CDC integrated with a reliable, sequenced streaming platform (like Debezium processing the PostgreSQL WAL and sending to Kafka topics divided by entity key), alongside a schema registry, idempotent consumers, and delivery via connectors.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Create a transactional outbox table within the database: the application records domain events in an outbox row during the same transaction as the main update, while a highly scalable polling mechanism or CDC process reads the outbox to send events downstream.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Send out events synchronously from the application level during the transaction via RPC/REST calls to the downstream systems or an event gateway that completes delivery prior to the commit, guaranteeing strict cross-service consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Execute regular snapshot and diff tasks to compare the current database state against the previous snapshot, then send the calculated deltas downstream (for example, every few seconds), depending on downstream conflict resolution and deduplication.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Log-Based CDC with a Partitioned Streaming Platform</h3>
+        <p>Log-based CDC reads PostgreSQL's write-ahead log (WAL) through a logical replication slot, so it sees <strong>every committed change</strong>, whether it came from the application, a batch job, a migration, or ad-hoc SQL, without adding queries or extra writes to the OLTP path. Publishing those changes to a partitioned log such as Kafka, keyed by the entity's primary key, gives <strong>per-entity ordering</strong>, durable replay, and independent consumer groups for the search index, analytics, cache, and microservices. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Complete, commit-ordered capture:</strong> The WAL is the database's own record of committed changes, so inserts, updates and deletes are captured in commit order with no triggers, no polling queries, and no application changes. Nothing that bypasses the application layer is missed.</li>
+          <li><strong>Low latency, low source overhead:</strong> Changes are decoded from the log stream rather than queried, so they typically reach Kafka in tens to a few hundred milliseconds without extra write amplification on the OLTP path. That fits comfortably inside a sub-second budget.</li>
+          <li><strong>Per-entity ordering that scales:</strong> Events keyed by primary key land in one partition and stay ordered, while partitions let consumers scale horizontally. Each downstream system has its own consumer group and offsets, so a slow search indexer never blocks cache invalidation.</li>
+          <li><strong>Built-in recovery and replay:</strong> The replication slot retains unconfirmed WAL, the connector resumes from its last confirmed LSN after a crash (at-least-once), and Kafka retention lets new consumers or rebuilt indexes replay history. The connector also manages the initial snapshot-then-stream handover.</li>
+          <li><strong>Schema evolution and observability:</strong> Change events carry schemas registered in a schema registry with compatibility rules (BACKWARD or FULL), so additive DDL does not break consumers. Connector lag, slot lag in bytes (<code>pg_replication_slots</code>), consumer-group lag, and dead-letter counts give end-to-end visibility.</li>
+        </ul>
+        <p>A production-grade setup pairs <strong>log-based CDC</strong> with a <strong>schema registry and compatibility policy</strong>, <strong>idempotent consumers</strong> that use the source LSN as a version, <strong>dead-letter handling</strong>, and <strong>replay tooling</strong>. Track commit-to-sink latency, retained WAL per slot, consumer lag, and DLQ rate, and rehearse a failover and a full replay before go-live.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📤</span>
+            <h4>B — Transactional Outbox</h4>
+          </div>
+          <p>The outbox is an excellent pattern: it solves the dual-write problem by committing the event with the state change. But as the <strong>primary</strong> strategy here it falls short. It only captures what the application chooses to write, so batch jobs, admin SQL and other writers bypass it, and every writer needs code changes. It adds write amplification, storage and cleanup to an already busy OLTP database, and a polling reader that scans by auto-increment id can skip rows that commit out of order. <strong>Caveat:</strong> when consumers need curated domain events (such as OrderPlaced) rather than raw row changes, an outbox read through CDC is the right tool, and it composes with option A.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>C — Synchronous Dual-Write Before Commit</h4>
+          </div>
+          <p>Calling downstream systems inside the transaction is not atomic. If a call succeeds but the commit fails, consumers see <strong>phantom events</strong>; if the commit succeeds but a call fails, events are <strong>lost</strong>. It also couples OLTP latency and availability to every downstream system (availability multiplies across four or more dependencies) and holds locks and connections open during network calls. Strict cross-service consistency cannot be achieved this way without distributed transactions, so this is an anti-pattern for the stated requirements.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📸</span>
+            <h4>D — Snapshot and Diff</h4>
+          </div>
+          <p>Periodic snapshot comparison puts heavy read load on the OLTP database, and its cost scales with table size rather than change rate. Latency is bounded below by the interval plus diff time (seconds at best), intermediate states are lost (A to B to C between snapshots looks like A to C), and detecting deletes requires full comparison. It cannot meet sub-second latency at tens of thousands of operations per second. It is fine for low-volume, non-critical sync or as a periodic <em>reconciliation</em> audit.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Log-Based CDC with a Partitioned Streaming Platform ✓</h4>
+          </div>
+          <p>Utilize log-driven CDC integrated with a reliable, sequenced streaming platform (like Debezium processing the PostgreSQL WAL and sending to Kafka topics divided by entity key), alongside a schema regi</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Capture Completeness</th><th>End-to-End Latency</th><th>Source DB Overhead</th><th>Per-Entity Ordering</th><th>Failure Recovery / Replay</th><th>Schema Change Handling</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Log-Based CDC + Streaming ✓</td><td>All committed changes ✅</td><td>Tens to hundreds of ms ✅</td><td>Low (reads WAL) ✅</td><td>Per key via partitions ✅</td><td>Strong (slot, offsets, replay) ✅</td><td>Good with schema registry ✅</td><td>Medium–High (Kafka + Connect) ⚠</td></tr>
+            <tr><td class="tt-option">B — Transactional Outbox</td><td>Only app-written events ⚠</td><td>Low with CDC, seconds with polling ⚠</td><td>Medium (extra writes, cleanup) ⚠</td><td>Good if sequenced carefully ⚠</td><td>Good ✅</td><td>Good (explicit event contract) ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — Synchronous Dual-Write</td><td>Only what the app emits ❌</td><td>Adds downstream latency to every write ❌</td><td>High (locks held during calls) ❌</td><td>Not guaranteed ❌</td><td>Weak (phantom or lost events) ❌</td><td>Tight coupling ❌</td><td>Low to build, high to operate ❌</td></tr>
+            <tr><td class="tt-option">D — Snapshot and Diff</td><td>Misses intermediate states ❌</td><td>Seconds or worse ❌</td><td>High (scans) ❌</td><td>Lost across snapshots ❌</td><td>Re-run the diff ⚠</td><td>Fragile ⚠</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Log-Based CDC + Streaming</h4>
+          </div>
+          <p>Many downstream consumers need every committed change with low latency, per-entity ordering, replay, and schema-evolution support, and you can operate Kafka and Kafka Connect (or use a managed equivalent).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Transactional Outbox</h4>
+          </div>
+          <p>Services must publish curated domain events (OrderPlaced, PaymentCaptured) atomically with state changes, and every write path goes through application code you control. Most powerful when the outbox is read via CDC.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Synchronous Dual-Write</h4>
+          </div>
+          <p>Rarely appropriate. Only for a single, highly reliable downstream where you explicitly accept coupled latency and the possibility of inconsistency, and where an outbox or CDC is not yet available.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Snapshot and Diff</h4>
+          </div>
+          <p>Small or slow-changing datasets, batch-oriented consumers that tolerate minutes of delay, or periodic reconciliation to verify that a streaming pipeline has not drifted.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Log-Based CDC Pipeline</h3>
+        <p>Changes flow from the WAL through Debezium into partitioned Kafka topics, and each downstream system consumes independently:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    APP[Applications and batch jobs] --&gt; PG[(PostgreSQL primary)]
+    PG --&gt;|WAL via logical slot| DBZ[Debezium on Kafka Connect]
+    DBZ -.-&gt; SR[Schema Registry]
+    DBZ --&gt; K[(Kafka topics keyed by primary key)]
+    K --&gt; S[Search indexer]
+    K --&gt; AN[Analytics stream]
+    K --&gt; CI[Cache invalidator]
+    K --&gt; MS[Microservice consumers]
+    S -.-&gt;|poison events| DLQ[Dead-letter topic]">flowchart LR
+    APP[Applications and batch jobs] --&gt; PG[(PostgreSQL primary)]
+    PG --&gt;|WAL via logical slot| DBZ[Debezium on Kafka Connect]
+    DBZ -.-&gt; SR[Schema Registry]
+    DBZ --&gt; K[(Kafka topics keyed by primary key)]
+    K --&gt; S[Search indexer]
+    K --&gt; AN[Analytics stream]
+    K --&gt; CI[Cache invalidator]
+    K --&gt; MS[Microservice consumers]
+    S -.-&gt;|poison events| DLQ[Dead-letter topic]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent CDC Consumer for the Search Index</h3>
+        <p>Consumes Debezium change events, uses the source LSN as an external version so duplicates and replays are harmless, and commits offsets only after the sink acknowledges:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">consumeBatch</span>(records):</span>
+<span class="line">    actions <span class="tk-op">=</span> []</span>
+<span class="line">    <span class="tk-kw">for</span> rec <span class="tk-kw">in</span> records:</span>
+<span class="line">        <span class="tk-kw">if</span> rec.value <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">            <span class="tk-kw">continue</span>                                      <span class="tk-com">// tombstone that follows a delete</span></span>
+<span class="line">        key <span class="tk-op">=</span> rec.key.id                                  <span class="tk-com">// PK is the partition key =&gt; per-entity order</span></span>
+<span class="line">        op  <span class="tk-op">=</span> rec.value.op                                <span class="tk-com">// c, u, d, r (snapshot read)</span></span>
+<span class="line">        lsn <span class="tk-op">=</span> rec.value.source.lsn                        <span class="tk-com">// monotonically increasing per source database</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">if</span> op <span class="tk-op">==</span> <span class="tk-str">&#x27;d&#x27;</span>:</span>
+<span class="line">            actions.<span class="tk-fn">add</span>(<span class="tk-fn">Delete</span>(index <span class="tk-op">=</span> <span class="tk-str">&#x27;products&#x27;</span>, id <span class="tk-op">=</span> key, version <span class="tk-op">=</span> lsn))</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            doc <span class="tk-op">=</span> <span class="tk-fn">project</span>(rec.value.after)                <span class="tk-com">// map only the fields search needs</span></span>
+<span class="line">            actions.<span class="tk-fn">add</span>(<span class="tk-fn">Upsert</span>(index <span class="tk-op">=</span> <span class="tk-str">&#x27;products&#x27;</span>, id <span class="tk-op">=</span> key, doc <span class="tk-op">=</span> doc, version <span class="tk-op">=</span> lsn))</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// External versioning: the sink rejects any write whose version is not newer than the</span></span>
+<span class="line">    <span class="tk-com">// stored one, so duplicates, replays and retries cannot move a document backwards.</span></span>
+<span class="line">    result <span class="tk-op">=</span> searchClient.<span class="tk-fn">bulk</span>(actions, versionType <span class="tk-op">=</span> <span class="tk-str">&#x27;external&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">for</span> failure <span class="tk-kw">in</span> result.failures:</span>
+<span class="line">        <span class="tk-kw">if</span> failure.isVersionConflict:</span>
+<span class="line">            <span class="tk-kw">continue</span>                                      <span class="tk-com">// stale or duplicate event: safe to ignore</span></span>
+<span class="line">        <span class="tk-kw">if</span> failure.isRetryable:</span>
+<span class="line">            <span class="tk-fn">retryWithBackoff</span>(failure.action, maxAttempts <span class="tk-op">=</span> <span class="tk-num">5</span>)</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            dlq.<span class="tk-fn">publish</span>(failure.record, reason <span class="tk-op">=</span> failure.error)   <span class="tk-com">// poison message: park it and keep going</span></span>
+<span class="line"></span>
+<span class="line">    consumer.<span class="tk-fn">commitOffsets</span>(records)                       <span class="tk-com">// only after the sink acknowledged the batch</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Ignoring replication slot lag:</strong> A stalled connector makes PostgreSQL retain WAL until the disk fills and takes the primary down. Cap retention with <code>max_slot_wal_keep_size</code>, alert early, and have a drop-and-resnapshot runbook.</li>
+          <li><strong>Assuming exactly-once delivery:</strong> Restarts and rebalances replay events. Consumers that increment counters or append blindly will double-apply. Use idempotent upserts with an external version such as the LSN.</li>
+          <li><strong>Expecting global ordering:</strong> Ordering holds per partition key only. Cross-table or cross-entity invariants need transaction metadata or consumers that tolerate interleaving.</li>
+          <li><strong>Publishing raw table changes as a public contract:</strong> Every internal column rename becomes a breaking change for consumers. Put an outbox or a mapping layer in front of anything that crosses a team boundary.</li>
+          <li><strong>Forgetting REPLICA IDENTITY and TOAST behavior:</strong> Updates and deletes on tables without a primary key, or without FULL identity when before-images are needed, produce incomplete events. Unchanged large TOAST columns arrive as placeholders and must not overwrite the sink.</li>
+          <li><strong>Skipping failover and snapshot rehearsals:</strong> On PostgreSQL versions before 17, a failover can lose the logical slot, and re-snapshotting a huge table under load is slow. Practice both before an incident forces you to.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams treat CDC as a platform and combine patterns rather than choosing one dogmatically. A typical rollout looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Check prerequisites:</strong> Set <code>wal_level=logical</code>, size <code>max_replication_slots</code>, make sure every table has a primary key, choose <code>REPLICA IDENTITY</code> (FULL only where consumers need before-images), and size WAL disk for the worst-case connector outage.</li>
+          <li><strong>Step 1 — Stand up Debezium on Kafka Connect:</strong> Run the initial snapshot then stream, key events by primary key, serialize with Avro or Protobuf against a schema registry, and enable heartbeats.</li>
+          <li><strong>Step 2 — Build idempotent, independently scaled consumers:</strong> One consumer group per downstream system, the source LSN (or a row version) as the external version in each sink, offsets committed only after the sink acknowledges, and a dead-letter topic with replay tooling.</li>
+          <li><strong>Step 3 — Harden failure modes:</strong> Alert on slot lag and retained WAL, connector status, and consumer lag. Write a failover runbook (slot synchronization on PostgreSQL 17+, or re-snapshot) and load-test backpressure.</li>
+          <li><strong>Step 4 — Add an outbox for business events:</strong> Where services need stable domain events instead of table-shaped changes, add an outbox table and Debezium's outbox event router so contracts stay decoupled from internal schema.</li>
+          <li><strong>Step 5 — Evolve schemas safely:</strong> Use expand/contract migrations, additive changes first, tolerant-reader consumers, and compatibility checks in CI.</li>
+        </ul>
+        <p>Use CDC to distribute data and an outbox to publish domain contracts; they complement each other.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When many downstream systems need <strong>every committed change</strong>, ordered per entity, with low latency and replay, read the database's own commit log and publish it to a partitioned, durable stream. Log-based CDC removes dual writes and polling, but it demands idempotent consumers, replication-slot monitoring, and a schema-compatibility policy.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

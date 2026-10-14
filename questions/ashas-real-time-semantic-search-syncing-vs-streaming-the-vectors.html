@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asha&#x27;s Real-Time Semantic Search: Syncing vs. Streaming the Vectors — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">18 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Semantic Search</span>
+      <span class="tag tag--green">Vector Sync</span>
+      <span class="tag tag--amber">Stream Processing</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Asha&#x27;s Real-Time Semantic Search: Syncing vs. Streaming the Vectors</h1>
+      <p class="q-scenario"><strong>Asha</strong>, a backend engineer, owns semantic search for a <strong>multi-tenant product catalog</strong> with <strong>thousands of item writes per second</strong>. Each item has metadata in a <strong>relational database</strong> and a <strong>vector embedding</strong> in a vector database used for approximate nearest neighbor (ANN) search. The requirements are <strong>search latency under 100 ms</strong>, <strong>near-real-time visibility</strong> of new and updated items, and <strong>predictable failure handling</strong>. The vector database excels at ANN queries but has <strong>slow bulk writes during spikes</strong> and <strong>weak transactional guarantees</strong>. She must design the write and indexing strategy.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Fully synchronous writes: generate the embedding in the request, then write metadata and vector atomically (transaction or 2PC), and return success only after both stores acknowledge.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Append a single event to a durable log (Kafka) while synchronously updating relational metadata, then use asynchronous workers or a stream processor to compute embeddings and upsert into the vector DB with versioned timestamps, and handle read-after-write with a small recent-writes cache or metadata timestamp checks at query time.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Per-tenant isolation: separate vector clusters per tenant, with synchronous writes to the tenant&#x27;s metadata DB and vector cluster, scaling by adding clusters for new tenants.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Persist only metadata on write, and run embedding and vector indexing in periodic batch jobs (nightly or hourly). Serve queries from the last batch, computing embeddings on the fly for modified records or falling back to metadata-only results.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Log-Based Async Indexing with Versioned Upserts</h3>
+        <p>The two stores have different strengths. The relational database is the <strong>durable source of truth</strong>, while the vector index is a <strong>derived, rebuildable view</strong> that is slow to write in bursts. The right design makes the source-of-truth write fast and durable, then <em>propagates</em> to the index through a buffered, replayable pipeline. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Write latency is decoupled from the slow vector DB:</strong> The request path commits metadata (and an event) and returns. Embedding generation and vector upserts, the slow parts, happen off the request path.</li>
+          <li><strong>Spikes are absorbed by the log:</strong> Kafka buffers bursts, and workers batch upserts at a rate the vector DB can sustain. Backpressure shows up as consumer lag, not request failures.</li>
+          <li><strong>Predictable failure handling:</strong> Failed embeddings or upserts are retried with backoff, and poison messages go to a dead-letter topic. Nothing is lost, because the log and relational DB are durable, and the index can be rebuilt by replay.</li>
+          <li><strong>Correct under weak vector-DB guarantees:</strong> Versioned (or timestamped) idempotent upserts mean duplicates and out-of-order delivery cannot overwrite newer data with older data.</li>
+          <li><strong>Near-real-time with read-your-writes:</strong> Typical pipeline lag is seconds. For items changed within that window, the query layer checks versions against the relational DB and merges them in from a small shared recent-writes set (matched lexically until their vectors are indexed), so users see their own changes immediately.</li>
+        </ul>
+        <p>A production-ready version has an <strong>outbox or CDC source</strong>, <strong>partitioning by item ID</strong>, <strong>idempotent versioned upserts</strong>, a <strong>dead-letter queue</strong>, and a <strong>freshness SLO</strong> (for example 'p99 index lag under 5 seconds'). Monitor <strong>consumer lag, embedding latency, upsert error rate, and recent-writes overlay hit rate</strong>.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Fully Synchronous Dual-Store Write</h4>
+          </div>
+          <p>There is no real distributed transaction across a relational database and most vector databases, and 2PC would couple request latency and availability to the slowest component. Embedding inference in the request path adds tens to hundreds of milliseconds, and during write spikes the vector DB's slow bulk writes turn into user-facing timeouts. <strong>Caveat:</strong> synchronous indexing can be acceptable for very low write volume where simplicity wins.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏢</span>
+            <h4>C — Per-Tenant Vector Clusters</h4>
+          </div>
+          <p>Isolation is a legitimate requirement for some tenants, but separate clusters per tenant do not fix the write-path problem: writes are still synchronous and still hit slow bulk-write behavior. Operational cost grows with tenant count (many small, underused clusters, upgrades, backups, monitoring), and skewed tenants still need capacity planning. Namespaces or partitions with enforced tenant filters are usually the better default, with dedicated clusters reserved for large or regulated tenants.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🕒</span>
+            <h4>D — Hourly or Nightly Batch Indexing</h4>
+          </div>
+          <p>Batch indexing is simple and cheap, but it cannot meet <em>near-real-time</em> visibility: new items would be invisible for up to a batch interval. The fallback of computing embeddings on read adds inference latency to the search path and can break the 100 ms target. Large batches also create exactly the write spikes the vector DB handles poorly. <strong>Caveat:</strong> batch jobs are still useful for periodic full re-indexing and model migrations.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Log-Based Async Indexing with Versioned Upserts ✓</h4>
+          </div>
+          <p>Append a single event to a durable log (Kafka) while synchronously updating relational metadata, then use asynchronous workers or a stream processor to compute embeddings and upsert into the vector DB</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Latency</th><th>Search Latency</th><th>Freshness</th><th>Failure Handling</th><th>Spike Tolerance</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Synchronous Dual-Store Write</td><td>High ❌ (embedding and two stores in request)</td><td>Good ✅</td><td>Immediate ✅</td><td>Poor ❌ (partial failures)</td><td>Poor ❌</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Log + Async Versioned Upserts ✓</td><td>Low ✅</td><td>Good (small overlay cost) ✅</td><td>Seconds ✅</td><td>Strong (retry, DLQ, replay) ✅</td><td>Strong ✅</td><td>High ⚠</td></tr>
+            <tr><td class="tt-option">C — Per-Tenant Clusters</td><td>High ❌</td><td>Good ✅</td><td>Immediate ✅</td><td>Poor ❌</td><td>Poor ❌</td><td>Very high ❌</td></tr>
+            <tr><td class="tt-option">D — Batch Indexing</td><td>Low ✅</td><td>Risky (on-the-fly embedding) ❌</td><td>Hours ❌</td><td>Medium ⚠</td><td>Poor (batch spikes) ❌</td><td>Low ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous Dual-Store Write</h4>
+          </div>
+          <p>Low write volume, relaxed latency targets, and a vector store that supports the needed transactional behavior.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Log + Async Versioned Upserts</h4>
+          </div>
+          <p>High write rates, bursty traffic, near-real-time search, and a vector DB with weak write guarantees (this scenario).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Per-Tenant Clusters</h4>
+          </div>
+          <p>A few large or regulated tenants that need hard isolation, data residency, or dedicated capacity.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Batch Indexing</h4>
+          </div>
+          <p>Mostly static catalogs where hours-old search results are acceptable, or as a complement for periodic full re-indexing.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Query Path with Recent-Writes Overlay</h3>
+        <p>ANN results are verified against current metadata, and items written in the last few seconds are merged in until their vectors are indexed:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U as User
+    participant A as Search API
+    participant V as Vector DB
+    participant R as Recent Writes Cache
+    participant D as Relational DB
+    U-&gt;&gt;A: 1. Search query and tenant
+    A-&gt;&gt;A: 2. Embed the query text
+    par ANN search
+        A-&gt;&gt;V: 3a. ANN top-K with mandatory tenant filter
+        V--&gt;&gt;A: Candidate IDs and indexed versions
+    and Recent writes
+        A-&gt;&gt;R: 3b. IDs changed in the last N seconds for this tenant
+        R--&gt;&gt;A: Recent IDs and versions
+    end
+    A-&gt;&gt;D: 4. Fetch current metadata and versions for candidates and recent IDs
+    A-&gt;&gt;A: 5. Drop deleted or stale hits, add recent items (lexical match), re-rank
+    A--&gt;&gt;U: 6. Results (target under 100 ms)">sequenceDiagram
+    participant U as User
+    participant A as Search API
+    participant V as Vector DB
+    participant R as Recent Writes Cache
+    participant D as Relational DB
+    U-&gt;&gt;A: 1. Search query and tenant
+    A-&gt;&gt;A: 2. Embed the query text
+    par ANN search
+        A-&gt;&gt;V: 3a. ANN top-K with mandatory tenant filter
+        V--&gt;&gt;A: Candidate IDs and indexed versions
+    and Recent writes
+        A-&gt;&gt;R: 3b. IDs changed in the last N seconds for this tenant
+        R--&gt;&gt;A: Recent IDs and versions
+    end
+    A-&gt;&gt;D: 4. Fetch current metadata and versions for candidates and recent IDs
+    A-&gt;&gt;A: 5. Drop deleted or stale hits, add recent items (lexical match), re-rank
+    A--&gt;&gt;U: 6. Results (target under 100 ms)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Outbox Write, Versioned Indexer, and Overlay Query</h3>
+        <p>A durable write with an outbox event, a batched indexer whose upserts are idempotent and version-guarded, and a query path that verifies hits against current metadata and merges in just-written items:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- API: durable write with outbox ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">upsertItem</span>(tenantId, item):</span>
+<span class="line">    tx  <span class="tk-op">=</span> db.<span class="tk-kw">begin</span>()</span>
+<span class="line">    row <span class="tk-op">=</span> tx.<span class="tk-fn">exec</span>(</span>
+<span class="line">        &quot;INSERT INTO <span class="tk-fn">items</span> (tenant_id, id, ...) <span class="tk-fn">VALUES</span> (...)</span>
+<span class="line">         ON <span class="tk-fn">CONFLICT</span> (tenant_id, id) DO UPDATE SET ..., version <span class="tk-op">=</span> items.version <span class="tk-op">+</span> <span class="tk-num">1</span></span>
+<span class="line">         RETURNING id, version&quot;, ...)</span>
+<span class="line">    tx.<span class="tk-fn">insert</span>(<span class="tk-str">&quot;outbox&quot;</span>, { key: tenantId <span class="tk-op">+</span> <span class="tk-str">&quot;:&quot;</span> <span class="tk-op">+</span> item.id, type: <span class="tk-str">&quot;ItemChanged&quot;</span>, version: row.version })</span>
+<span class="line">    tx.<span class="tk-fn">commit</span>()                                                   <span class="tk-com">// item and event are atomic</span></span>
+<span class="line">    recentWrites.<span class="tk-fn">put</span>(tenantId, item.id, row.version, ttl <span class="tk-op">=</span> <span class="tk-num">30s</span>)   <span class="tk-com">// best-effort overlay entry</span></span>
+<span class="line">    <span class="tk-kw">return</span> row</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Indexer: batched, idempotent, version-guarded ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">indexBatch</span>(events):                                      <span class="tk-com">// partitioned by item key, ordered per item</span></span>
+<span class="line">    latest     <span class="tk-op">=</span> <span class="tk-fn">keepLatestPerKey</span>(events)                         <span class="tk-com">// collapse multiple updates in the batch</span></span>
+<span class="line">    docs       <span class="tk-op">=</span> db.<span class="tk-fn">getItems</span>(latest.keys)                         <span class="tk-com">// read current state, not the event payload</span></span>
+<span class="line">    embeddings <span class="tk-op">=</span> embeddingModel.<span class="tk-fn">embedBatch</span>(docs.<span class="tk-fn">map</span>(buildText))   <span class="tk-com">// batched inference</span></span>
+<span class="line">    ops <span class="tk-op">=</span> []</span>
+<span class="line">    <span class="tk-kw">for</span> d <span class="tk-kw">in</span> docs:</span>
+<span class="line">        <span class="tk-kw">if</span> d.deleted:</span>
+<span class="line">            ops.<span class="tk-fn">add</span>(<span class="tk-fn">Delete</span>(d.key, version <span class="tk-op">=</span> d.version))</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            ops.<span class="tk-fn">add</span>(<span class="tk-fn">Upsert</span>(d.key, embeddings[d.key], version <span class="tk-op">=</span> d.version, tenant <span class="tk-op">=</span> d.tenantId))</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        vectorDb.<span class="tk-fn">bulkUpsert</span>(ops, rule <span class="tk-op">=</span> <span class="tk-str">&quot;apply only if version &gt; stored&quot;</span>)   <span class="tk-com">// duplicates and replays are no-ops</span></span>
+<span class="line">        <span class="tk-fn">commitOffsets</span>(events)</span>
+<span class="line">    <span class="tk-kw">catch</span> Transient e:</span>
+<span class="line">        <span class="tk-fn">retryWithBackoff</span>(events)                                  <span class="tk-com">// consumer lag grows, requests are unaffected</span></span>
+<span class="line">    <span class="tk-kw">catch</span> Poison e:</span>
+<span class="line">        <span class="tk-fn">deadLetter</span>(events)</span>
+<span class="line">        <span class="tk-fn">commitOffsets</span>(events)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Query: ANN plus recent-writes overlay, tenant filter is mandatory ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">search</span>(tenantId, text, k):</span>
+<span class="line">    qv      <span class="tk-op">=</span> <span class="tk-fn">embed</span>(text)</span>
+<span class="line">    hits    <span class="tk-op">=</span> vectorDb.<span class="tk-fn">ann</span>(qv, k <span class="tk-op">*</span> <span class="tk-num">2</span>, filter <span class="tk-op">=</span> { tenant: tenantId })</span>
+<span class="line">    recent  <span class="tk-op">=</span> recentWrites.<span class="tk-fn">listForTenant</span>(tenantId)                <span class="tk-com">// IDs and versions changed in the last ~30s</span></span>
+<span class="line">    current <span class="tk-op">=</span> db.<span class="tk-fn">getMetadata</span>(hits.ids <span class="tk-op">+</span> recent.ids)               <span class="tk-com">// one indexed lookup: version, deleted flag, text</span></span>
+<span class="line"></span>
+<span class="line">    kept <span class="tk-op">=</span> hits.<span class="tk-fn">filter</span>(h <span class="tk-op">-&gt;</span> current[h.id] <span class="tk-op">!=</span> <span class="tk-lit">null</span></span>
+<span class="line">                            <span class="tk-kw">and</span> <span class="tk-kw">not</span> current[h.id].deleted</span>
+<span class="line">                            <span class="tk-kw">and</span> (h.id <span class="tk-kw">not</span> <span class="tk-kw">in</span> recent.ids <span class="tk-kw">or</span> h.version <span class="tk-op">==</span> current[h.id].version))</span>
+<span class="line">    keptIds <span class="tk-op">=</span> kept.<span class="tk-fn">map</span>(h <span class="tk-op">-&gt;</span> h.id)</span>
+<span class="line"></span>
+<span class="line">    fresh <span class="tk-op">=</span> recent.ids.<span class="tk-fn">filter</span>(id <span class="tk-op">-&gt;</span> id <span class="tk-kw">not</span> <span class="tk-kw">in</span> keptIds <span class="tk-kw">and</span> current[id] <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> <span class="tk-kw">not</span> current[id].deleted)</span>
+<span class="line">                      .<span class="tk-fn">map</span>(id <span class="tk-op">-&gt;</span> current[id])</span>
+<span class="line">                      .<span class="tk-fn">filter</span>(m <span class="tk-op">-&gt;</span> <span class="tk-fn">lexicalMatch</span>(text, m.text))    <span class="tk-com">// vector not indexed yet, so match by text</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">rerank</span>(kept <span class="tk-op">+</span> fresh).<span class="tk-fn">top</span>(k)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Dual-writing to the DB and Kafka without an outbox:</strong> A crash between the two silently drops index updates. Make the event part of the same transaction.</li>
+          <li><strong>Unversioned upserts:</strong> Retries and out-of-order messages can overwrite newer vectors with older ones. Always carry a version and upsert only if it is newer.</li>
+          <li><strong>Ignoring deletes:</strong> Removed items keep appearing in search results. Propagate tombstones and verify against metadata at query time.</li>
+          <li><strong>Unbounded retries on poison messages:</strong> A single bad document blocks a partition. Retry with a limit, then dead-letter it.</li>
+          <li><strong>No tenant filter enforcement:</strong> A missing filter in an ANN query leaks data across tenants. Enforce it in a shared query layer, not per caller.</li>
+          <li><strong>Per-node recent-write caches:</strong> Another API node will not see the entry. Use a shared cache or version checks against the DB.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, search teams treat the vector index as a <strong>derived view of the source of truth</strong>. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Define freshness and failure goals:</strong> Agree on index-lag SLOs, what users should see right after a write, and what happens when embedding or indexing is degraded.</li>
+          <li><strong>Step 1 — Make the source write atomic with an event:</strong> Use an outbox or CDC so the item row and its change event commit together.</li>
+          <li><strong>Step 2 — Build the indexing pipeline:</strong> Use Kafka partitioned by item ID, workers that batch embedding calls and upserts, retries with backoff, and a dead-letter topic.</li>
+          <li><strong>Step 3 — Guard upserts with versions:</strong> Reject writes older than the stored version so replays and duplicates are harmless.</li>
+          <li><strong>Step 4 — Add the read-your-writes overlay:</strong> Merge recently written items (from a shared short-TTL store) into results, enforce the tenant filter, and re-rank.</li>
+          <li><strong>Step 5 — Plan rebuilds:</strong> Support full replay into a new index for model upgrades, corruption, or disaster recovery, and reconcile periodically by comparing versions between the DB and the index.</li>
+        </ul>
+        <p>Keep the <strong>relational DB authoritative</strong> and treat the vector index as <strong>rebuildable</strong>.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Decouple slow embedding and vector writes from the request path: <strong>commit metadata and an event atomically, index asynchronously through a durable log with versioned upserts</strong>, and overlay recent writes at query time for read-after-write.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

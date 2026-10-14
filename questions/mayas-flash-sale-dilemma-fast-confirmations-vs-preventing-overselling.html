@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya&#x27;s Flash-Sale Dilemma: Fast Confirmations vs. Preventing Overselling — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">16 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Flash Sales</span>
+      <span class="tag tag--green">Consistency</span>
+      <span class="tag tag--amber">Latency</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya&#x27;s Flash-Sale Dilemma: Fast Confirmations vs. Preventing Overselling</h1>
+      <p class="q-scenario"><strong>Maya</strong> is designing checkout for an e-commerce platform that runs <strong>flash sales</strong>: thousands of orders per second against a handful of very hot SKUs for a few minutes at a time. The business requires an <strong>order confirmation in under 200 ms</strong> to limit cart abandonment, and stock is <strong>strictly limited</strong>, so overselling means refunds, apologies, and brand damage. The design must also be <strong>recoverable</strong>: if a cache node or a worker dies mid-sale, no accepted order may be lost and inventory must be reconstructible from durable data. Payment capture may complete shortly <em>after</em> the confirmation, inside a bounded reservation window. She needs the architecture that best balances <em>throughput, latency, correctness, and recoverability</em>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Execute a synchronous, strongly consistent checkout: run a serializable database transaction for every order that locks inventory using SELECT FOR UPDATE, decrements the stock, and commits before confirming. Rely entirely on the relational database as the primary source of truth.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Utilize an in-memory atomic reservation with asynchronous durability: perform an atomic reserve command in a fast caching layer (like a Redis Lua script) to reduce available stock and instantly return a success response, then place the order into a reliable queue (such as Kafka) for background workers to persist the transaction and finalize the database inventory. Employ TTLs, idempotent consumers, and reconciliation tasks to resolve any discrepancies.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Provide optimistic immediate confirmations without pre-checking stock: accept the order at the gateway, respond with an instant confirmation, and reconcile the inventory asynchronously later. If the stock is overcommitted, process compensating refunds or issue backorders afterward.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Rely on a distributed lock service for centralized coordination: mandate that each checkout obtains a lock for the item (using Zookeeper/etcd) before reducing inventory in the database or cache, ensuring that stock decrements are strictly serialized and accurate.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: In-Memory Atomic Reservation + Async Durability</h3>
+        <p>Option B is the only design that decides <strong>'is there stock?'</strong> atomically in memory (sub-millisecond) while still handing every accepted order to a <strong>durable log</strong> before it is treated as real. It separates the two things the business cares about: the <em>admission decision</em> (must be fast and must never oversell) and the <em>system-of-record update</em> (must be durable, but may lag by seconds). Here's why it stands out:</p>
+        <ul>
+          <li><strong>Atomic admission control:</strong> A Lua script executes atomically in Redis: check stock, decrement, and record the reservation as one step. Two buyers can never both take the last unit, and no row locks are involved.</li>
+          <li><strong>Fits the 200 ms budget:</strong> A Redis call is typically sub-millisecond and a Kafka produce with <code>acks=all</code> typically takes a few to tens of milliseconds, so the critical path stays far inside the budget. The slow work (database write, payment, inventory finalization) is off the critical path.</li>
+          <li><strong>Removes the hot-row bottleneck:</strong> Orders for one SKU serialized on a database row lock are capped at roughly 1 / (lock hold time), often only hundreds per second. An in-memory shard handles on the order of 100k simple operations per second, and one very hot SKU can be split into N stock buckets.</li>
+          <li><strong>Recoverable by design:</strong> The queue is a durable log, consumers are idempotent (keyed by order ID), reservations carry a TTL so abandoned carts return stock, and a reconciliation job rebuilds or repairs the counters from the database.</li>
+          <li><strong>Honest confirmation semantics:</strong> The user is told 'reserved, complete payment within N minutes', which is exactly what the system can guarantee at that moment, and it matches how ticketing and retail drops work in practice.</li>
+        </ul>
+        <p>A production-grade version includes a <strong>reservation TTL with a sweeper</strong>, <strong>idempotency keys</strong> on the order, a <strong>publish-before-confirm handoff</strong> (or an outbox), <strong>idempotent consumers</strong>, and a <strong>reconciliation job</strong> that compares Redis, Kafka, and the database. Alert on three numbers: reconciliation drift, consumer lag, and reservation-expiry rate.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Serializable DB Transaction with SELECT FOR UPDATE</h4>
+          </div>
+          <p>This is the most obviously correct design, but every order for a hot SKU queues on the <strong>same row lock</strong>. If each transaction holds the lock for 5-10 ms (commit fsync included), one SKU tops out at roughly 100-200 orders per second, and waiting requests blow through the 200 ms budget. Timeouts then trigger client retries, which deepen the lock queue and cascade. <strong>Caveat:</strong> for ordinary traffic or non-hot SKUs this is simple, correct, and the right choice. It also remains the right design for the <em>finalization</em> step behind option B.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🎲</span>
+            <h4>C — Optimistic Confirmation Without Stock Check</h4>
+          </div>
+          <p>Confirming first and reconciling later moves the failure from the system to the customer: oversold orders turn into cancellations, refunds, and support tickets at exactly the moment the brand is most visible. The requirement says overselling must be <strong>prevented</strong>, not compensated. <strong>Caveat:</strong> deliberate overbooking with compensation is a legitimate strategy when a cancelled order costs less than an unsold unit (airlines do this), but that is an explicit business decision, not a safety mechanism.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔐</span>
+            <h4>D — Distributed Lock Service (ZooKeeper/etcd)</h4>
+          </div>
+          <p>A per-item lock serializes decrements correctly (when fencing tokens are used), but each checkout now pays <strong>consensus round trips</strong> to acquire and release the lock on top of the decrement itself. ZooKeeper and etcd are built for coordination, not for thousands of lock operations per second on one key, so the lock service becomes the bottleneck and a new availability dependency. It also does not solve durability: the decrement still has to land in a store, and a lock that expires during a GC pause lets a stale holder write unless fencing is enforced.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — In-Memory Atomic Reservation + Async Durability ✓</h4>
+          </div>
+          <p>Utilize an in-memory atomic reservation with asynchronous durability: perform an atomic reserve command in a fast caching layer (like a Redis Lua script) to reduce available stock and instantly return</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Meets 200 ms Budget</th><th>Prevents Overselling</th><th>Hot-SKU Throughput</th><th>Durability / Recoverability</th><th>Implementation Complexity</th><th>Failure Blast Radius</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Serializable DB Transaction</td><td>❌ Lock queue on hot row</td><td>✅ Strong (serializable)</td><td>❌ ~100s/s per SKU</td><td>✅ DB is source of truth</td><td>✅ Low</td><td>⚠ DB saturation hits all checkouts</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — In-Memory Reservation + Queue ✓</td><td>✅ Few-ms decision</td><td>✅ Atomic in Lua (⚠ failover window)</td><td>✅ ~100k ops/s per shard</td><td>⚠ Needs queue + reconciliation</td><td>❌ High</td><td>⚠ Cache failover needs rebuild</td></tr>
+            <tr><td class="tt-option">C — Optimistic Confirmation</td><td>✅ Instant</td><td>❌ None up front</td><td>✅ Effectively unbounded</td><td>⚠ Order stored, truth later</td><td>⚠ Medium (compensation flows)</td><td>❌ Customer-facing refunds</td></tr>
+            <tr><td class="tt-option">D — Distributed Lock Service</td><td>❌ Consensus round trips</td><td>✅ Serialized (with fencing)</td><td>❌ Lock service bound</td><td>⚠ A lock is not storage</td><td>❌ High</td><td>❌ Lock outage stops sales</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Serializable DB Transaction</h4>
+          </div>
+          <p>Low-to-moderate order rates per SKU (tens per second), correctness above all, a small team, and no hot-SKU spikes. Also the right engine for the finalization step in option B.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — In-Memory Reservation + Queue</h4>
+          </div>
+          <p>Flash sales, ticket drops, and limited releases with hot SKUs, a tight latency SLO, and a team able to run Redis plus a durable queue with reconciliation.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Optimistic Confirmation</h4>
+          </div>
+          <p>Digital or effectively unlimited goods, or deliberate overbooking where a cancellation costs less than an unsold unit.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Distributed Lock Service</h4>
+          </div>
+          <p>Low-rate coordination of rare exclusive resources (leader election, a one-at-a-time maintenance job), not high-rate inventory counters.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Atomic Reservation Path (Under 200 ms)</h3>
+        <p>The user-facing path touches only Redis and the queue. The database is not on the critical path:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U as User
+    participant G as Checkout API
+    participant R as Redis Lua
+    participant K as Kafka
+    U-&gt;&gt;G: POST /checkout with idempotency key
+    G-&gt;&gt;R: 1. EVAL reserve(sku, qty, orderId, ttl)
+    alt Stock available
+        R--&gt;&gt;G: 2a. RESERVED
+        G-&gt;&gt;K: 3. Produce OrderReserved (acks=all)
+        K--&gt;&gt;G: 4. Ack
+        G--&gt;&gt;U: 5. 202 Reserved, pay within N minutes
+    else Sold out
+        R--&gt;&gt;G: 2b. SOLD_OUT
+        G--&gt;&gt;U: 409 Sold out
+    end">sequenceDiagram
+    participant U as User
+    participant G as Checkout API
+    participant R as Redis Lua
+    participant K as Kafka
+    U-&gt;&gt;G: POST /checkout with idempotency key
+    G-&gt;&gt;R: 1. EVAL reserve(sku, qty, orderId, ttl)
+    alt Stock available
+        R--&gt;&gt;G: 2a. RESERVED
+        G-&gt;&gt;K: 3. Produce OrderReserved (acks=all)
+        K--&gt;&gt;G: 4. Ack
+        G--&gt;&gt;U: 5. 202 Reserved, pay within N minutes
+    else Sold out
+        R--&gt;&gt;G: 2b. SOLD_OUT
+        G--&gt;&gt;U: 409 Sold out
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Atomic Reserve (Lua) + Checkout API + Idempotent Consumer</h3>
+        <p>The reservation is one atomic script, the API publishes before confirming, and the consumer is idempotent with a database guard as the last line of defence:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Redis Lua script: atomic. All keys share one hash slot via the {sku} tag ----</span></span>
+<span class="line"><span class="tk-com">// KEYS[1]=stock:{sku}   KEYS[2]=resv:{sku}:orderId   KEYS[3]=expiry:{sku}</span></span>
+<span class="line"><span class="tk-com">// ARGV: qty, ttlSeconds, nowMillis, orderId</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reserve</span>(KEYS, ARGV):</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">EXISTS</span>(KEYS[<span class="tk-num">2</span>]): <span class="tk-kw">return</span> ALREADY_RESERVED            <span class="tk-com">// idempotent client retry</span></span>
+<span class="line">    stock <span class="tk-op">=</span> <span class="tk-fn">tonumber</span>(<span class="tk-fn">GET</span>(KEYS[<span class="tk-num">1</span>]) <span class="tk-kw">or</span> <span class="tk-num">0</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> stock <span class="tk-op">&lt;</span> ARGV.qty: <span class="tk-kw">return</span> SOLD_OUT</span>
+<span class="line">    <span class="tk-fn">DECRBY</span>(KEYS[<span class="tk-num">1</span>], ARGV.qty)</span>
+<span class="line">    <span class="tk-fn">SET</span>(KEYS[<span class="tk-num">2</span>], ARGV.qty, EX <span class="tk-op">=</span> ARGV.ttlSeconds)           <span class="tk-com">// reservation record with TTL</span></span>
+<span class="line">    <span class="tk-fn">ZADD</span>(KEYS[<span class="tk-num">3</span>], ARGV.nowMillis <span class="tk-op">+</span> ARGV.ttlSeconds <span class="tk-op">*</span> <span class="tk-num">1000</span>, ARGV.orderId)   <span class="tk-com">// sweeper returns expired stock</span></span>
+<span class="line">    <span class="tk-kw">return</span> RESERVED</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Checkout API ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">checkout</span>(req):</span>
+<span class="line">    result <span class="tk-op">=</span> redis.<span class="tk-fn">eval</span>(reserve, keys <span class="tk-op">=</span> [stockKey, resvKey, expiryKey], args <span class="tk-op">=</span> [req.qty, TTL, <span class="tk-fn">now</span>(), req.orderId])</span>
+<span class="line">    <span class="tk-kw">if</span> result <span class="tk-op">==</span> SOLD_OUT: <span class="tk-kw">return</span> <span class="tk-num">409</span></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        kafka.<span class="tk-fn">produce</span>(<span class="tk-str">&quot;orders.reserved&quot;</span>, key <span class="tk-op">=</span> req.orderId, value <span class="tk-op">=</span> req, acks <span class="tk-op">=</span> <span class="tk-str">&quot;all&quot;</span>)   <span class="tk-com">// wait for the broker ack</span></span>
+<span class="line">    <span class="tk-kw">catch</span> error:</span>
+<span class="line">        redis.<span class="tk-fn">eval</span>(release, keys <span class="tk-op">=</span> [...], args <span class="tk-op">=</span> [...])    <span class="tk-com">// give the unit back immediately</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">503</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-num">202</span> <span class="tk-fn">Reserved</span>(expiresAt <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">+</span> TTL)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Idempotent consumer ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onOrderReserved</span>(msg):</span>
+<span class="line">    tx <span class="tk-op">=</span> db.<span class="tk-kw">begin</span>()</span>
+<span class="line">    inserted <span class="tk-op">=</span> tx.<span class="tk-fn">insert</span>(<span class="tk-str">&quot;orders&quot;</span>, msg.orderId, ...) ON CONFLICT DO NOTHING</span>
+<span class="line">    <span class="tk-kw">if</span> inserted:</span>
+<span class="line">        rows <span class="tk-op">=</span> tx.<span class="tk-fn">exec</span>(<span class="tk-str">&quot;UPDATE inventory SET stock = stock - ? WHERE sku = ? AND stock &gt;= ?&quot;</span>, msg.qty, msg.sku, msg.qty)</span>
+<span class="line">        <span class="tk-kw">if</span> rows <span class="tk-op">==</span> <span class="tk-num">0</span>: <span class="tk-fn">flagForCompensation</span>(msg.orderId)     <span class="tk-com">// overcommit detected: should be ~never</span></span>
+<span class="line">    tx.<span class="tk-fn">commit</span>()</span>
+<span class="line">    <span class="tk-fn">ack</span>(msg)                                               <span class="tk-com">// commit the offset only after the DB commit</span></span>
+<span class="line">    <span class="tk-kw">if</span> inserted: payments.<span class="tk-fn">authorize</span>(msg.orderId, idempotencyKey <span class="tk-op">=</span> msg.orderId)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Sweeper and reconciler (periodic) ----</span></span>
+<span class="line"><span class="tk-com">// sweeper:    for each expired reservation in expiry:{sku}, INCRBY stock and delete the entry (atomic script)</span></span>
+<span class="line"><span class="tk-com">// reconciler: expected = initialStock - confirmedOrders - activeReservations</span></span>
+<span class="line"><span class="tk-com">//             if abs(redisStock - expected) &gt; tolerance: alert, then repair redisStock = expected</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Check-then-decrement in two commands:</strong> A <code>GET</code> followed by a <code>DECR</code> from application code is a race. Do the check and the decrement inside one Lua script so they are a single atomic step.</li>
+          <li><strong>No reservation TTL:</strong> Abandoned carts lock stock forever and the sale ends 'sold out' while units are still unsold. Expire reservations and release the stock.</li>
+          <li><strong>Confirming before the durable handoff:</strong> If you answer the user before the queue acknowledges, a crash loses an order the customer was told was confirmed. Publish with <code>acks=all</code> and wait.</li>
+          <li><strong>Non-idempotent consumers:</strong> Kafka is at-least-once. Without an idempotency key on the order, a redelivery double-decrements database inventory.</li>
+          <li><strong>Treating Redis as the source of truth:</strong> Cache failover, eviction, and bugs will cause drift. Keep the database authoritative and rebuild the counters from it.</li>
+          <li><strong>Ignoring the hot key:</strong> One SKU on one shard saturates that node. Split into buckets and plan for borrowing between them.</li>
+          <li><strong>No reconciliation or alerting:</strong> Drift is inevitable. Without a job that compares the layers, you will discover it from customers.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Large retailers and ticketing platforms pair admission control with traffic shaping so the inventory path only sees the load it can serve:</p>
+        <ul>
+          <li><strong>Step 0 - Pre-sale:</strong> Load stock from the database into Redis (one key per SKU, or N buckets for hot SKUs), warm connection pools, and pre-scale consumers.</li>
+          <li><strong>Step 1 - Waiting room / rate shaping:</strong> A virtual queue or token bucket at the edge admits only as many shoppers as checkout can handle; everyone else sees a queue page.</li>
+          <li><strong>Step 2 - Atomic reservation:</strong> The Lua script reserves units, writes a reservation with a TTL, and returns a reservation ID in a few milliseconds.</li>
+          <li><strong>Step 3 - Durable handoff:</strong> Publish <code>OrderReserved</code> to Kafka (idempotent producer, <code>acks=all</code>, key = order ID), then answer 'reserved' to the user.</li>
+          <li><strong>Step 4 - Async finalization:</strong> Workers persist the order, decrement database inventory, and start payment, with the reservation TTL as the payment deadline. Failure or timeout releases the stock.</li>
+          <li><strong>Step 5 - Reconcile:</strong> Compare <code>initialStock - confirmedOrders - activeReservations</code> against Redis, alert on drift, and rebuild counters from the database after a cache failover.</li>
+        </ul>
+        <p>Put the strict correctness check in the fastest layer, put the durable record behind a log, and make every step replayable.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Separate the <strong>admission decision</strong> from the <strong>durable bookkeeping</strong>. Decide stock atomically in memory so the hot path never touches row locks, hand each accepted order to a durable log before confirming, and let idempotent workers plus reconciliation make the database exact. Accept a short gap between confirmation and finalization, but never accept overselling.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

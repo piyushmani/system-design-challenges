@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aisha&#x27;s global config service: navigating the availability and consistency trade-off — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">19 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Configuration Management</span>
+      <span class="tag tag--green">Availability vs Consistency</span>
+      <span class="tag tag--amber">Global Systems</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Aisha&#x27;s global config service: navigating the availability and consistency trade-off</h1>
+      <p class="q-scenario"><strong>Aisha</strong> is building a <strong>globally distributed user-settings service</strong>. It must meet <strong>99.99% availability</strong> for reads and writes, serve typical reads in <strong>under 50 ms worldwide</strong>, handle a <strong>moderate write load</strong> (hundreds per second), and <strong>never allow conflicting or lost updates</strong> (strict consistency on writes). Each cloud region averages about <strong>99.9% uptime</strong> and inter-region links can be unstable. Settings are small and read far more often than they are written, and the cluster can span at least <strong>three independent regions</strong>. She must choose the architecture that meets the SLO, keeps reads fast, and eliminates conflicting or lost writes.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A 3-region majority-quorum cluster (Paxos/Raft) where a write commits only after a majority of regions acknowledge it. Reads are served from local replicas, using leader-aware redirects or session tokens to guarantee linearizable reads, with automatic leader election and health checks maintaining quorum availability.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">A single primary region handling all writes with synchronous replication to a passive standby in another region for failover, while reads go to potentially stale read replicas in various regions.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Active-active multi-master writes in all regions with asynchronous replication and client-side conflict resolution (CRDTs or last-writer-wins), sending reads and writes to the nearest region.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Region-local primaries that each accept local writes, replicate asynchronously between regions, and resolve conflicts with last-writer-wins, giving fast local reads and eventual convergence at the cost of possible data loss during regional failover.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Multi-Region Quorum (Raft/Paxos)</h3>
+        <p>The key requirement is <strong>strict consistency on writes</strong> combined with <strong>higher availability than any single region provides</strong>. Only consensus-based replication achieves both: with three regions, a write commits when two of three agree, so the system keeps accepting writes after losing any one region or link, while no two regions can ever commit conflicting values. Each region is only 99.9% available, so a design that depends on one specific region (options B and, in effect, D) cannot reach 99.99%, and designs that accept conflicting writes (C and D) fail the correctness requirement outright. Here's why it stands out:</p>
+        <ul>
+          <li><strong>The availability math works:</strong> If each region is 99.9% available and failures are independent, the chance that at least two of three are up is about 99.9997%, comfortably above the 99.99% target. A single-primary design is capped near 99.9% plus whatever failover quality adds.</li>
+          <li><strong>Conflicts are prevented, not repaired:</strong> A consensus log gives every update a single total order, so two clients cannot both 'win' with different values. Add a version or compare-and-set precondition on writes to turn lost updates into explicit, retryable failures.</li>
+          <li><strong>Write cost fits the load:</strong> A commit costs roughly one round trip to the nearest majority of regions, commonly tens to a couple of hundred milliseconds depending on geography. At hundreds of writes per second this is fine, and it is only paid on writes.</li>
+          <li><strong>Fast reads where it matters:</strong> Most reads are served from the local replica with a session token (the client presents the last commit version it saw, and the replica answers only once it has applied that version). That gives read-your-writes and monotonic reads at local latency. A fully linearizable read costs a check with the leader (a read-index round trip) or a leader lease, so reserve it for calls that explicitly need it.</li>
+          <li><strong>Automatic failover without split brain:</strong> Leader election requires a majority, so a partitioned minority cannot elect a second leader or accept writes.</li>
+          <li><strong>Proven at scale:</strong> Google Spanner and CockroachDB replicate across regions with Paxos/Raft-style consensus, and etcd and Consul use Raft for configuration-style data. The Raft paper (Ongaro and Ousterhout, 2014) and its follow-up thesis describe the read-index and lease-read approaches to linearizable reads.</li>
+        </ul>
+        <p>A well-run deployment uses <strong>3 or 5 voters across independent regions</strong>, <strong>version-checked (compare-and-set) writes</strong>, <strong>session-token local reads with an explicit linearizable option</strong>, <strong>leader placement near the write hot spots</strong>, and <strong>client caches with a last-known-good fallback</strong>. Track commit latency, leader elections, replication lag, quorum health, and the fraction of reads served locally; test with game days that kill a region and partition links.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏢</span>
+            <h4>B — Single Primary + Passive Standby</h4>
+          </div>
+          <p>One writable region caps availability near that region's own 99.9%, and failover to a passive standby takes time and, without a consensus-based election, risks <strong>split brain</strong> (two primaries accepting writes). Reads from stale replicas also contradict the strict-consistency requirement, and users far from the primary pay a cross-region round trip on every write. <strong>Caveat:</strong> for a regional or lower-SLO product where an occasional minutes-long write outage is acceptable, this is much simpler and cheaper to operate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>C — Active-Active + LWW/CRDT</h4>
+          </div>
+          <p>Accepting writes everywhere and reconciling later means <strong>conflicts are allowed to happen</strong>. Last-writer-wins silently discards one of two concurrent updates (and depends on clock quality), and CRDTs merge values rather than guarantee that a business rule holds. Both violate the 'no conflicting or lost updates' requirement for settings that must be exact. <strong>Caveat:</strong> CRDTs are an excellent fit for naturally mergeable data (counters, sets, presence), just not for values where only one update may win.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌍</span>
+            <h4>D — Region-Local Primaries + LWW</h4>
+          </div>
+          <p>This makes the same trade as C with weaker guarantees: asynchronous cross-region replication means <strong>acknowledged writes can be lost</strong> if a region fails before replicating, and LWW can overwrite newer intent with older. It is attractive for latency but explicitly gives up strict consistency, so it cannot meet the requirements as stated. <strong>Caveat:</strong> if the requirement were relaxed to 'eventual consistency is fine', this would be a reasonable low-latency choice.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Multi-Region Quorum (Raft/Paxos) ✓</h4>
+          </div>
+          <p>A 3-region majority-quorum cluster (Paxos/Raft) where a write commits only after a majority of regions acknowledge it. Reads are served from local replicas, using leader-aware redirects or session tok</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Consistency</th><th>Availability vs 99.99% SLO</th><th>Local Read Latency</th><th>Write Latency</th><th>Data-Loss Risk on Region Failure</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Multi-Region Quorum ✓</td><td>Strict, no conflicts ✅</td><td>Meets target if regions are independent ✅</td><td>Low with session tokens ✅</td><td>Cross-region majority round trip ⚠</td><td>None for committed writes ✅</td><td>High ⚠</td></tr>
+            <tr><td class="tt-option">B — Single Primary + Standby</td><td>Strict on primary, stale on replicas ⚠</td><td>Near single-region ceiling ❌</td><td>Low but stale ⚠</td><td>Remote for most users ⚠</td><td>Low if synchronous, but failover and split-brain risk ⚠</td><td>Low–Medium ✅</td></tr>
+            <tr><td class="tt-option">C — Active-Active LWW/CRDT</td><td>Conflicts allowed ❌</td><td>Very high ✅</td><td>Very low ✅</td><td>Very low ✅</td><td>Lost updates possible ❌</td><td>High (merge logic) ⚠</td></tr>
+            <tr><td class="tt-option">D — Region-Local Primaries + LWW</td><td>Eventual, last-writer-wins ❌</td><td>High ✅</td><td>Very low ✅</td><td>Very low ✅</td><td>Acknowledged writes can be lost ❌</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Multi-Region Quorum</h4>
+          </div>
+          <p>Small, high-value, correctness-critical data (configuration, feature flags, account settings, metadata, locks) that needs both strong consistency and survival of a regional outage, with a moderate write rate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Single Primary + Standby</h4>
+          </div>
+          <p>Single-region-centric products or tools with relaxed availability targets, where a short write outage during failover is acceptable and operational simplicity matters more.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Active-Active LWW/CRDT</h4>
+          </div>
+          <p>Naturally mergeable data (counters, sets, collaborative text, presence) that needs local-write latency in every region and can tolerate eventual convergence.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Region-Local Primaries + LWW</h4>
+          </div>
+          <p>High-volume, low-stakes data (activity, caches, telemetry) where occasional lost or overwritten updates are acceptable and local latency matters most.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Local Read with Session Token (and Optional Linearizable Read)</h3>
+        <p>Most reads are answered locally once the replica has caught up to the client's last-seen version; only explicit linearizable reads pay a leader round trip:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client in Region B
+    participant L as Local Replica
+    participant D as Leader in Region A
+    C-&gt;&gt;L: 1. GET setting with minVersion from session token
+    alt Replica has applied minVersion
+        L--&gt;&gt;C: 2a. Value and version, served locally
+    else Replica is behind
+        L-&gt;&gt;L: 2b. Wait briefly for apply
+        L--&gt;&gt;C: 2c. Value and version, or redirect to leader
+    end
+    opt Caller requires a linearizable read
+        C-&gt;&gt;L: 3. GET with linearizable flag
+        L-&gt;&gt;D: 4. Read-index request
+        D--&gt;&gt;L: 5. Commit index confirmed after quorum heartbeat
+        L--&gt;&gt;C: 6. Fresh value
+    end">sequenceDiagram
+    participant C as Client in Region B
+    participant L as Local Replica
+    participant D as Leader in Region A
+    C-&gt;&gt;L: 1. GET setting with minVersion from session token
+    alt Replica has applied minVersion
+        L--&gt;&gt;C: 2a. Value and version, served locally
+    else Replica is behind
+        L-&gt;&gt;L: 2b. Wait briefly for apply
+        L--&gt;&gt;C: 2c. Value and version, or redirect to leader
+    end
+    opt Caller requires a linearizable read
+        C-&gt;&gt;L: 3. GET with linearizable flag
+        L-&gt;&gt;D: 4. Read-index request
+        D--&gt;&gt;L: 5. Commit index confirmed after quorum heartbeat
+        L--&gt;&gt;C: 6. Fresh value
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Version-Checked Writes and Session-Token Reads</h3>
+        <p>Writes carry an expected version so conflicting updates fail explicitly; reads use a session token for local, read-your-writes access, with a leader read only when required and a last-known-good fallback when the majority is unreachable:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Client SDK keeps the highest commit version it has seen (the session token)</span></span>
+<span class="line">session.lastSeenVersion <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">putSetting</span>(key, newValue, expectedVersion):</span>
+<span class="line">    resp <span class="tk-op">=</span> anyReplica.<span class="tk-fn">write</span>(key, newValue, expectedVersion, timeout <span class="tk-op">=</span> <span class="tk-num">2s</span>)   <span class="tk-com">// non-leaders forward to the leader</span></span>
+<span class="line">    <span class="tk-kw">if</span> resp.status <span class="tk-op">==</span> VERSION_MISMATCH:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">Conflict</span>(currentVersion <span class="tk-op">=</span> resp.currentVersion)      <span class="tk-com">// caller re-reads and retries; no silent overwrite</span></span>
+<span class="line">    <span class="tk-kw">if</span> resp.status <span class="tk-op">==</span> COMMITTED:</span>
+<span class="line">        session.lastSeenVersion <span class="tk-op">=</span> <span class="tk-fn">max</span>(session.lastSeenVersion, resp.commitVersion)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">Ok</span>(resp.commitVersion)</span>
+<span class="line">    <span class="tk-kw">throw</span> Unavailable                                              <span class="tk-com">// no majority reachable: fail explicitly</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getSetting</span>(key, requireLinearizable <span class="tk-op">=</span> <span class="tk-lit">false</span>):</span>
+<span class="line">    <span class="tk-kw">if</span> requireLinearizable:</span>
+<span class="line">        <span class="tk-kw">return</span> leader.<span class="tk-fn">readIndexRead</span>(key)                           <span class="tk-com">// cross-region round trip, used rarely</span></span>
+<span class="line">    replica <span class="tk-op">=</span> <span class="tk-fn">nearestHealthyReplica</span>()</span>
+<span class="line">    resp <span class="tk-op">=</span> replica.<span class="tk-fn">read</span>(key, minVersion <span class="tk-op">=</span> session.lastSeenVersion, maxWait <span class="tk-op">=</span> <span class="tk-num">30ms</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> resp.status <span class="tk-op">==</span> OK:</span>
+<span class="line">        session.lastSeenVersion <span class="tk-op">=</span> <span class="tk-fn">max</span>(session.lastSeenVersion, resp.version)</span>
+<span class="line">        localCache.<span class="tk-fn">put</span>(key, resp)                                  <span class="tk-com">// last-known-good copy</span></span>
+<span class="line">        <span class="tk-kw">return</span> resp.value</span>
+<span class="line">    <span class="tk-kw">if</span> resp.status <span class="tk-op">==</span> BEHIND:</span>
+<span class="line">        <span class="tk-kw">return</span> leader.<span class="tk-fn">readIndexRead</span>(key)                           <span class="tk-com">// fall back to a fresh read</span></span>
+<span class="line">    cached <span class="tk-op">=</span> localCache.<span class="tk-fn">get</span>(key)</span>
+<span class="line">    <span class="tk-kw">if</span> cached <span class="tk-op">!=</span> <span class="tk-lit">null</span>: <span class="tk-kw">return</span> cached.value flaggedAs STALE         <span class="tk-com">// degraded mode, surfaced to the caller</span></span>
+<span class="line">    <span class="tk-kw">throw</span> Unavailable</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Server side, on the leader</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleWrite</span>(key, newValue, expectedVersion):</span>
+<span class="line">    current <span class="tk-op">=</span> store.<span class="tk-fn">get</span>(key)</span>
+<span class="line">    <span class="tk-kw">if</span> current.version <span class="tk-op">!=</span> expectedVersion:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">VERSION_MISMATCH</span>(current.version)</span>
+<span class="line">    entry <span class="tk-op">=</span> log.<span class="tk-fn">append</span>(key, newValue, current.version <span class="tk-op">+</span> <span class="tk-num">1</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">replicateToMajority</span>(entry, timeout <span class="tk-op">=</span> <span class="tk-num">1s</span>):                   <span class="tk-com">// 2 of 3 regions</span></span>
+<span class="line">        store.<span class="tk-fn">apply</span>(entry)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">COMMITTED</span>(entry.version)</span>
+<span class="line">    <span class="tk-kw">return</span> NOT_COMMITTED                                           <span class="tk-com">// leader lost its quorum and steps down</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Assuming linearizable reads are free:</strong> Reading from any follower can return stale data. Use read-index, leader leases, or session tokens, and measure the latency of each.</li>
+          <li><strong>Witness or tie-breaker that is not independent:</strong> Quorum needs independent failure domains; a witness in the same provider zone as a voter defeats the purpose.</li>
+          <li><strong>Ignoring correlated failures:</strong> Multiplying 99.9% three times assumes independence; shared deployments, DNS, and control planes break that assumption.</li>
+          <li><strong>Writes without preconditions:</strong> Two clients can still overwrite each other in sequence. Require a version (compare-and-set) on updates so stale writers get a clear conflict error.</li>
+          <li><strong>Leader far from the write traffic:</strong> Every write then pays an extra long-haul hop. Place or move leaders near the heaviest writers.</li>
+          <li><strong>No client-side fallback:</strong> If the SDK has no last-known-good cache, a quorum outage becomes a full outage for every dependent service.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams <strong>state the consistency contract per operation</strong> and choose the cheapest mechanism that meets it:</p>
+        <ul>
+          <li><strong>Step 0 — Classify operations:</strong> Which writes must never conflict? Which reads must be fresh, and which only need read-your-writes? Most settings reads are the latter.</li>
+          <li><strong>Step 1 — Consensus core:</strong> Run a 3-region (or 5-region) Raft/Paxos group, or use a managed database that provides it, for the authoritative copy.</li>
+          <li><strong>Step 2 — Fast reads:</strong> Serve reads from local replicas with session tokens; offer a linearizable read option for the rare calls that need it.</li>
+          <li><strong>Step 3 — Client and edge caching:</strong> Cache with versions and push invalidation (watch streams), and keep a last-known-good copy so a client survives a quorum outage.</li>
+          <li><strong>Step 4 — Define the SLO honestly:</strong> Specify what happens for clients stuck in a minority partition (read-only with possibly stale data, or explicit errors) and test it.</li>
+          <li><strong>Step 5 — Chaos testing:</strong> Regularly fail a region and partition links to verify leader election time, write availability, and data safety.</li>
+        </ul>
+        <p>Strong consistency and high availability coexist only up to what a majority can reach; be explicit about that boundary.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When the requirement is <strong>no conflicting or lost updates</strong> plus <strong>availability above a single region</strong>, use <strong>majority-quorum consensus across three or more independent regions</strong>. Serve most reads locally with session tokens, spend a cross-region round trip only on writes and on reads that truly need linearizability, and be explicit about behavior for clients cut off from the majority.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hash vs Tree: Selecting the index for a high-throughput feed service — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">19 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Indexing</span>
+      <span class="tag tag--green">Hash vs Tree</span>
+      <span class="tag tag--amber">High Throughput</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Hash vs Tree: Selecting the index for a high-throughput feed service</h1>
+      <p class="q-scenario"><strong>Sofia</strong> leads the team building a worldwide <strong>user activity feed</strong>. The service must absorb <strong>millions of writes per second</strong>, serve <strong>point reads in under 10 ms</strong> (a user's latest events), support <strong>range queries</strong> (top-K within a period, events within a time window), and <strong>rebalance easily</strong> as nodes are added. It must also stay <strong>highly available</strong>, <strong>observable</strong>, and <strong>resilient to node failures</strong>. Most reads and range queries are scoped to <strong>a single user's feed</strong>, while a smaller share are cross-user or global analytics queries. She must choose between hash partitioning, an ordered (tree) index, or a mix of the two.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A purely hash-partitioned key-value store: consistent hashing by userID, an in-memory hash table per node with disk snapshots, O(1) point reads and easy rebalancing via virtual nodes, but range queries must scan keys across the relevant nodes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">A purely ordered/range-sharded store: contiguous (for example, time-prefixed) key ranges with a distributed ordered index or B-tree so range queries touch few shards, with strict leader-based consistency per shard for exact rankings and ordered scans.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">A hybrid: consistent hashing distributes data evenly for balanced writes, with an ordered index (LSM or B-tree) inside each shard for efficient local range queries. Point lookups go straight to the hashed shard, range queries fan out to the shards covering the range, and per-shard replication plus background rebalancing use routing metadata and virtual nodes.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">A two-tier design: an in-memory hash cache for fast point reads in front of an asynchronously updated distributed ordered (tree) store, with writes applied synchronously to the cache and a write-ahead log and a background process updating the ordered index, so range results are eventually consistent.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Hash Partitioning + Ordered Index per Shard</h3>
+        <p>The workload has two access patterns that pull in opposite directions: <strong>massive, evenly spread writes and point lookups</strong> favor hash partitioning, while <strong>ordered scans by time</strong> favor an ordered index. The hybrid gets both by splitting the two jobs: hash the <em>partition key</em> (userID, optionally with a time bucket) to spread load and make rebalancing a matter of moving virtual nodes, then keep events <em>sorted by time inside each partition</em> with an LSM-tree (or B-tree). A user's latest events become a single-shard, reverse-ordered range read, which is both a point-lookup-latency operation and a range query. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Write scalability:</strong> Hashing spreads writes uniformly across shards, avoiding the 'newest range' hotspot that time-ordered sharding creates. LSM-trees turn random writes into sequential appends (commit log plus memtable, flushed to sorted files), which is why they are the usual choice for millions of writes per second.</li>
+          <li><strong>Fast point and per-user range reads:</strong> With partition key = userID and clustering key = event time (descending), 'latest N events for user X' is one shard and one contiguous scan. Bloom filters, block caches, and SSDs commonly keep this in single-digit milliseconds, though that depends on compaction health and cache hit rate.</li>
+          <li><strong>Rebalancing:</strong> Consistent hashing with virtual nodes moves only a small fraction of data when nodes join or leave, and it can run in the background using routing metadata, which keeps the cluster available during scaling.</li>
+          <li><strong>Availability:</strong> Per-shard replication (typically a replication factor of 3 with quorum or leader-based writes) tolerates node loss without a global coordinator or a single hot range leader.</li>
+          <li><strong>Why not a pure ordered store?</strong> Range sharding by time sends every new write to the most recent range, so one shard's leader becomes the cluster's write ceiling. Splitting hot ranges mitigates this, but only after the hotspot forms.</li>
+          <li><strong>Proven at scale:</strong> Cassandra/ScyllaDB (partition key plus clustering columns), DynamoDB (partition key plus sort key), and Discord's published message-storage design (partition by channel and time bucket, ordered by a time-sortable ID) all use this hash-then-order structure.</li>
+        </ul>
+        <p>A robust design uses <strong>(userID, time bucket) as the partition key</strong>, <strong>event time as a descending clustering key</strong>, <strong>replication factor 3 with quorum or leader-based writes</strong>, and <strong>virtual nodes with background streaming for rebalancing</strong>. Track per-partition size, hot-key skew, compaction backlog, and p99 point and range latency; if most queries turn out to be global rather than per-user, add a secondary index or analytics store instead of forcing the primary feed to answer them.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔑</span>
+            <h4>A — Pure Hash-Partitioned Store</h4>
+          </div>
+          <p>Hashing gives O(1) point reads and the easiest rebalancing, but it <strong>destroys key order</strong>, so any time-window or top-K query becomes a scan of every candidate key. Holding all data in per-node in-memory hash tables with periodic disk snapshots also ties capacity to RAM and risks losing recent writes between snapshots unless a write-ahead log is added. <strong>Caveat:</strong> if the feed only needed 'get by exact key' and never ordered or range access, a hash store would be the simplest and fastest option.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📏</span>
+            <h4>B — Pure Range-Sharded Store</h4>
+          </div>
+          <p>Contiguous time-prefixed keys make range scans cheap, but <strong>all new writes land on the newest range</strong>, so one shard absorbs the entire write stream (a classic hotspot). Strict leader-based consistency on each shard adds write latency and makes that hot leader an even bigger bottleneck. Rebalancing by splitting ranges is reactive and heavier than moving virtual nodes. <strong>Caveat:</strong> range sharding works well when the key is <em>not</em> monotonically increasing (for example, prefixed by tenant or user), which is essentially the hybrid design by another name.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>D — Hash Cache + Async Ordered Store</h4>
+          </div>
+          <p>Two tiers mean <strong>two sources of truth</strong>: the cache and the ordered store can disagree, range results lag behind point reads, and the write path must keep the cache, the log, and the index in step. A cache also does not remove the need for the underlying store to handle millions of writes per second, and cold starts or misses fall back to a slower tier at the worst moment. <strong>Caveat:</strong> a cache is a fine <em>addition</em> on top of the hybrid design for very hot users, as long as the durable store remains the source of truth.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Hash Partitioning + Ordered Index per Shard ✓</h4>
+          </div>
+          <p>A hybrid: consistent hashing distributes data evenly for balanced writes, with an ordered index (LSM or B-tree) inside each shard for efficient local range queries. Point lookups go straight to the ha</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Throughput</th><th>Point-Read Latency</th><th>Range-Query Efficiency</th><th>Rebalancing Ease</th><th>Hotspot Risk</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Pure Hash Store</td><td>Very high ✅</td><td>Very low ✅</td><td>Poor (scan) ❌</td><td>Easy ✅</td><td>Low ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Pure Range-Sharded</td><td>Limited by newest range ❌</td><td>Low ✅</td><td>Excellent ✅</td><td>Medium (range splits) ⚠</td><td>High (monotonic keys) ❌</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Hash + Ordered per Shard ✓</td><td>Very high ✅</td><td>Low ✅</td><td>Good per user, scatter-gather for global ⚠</td><td>Easy ✅</td><td>Low–Medium (needs buckets) ⚠</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Cache + Async Ordered</td><td>High, but cache and log both on the write path ⚠</td><td>Very low on cache hit ✅</td><td>Eventually consistent ⚠</td><td>Medium ⚠</td><td>Medium ⚠</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Pure Hash Store</h4>
+          </div>
+          <p>Pure key-value access by exact key (sessions, tokens, counters) with no ordered or range access, and data that fits the memory budget or an on-disk hash-based engine.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Pure Range-Sharded Store</h4>
+          </div>
+          <p>Workloads dominated by ordered scans across a global key space where writes are already spread by the key itself (for example, keys prefixed by tenant), with a mature range-split and load-based rebalancing story.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hash + Ordered per Shard</h4>
+          </div>
+          <p>High-volume, per-entity time-series or event data with both point lookups and per-entity range scans: activity feeds, messages, IoT telemetry, audit logs.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Cache + Async Ordered Store</h4>
+          </div>
+          <p>Extremely read-heavy hot subsets, where a cache sits on top of a durable ordered store and the team can tolerate and monitor cache and index divergence.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Hybrid Routing: Hash to the Shard, Order Inside the Shard</h3>
+        <p>Point and per-user range reads hash to one shard; global range queries fan out and merge:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TD
+    C[Client] --&gt; R[Router with routing metadata]
+    R --&gt;|point read or per-user range| H[Hash of userID and time bucket]
+    H --&gt; S[Owning shard and replicas]
+    S --&gt; L[LSM index sorted by event time descending]
+    L --&gt; C
+    R --&gt;|global range query| F[Fan out to all shards that may hold data]
+    F --&gt; SA[Shard 1]
+    F --&gt; SB[Shard 2]
+    F --&gt; SC[Shard N]
+    SA --&gt; M[Merge partial results and top-K]
+    SB --&gt; M
+    SC --&gt; M
+    M --&gt; C">flowchart TD
+    C[Client] --&gt; R[Router with routing metadata]
+    R --&gt;|point read or per-user range| H[Hash of userID and time bucket]
+    H --&gt; S[Owning shard and replicas]
+    S --&gt; L[LSM index sorted by event time descending]
+    L --&gt; C
+    R --&gt;|global range query| F[Fan out to all shards that may hold data]
+    F --&gt; SA[Shard 1]
+    F --&gt; SB[Shard 2]
+    F --&gt; SC[Shard N]
+    SA --&gt; M[Merge partial results and top-K]
+    SB --&gt; M
+    SC --&gt; M
+    M --&gt; C</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Hash-Then-Order Key Design: Write, Latest-N Read, and Global Range Query</h3>
+        <p>Partition by (userID, day bucket) so the common reads stay on one shard, order events by time inside the partition, and treat global queries as an explicit scatter-gather:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Partition key = (userId, dayBucket) hashed to a shard; clustering key = eventTime DESC</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">partitionKey</span>(userId, ts):</span>
+<span class="line">    <span class="tk-kw">return</span> userId <span class="tk-op">+</span> <span class="tk-str">&#x27;#&#x27;</span> <span class="tk-op">+</span> <span class="tk-fn">formatDate</span>(ts, <span class="tk-str">&#x27;yyyyMMdd&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">writeEvent</span>(userId, event):</span>
+<span class="line">    pk <span class="tk-op">=</span> <span class="tk-fn">partitionKey</span>(userId, event.ts)</span>
+<span class="line">    shard <span class="tk-op">=</span> ring.<span class="tk-fn">lookup</span>(<span class="tk-fn">hash64</span>(pk))                        <span class="tk-com">// consistent hashing with virtual nodes</span></span>
+<span class="line">    shard.leader.<span class="tk-fn">append</span>(pk, clustering <span class="tk-op">=</span> (event.ts DESC, event.id), value <span class="tk-op">=</span> event, consistency <span class="tk-op">=</span> QUORUM)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">latestEvents</span>(userId, n):</span>
+<span class="line">    results <span class="tk-op">=</span> []</span>
+<span class="line">    bucket <span class="tk-op">=</span> <span class="tk-fn">today</span>()</span>
+<span class="line">    <span class="tk-kw">while</span> <span class="tk-fn">len</span>(results) <span class="tk-op">&lt;</span> n <span class="tk-kw">and</span> bucket <span class="tk-op">&gt;=</span> retentionLimit:   <span class="tk-com">// walk back one bucket at a time</span></span>
+<span class="line">        pk <span class="tk-op">=</span> userId <span class="tk-op">+</span> <span class="tk-str">&#x27;#&#x27;</span> <span class="tk-op">+</span> <span class="tk-fn">format</span>(bucket)</span>
+<span class="line">        rows <span class="tk-op">=</span> ring.<span class="tk-fn">lookup</span>(<span class="tk-fn">hash64</span>(pk)).replica.<span class="tk-fn">readRange</span>(pk, limit <span class="tk-op">=</span> n <span class="tk-op">-</span> <span class="tk-fn">len</span>(results))   <span class="tk-com">// newest-first scan</span></span>
+<span class="line">        results.<span class="tk-fn">addAll</span>(rows)</span>
+<span class="line">        bucket <span class="tk-op">=</span> bucket <span class="tk-op">-</span> <span class="tk-num">1</span> day</span>
+<span class="line">    <span class="tk-kw">return</span> results                                         <span class="tk-com">// usually one shard, one contiguous scan</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">eventsInWindow</span>(userId, <span class="tk-kw">from</span>, to):</span>
+<span class="line">    rows <span class="tk-op">=</span> []</span>
+<span class="line">    <span class="tk-kw">for</span> bucket <span class="tk-kw">in</span> <span class="tk-fn">dayBuckets</span>(to down to <span class="tk-kw">from</span>):             <span class="tk-com">// newest bucket first</span></span>
+<span class="line">        pk <span class="tk-op">=</span> userId <span class="tk-op">+</span> <span class="tk-str">&#x27;#&#x27;</span> <span class="tk-op">+</span> <span class="tk-fn">format</span>(bucket)</span>
+<span class="line">        rows.<span class="tk-fn">addAll</span>(ring.<span class="tk-fn">lookup</span>(<span class="tk-fn">hash64</span>(pk)).replica.<span class="tk-fn">readRange</span>(pk, ts <span class="tk-op">&gt;=</span> <span class="tk-kw">from</span> <span class="tk-kw">and</span> ts <span class="tk-op">&lt;=</span> to))</span>
+<span class="line">    <span class="tk-kw">return</span> rows</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">globalTopK</span>(window, k, scoreFn):</span>
+<span class="line">    <span class="tk-com">// Rare and expensive: prefer a pre-aggregated rollup store when possible</span></span>
+<span class="line">    shards <span class="tk-op">=</span> ring.<span class="tk-fn">allShards</span>()                              <span class="tk-com">// hashing means any shard may hold data for the window</span></span>
+<span class="line">    partials <span class="tk-op">=</span> <span class="tk-fn">parallelMap</span>(shards, shard <span class="tk-op">-&gt;</span> shard.<span class="tk-fn">localTopK</span>(window, k, scoreFn), timeout <span class="tk-op">=</span> <span class="tk-num">200ms</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">mergeTopK</span>(partials, k)                          <span class="tk-com">// exact for per-event scores; per-user aggregates need a rollup</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Partitioning by raw timestamp:</strong> Using the timestamp as the partition key recreates the hot-newest-range problem inside a hashed system. Hash a stable entity (userID) and use time only as a clustering key or a bucket.</li>
+          <li><strong>Unbounded partitions:</strong> A heavy user's partition grows forever, hurting compaction and repair. Add a time bucket (day or hour) and, for reads that cross buckets, query buckets newest-first.</li>
+          <li><strong>Scatter-gather on the hot path:</strong> Making the common feed read fan out to many shards inflates p99 latency. Make sure the common query is single-partition.</li>
+          <li><strong>Ignoring compaction:</strong> A compaction backlog causes read amplification and latency spikes. Alert on pending compactions and files touched per read.</li>
+          <li><strong>No virtual nodes or routing metadata:</strong> Plain modulo hashing reshuffles most data when nodes change. Use consistent hashing with virtual nodes and a versioned routing table.</li>
+          <li><strong>Skipping skew monitoring:</strong> Averages hide hot users. Track per-partition write rate and size, and the top-N hottest keys.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams model <strong>the queries first</strong>, then choose the key structure. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — List the queries:</strong> Write down every read pattern (latest N per user, time window per user, global top-K) with its latency target and frequency. The key design follows from them.</li>
+          <li><strong>Step 1 — Choose the partition key:</strong> Hash a key that spreads writes and keeps the common read in one place (userID, plus a time bucket for heavy users).</li>
+          <li><strong>Step 2 — Choose the clustering order:</strong> Sort by event time descending inside the partition so 'latest N' is a short forward scan.</li>
+          <li><strong>Step 3 — Replication and consistency:</strong> Use replication factor 3 across zones; choose quorum or leader-based writes and local reads for the feed, since a feed tolerates slight staleness.</li>
+          <li><strong>Step 4 — Rollups for global queries:</strong> Stream events into a separate store (time-series or OLAP) for cross-user top-K and analytics.</li>
+          <li><strong>Step 5 — Cache hot users:</strong> Add a small cache for the hottest feeds only after measuring hit rate and tail latency.</li>
+        </ul>
+        <p>Let the query patterns, not the data structure's reputation, pick the index.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Use <strong>hashing to distribute</strong> and <strong>ordering to scan</strong>: hash-partition by user (plus a time bucket) to balance writes and rebalancing, and keep an LSM-tree or B-tree ordered by time inside each shard so feed reads and per-user range queries stay on one shard. Treat global cross-user range queries as a separate scatter-gather or rollup problem.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

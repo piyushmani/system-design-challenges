@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rohan&#x27;s Dilemma: How to Mock Dependencies Without Risking Production — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">18 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Testing</span>
+      <span class="tag tag--green">Mocking</span>
+      <span class="tag tag--amber">Production Safety</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Rohan&#x27;s Dilemma: How to Mock Dependencies Without Risking Production</h1>
+      <p class="q-scenario"><strong>Rohan</strong>, a backend engineer on a high-volume <strong>order-processing microservice</strong>, depends on an internal HTTP <strong>Auth service</strong>, an external HTTP <strong>payment provider</strong>, and a <strong>Kafka</strong> cluster. The team wants a dependency injection (DI) and testing strategy that keeps <strong>unit tests fast</strong>, catches <strong>integration breakages early</strong>, and gives confidence in non-functional behavior such as <strong>retries, latency handling, and eventual consistency</strong>, while keeping CI stable and <strong>never touching production systems or credentials</strong>. He must choose how to use mocks and DI across the testing pyramid.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Centralized service virtualization: one shared mock server for all tests and environments, a DI-injected client pointing at it, and a few end-to-end tests against production-like infrastructure.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Integration-centric: no mocking in CI. DI supplies real clients that talk to sandboxed services (database, payment sandbox, Kafka) in a shared staging environment, and the full integration suite runs on every commit.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">DI with simple in-process stubs or in-memory fakes for unit tests only, relying on ad-hoc or manual smoke tests to verify integrations.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Hybrid: DI-supplied, behaviorally accurate test doubles for unit tests, consumer-driven contract tests (for example Pact) for service APIs, and regular ephemeral integration tests in CI (testcontainers or ephemeral clusters) to verify failure scenarios and non-functional behavior.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Hybrid Pyramid: Fakes, Contracts, Ephemeral Integration</h3>
+        <p>No single test type answers every question Rohan has. Unit tests prove <em>logic</em>, contract tests prove the <em>agreement between services</em>, and ephemeral integration tests prove <em>behavior on real infrastructure and under failure</em>. DI is the seam that lets each layer swap in the right implementation without changing production code. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Fast feedback where it matters:</strong> Unit tests inject in-memory fakes and run in milliseconds, so developers run them constantly. The slower, realistic tests are limited to a smaller, focused set.</li>
+          <li><strong>Early detection of integration drift:</strong> Consumer-driven contracts (Pact) record what Rohan's service actually expects from Auth and the payment API, and the provider verifies them in its own CI. A breaking change fails a build instead of production.</li>
+          <li><strong>Realistic non-functional testing:</strong> Testcontainers give a real Kafka and database per run, and a fault-injecting proxy (for example Toxiproxy) or a programmable HTTP stub can simulate timeouts, 5xx errors, and slow responses to verify retries, idempotency keys, and consumer redelivery.</li>
+          <li><strong>Deterministic, isolated CI:</strong> Each run gets its own throwaway infrastructure, so there is no shared-state flakiness and no chance of hitting production. Environment-specific wiring lives only in the DI composition root.</li>
+          <li><strong>Honest about the external provider:</strong> The payment provider cannot be started locally, so a contract-verified stub (plus the vendor sandbox in a small scheduled suite) covers it without making every commit depend on a third party.</li>
+        </ul>
+        <p>A good setup has a <strong>single DI composition root per environment</strong>, <strong>contract verification as a merge gate</strong>, <strong>fault-injection tests for retries and timeouts</strong>, and a tiny <strong>post-deploy smoke test</strong>. Track <strong>test duration, flake rate, and escaped integration defects</strong> to confirm the pyramid is balanced.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🎭</span>
+            <h4>A — Centralized Service Virtualization</h4>
+          </div>
+          <p>A shared mock server is fast and convenient, but it becomes a <strong>shared dependency with shared state</strong>: one team's change to canned responses breaks another team's tests, and the responses are only as accurate as someone's last update. It has no automatic link to the real provider, so drift goes unnoticed. <strong>Caveat:</strong> service virtualization helps for third-party APIs you cannot run, as long as the stubs are verified against real behavior.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏗️</span>
+            <h4>B — Integration-Centric on Shared Staging</h4>
+          </div>
+          <p>Running everything against shared staging on every commit is slow, flaky (shared data, rate limits, outages), and poor for failure injection, since you cannot make a real payment sandbox time out on demand. Failures become ambiguous (your bug, someone else's deploy, or the environment), which erodes trust in CI. It also couples every commit to environments the team does not control.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧪</span>
+            <h4>C — Stubs Only + Manual Smoke Tests</h4>
+          </div>
+          <p>This gives the fastest CI but pushes risk to the end of the lifecycle. Serialization mismatches, header or auth changes, Kafka redelivery behavior, and retry bugs only show up in staging or production. Manual smoke tests are not repeatable and do not scale with a high-volume service.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Hybrid Pyramid: Fakes, Contracts, Ephemeral Integration ✓</h4>
+          </div>
+          <p>Hybrid: DI-supplied, behaviorally accurate test doubles for unit tests, consumer-driven contract tests (for example Pact) for service APIs, and regular ephemeral integration tests in CI (testcontainer</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>CI Speed</th><th>Integration Bug Detection</th><th>Failure and Non-Functional Coverage</th><th>CI Stability (Flakiness)</th><th>Production Safety</th><th>Maintenance Effort</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Shared Service Virtualization</td><td>Fast ✅</td><td>Moderate ⚠ (drift risk)</td><td>Limited ❌</td><td>Medium ⚠ (shared state)</td><td>Good ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — Integration-Centric Staging</td><td>Slow ❌</td><td>High ✅</td><td>Hard to inject faults ⚠</td><td>Poor ❌</td><td>Risky if misconfigured ⚠</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">C — Stubs Only + Manual Smoke</td><td>Very fast ✅</td><td>Poor ❌</td><td>Poor ❌</td><td>Excellent ✅</td><td>Good ✅</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Hybrid Pyramid ✓</td><td>Fast units, moderate integration ✅</td><td>High ✅</td><td>High ✅</td><td>Good ✅</td><td>Good ✅</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Shared Service Virtualization</h4>
+          </div>
+          <p>You must test against third-party APIs you cannot run locally and need a stable stub, ideally contract-verified and versioned per team.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Integration-Centric Staging</h4>
+          </div>
+          <p>A small system with few dependencies and a dedicated, stable test environment, or as a limited pre-release validation stage.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Stubs Only + Manual Smoke</h4>
+          </div>
+          <p>Prototypes or low-risk internal tools where integration failures are cheap and late detection is acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Hybrid Pyramid</h4>
+          </div>
+          <p>A multi-service, high-volume system with internal and external dependencies, where speed, early integration feedback, and failure-mode confidence are all required (this scenario).</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> One Service, Four Wirings</h3>
+        <p>The same service code runs unchanged in every layer. Only the injected implementations and the gate that consumes the result change:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    S[OrderService with injected AuthClient, PaymentGateway and EventPublisher]
+    S --&gt; U[Unit tests - in-memory scripted fakes]
+    S --&gt; K[Contract tests - Pact stubs and provider verification]
+    S --&gt; I[Integration tests - Testcontainers Kafka and DB plus fault-injecting proxy]
+    S --&gt; P[Production - real clients]
+    U --&gt; G1[Every commit - seconds]
+    K --&gt; G2[Merge gate - can-i-deploy]
+    I --&gt; G3[CI pipeline - minutes, parallel]
+    P --&gt; G4[Canary and post-deploy smoke checks]">flowchart LR
+    S[OrderService with injected AuthClient, PaymentGateway and EventPublisher]
+    S --&gt; U[Unit tests - in-memory scripted fakes]
+    S --&gt; K[Contract tests - Pact stubs and provider verification]
+    S --&gt; I[Integration tests - Testcontainers Kafka and DB plus fault-injecting proxy]
+    S --&gt; P[Production - real clients]
+    U --&gt; G1[Every commit - seconds]
+    K --&gt; G2[Merge gate - can-i-deploy]
+    I --&gt; G3[CI pipeline - minutes, parallel]
+    P --&gt; G4[Canary and post-deploy smoke checks]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> DI Composition Roots and a Fault-Injection Integration Test</h3>
+        <p>One interface, several wirings. Unit tests inject a scriptable fake, integration tests inject the real client against throwaway infrastructure with injected faults, and production wires the real endpoint:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">interface PaymentGateway:</span>
+<span class="line">    <span class="tk-fn">charge</span>(orderId, amountCents, idempotencyKey) <span class="tk-op">-&gt;</span> ChargeResult    <span class="tk-com">// may throw Timeout, ServerError</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Production composition root ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">buildProd</span>(config):</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-kw">new</span> <span class="tk-fn">OrderService</span>(</span>
+<span class="line">        auth     <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-fn">HttpAuthClient</span>(config.authUrl, timeout <span class="tk-op">=</span> <span class="tk-num">300ms</span>),</span>
+<span class="line">        payments <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-fn">HttpPaymentGateway</span>(config.paymentUrl, secret <span class="tk-op">=</span> config.paymentKey),</span>
+<span class="line">        events   <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-fn">KafkaPublisher</span>(config.kafkaBrokers))</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Unit test: scriptable fake, no network ----</span></span>
+<span class="line">test <span class="tk-str">&quot;retries once on timeout and reuses the same idempotency key&quot;</span>:</span>
+<span class="line">    payments <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-fn">FakePaymentGateway</span>()</span>
+<span class="line">    payments.<span class="tk-fn">script</span>([Timeout, <span class="tk-fn">Success</span>(chargeId <span class="tk-op">=</span> <span class="tk-str">&quot;c1&quot;</span>)])           <span class="tk-com">// first call fails, second succeeds</span></span>
+<span class="line">    service  <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-fn">OrderService</span>(<span class="tk-kw">new</span> <span class="tk-fn">FakeAuth</span>(allow <span class="tk-op">=</span> <span class="tk-lit">true</span>), payments, <span class="tk-kw">new</span> <span class="tk-fn">InMemoryPublisher</span>())</span>
+<span class="line">    result   <span class="tk-op">=</span> service.<span class="tk-fn">placeOrder</span>(order)</span>
+<span class="line">    assert result.status <span class="tk-op">==</span> PAID</span>
+<span class="line">    assert payments.calls.count <span class="tk-op">==</span> <span class="tk-num">2</span></span>
+<span class="line">    assert payments.calls[<span class="tk-num">0</span>].idempotencyKey <span class="tk-op">==</span> payments.calls[<span class="tk-num">1</span>].idempotencyKey</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Integration test: real Kafka and DB in containers, faults injected via proxy ----</span></span>
+<span class="line">test <span class="tk-str">&quot;duplicate Kafka delivery does not double-charge&quot;</span>:</span>
+<span class="line">    kafka   <span class="tk-op">=</span> Testcontainers.<span class="tk-fn">kafka</span>()</span>
+<span class="line">    db      <span class="tk-op">=</span> Testcontainers.<span class="tk-fn">postgres</span>()</span>
+<span class="line">    stub    <span class="tk-op">=</span> <span class="tk-fn">ProgrammableHttpStub</span>()                               <span class="tk-com">// verified against the Pact contract</span></span>
+<span class="line">    proxy   <span class="tk-op">=</span> <span class="tk-fn">FaultProxy</span>(stub)                                     <span class="tk-com">// can add latency, drop or reset</span></span>
+<span class="line">    service <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-fn">OrderService</span>(<span class="tk-kw">new</span> <span class="tk-fn">HttpAuthClient</span>(stub.url),</span>
+<span class="line">                               <span class="tk-kw">new</span> <span class="tk-fn">HttpPaymentGateway</span>(proxy.url),</span>
+<span class="line">                               <span class="tk-kw">new</span> <span class="tk-fn">KafkaPublisher</span>(kafka.brokers))</span>
+<span class="line">    proxy.<span class="tk-fn">addLatency</span>(<span class="tk-num">2s</span>)                                           <span class="tk-com">// forces a timeout on the first attempt</span></span>
+<span class="line">    kafka.<span class="tk-fn">publish</span>(<span class="tk-str">&quot;orders.created&quot;</span>, order)</span>
+<span class="line">    kafka.<span class="tk-fn">publish</span>(<span class="tk-str">&quot;orders.created&quot;</span>, order)                         <span class="tk-com">// simulated redelivery</span></span>
+<span class="line">    <span class="tk-fn">awaitUntil</span>(timeout <span class="tk-op">=</span> <span class="tk-num">10s</span>):                                     <span class="tk-com">// poll, never sleep</span></span>
+<span class="line">        db.<span class="tk-fn">count</span>(<span class="tk-str">&quot;payments WHERE order_id = ?&quot;</span>, order.id) <span class="tk-op">==</span> <span class="tk-num">1</span></span>
+<span class="line">    assert stub.chargeRequests.<span class="tk-fn">distinctIdempotencyKeys</span>() <span class="tk-op">==</span> <span class="tk-num">1</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Mocking everything, verifying nothing:</strong> Tests that only assert that mocks were called prove the wiring, not the behavior. Prefer fakes with real semantics and assert on outcomes.</li>
+          <li><strong>Never validating the doubles:</strong> A stub that diverges from the real API gives false confidence. Verify stubs with contract tests or recorded interactions.</li>
+          <li><strong>Letting test configuration reach production (or the reverse):</strong> Hard-coded URLs or secrets in test code risk real calls. Keep wiring in the composition root, use per-environment config, and block production hosts from the test network.</li>
+          <li><strong>Testing retries without fault injection:</strong> A retry path that never actually triggers is unproven. Simulate timeouts, 5xx errors, and duplicate Kafka deliveries, and assert the idempotency key and backoff behavior.</li>
+          <li><strong>Ignoring async and eventual consistency:</strong> Using <code>sleep()</code> in tests causes flakes. Poll with a timeout (for example Awaitility) and assert on the eventual state.</li>
+          <li><strong>Contract tests without a deploy gate:</strong> Publishing pacts without provider verification and <code>can-i-deploy</code> checks gives paperwork, not protection.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams build the pyramid <strong>bottom-up and add layers as risk justifies them</strong>. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Define seams:</strong> Put <code>AuthClient</code>, <code>PaymentGateway</code>, and <code>EventPublisher</code> behind interfaces and inject them from one composition root. No test or production code constructs HTTP or Kafka clients directly.</li>
+          <li><strong>Step 1 — Unit tests with fakes:</strong> Cover order logic, retry decisions, and idempotency with in-memory fakes that can be scripted to fail.</li>
+          <li><strong>Step 2 — Contract tests:</strong> Publish consumer contracts for Auth and payments, verify them in the providers' pipelines, and gate deploys on compatibility.</li>
+          <li><strong>Step 3 — Ephemeral integration tests:</strong> Use Testcontainers for Kafka and the database, plus a fault-injecting HTTP stub, to verify retries, timeouts, duplicate delivery, and ordering.</li>
+          <li><strong>Step 4 — Scheduled sandbox checks:</strong> Run a small suite against the payment sandbox outside the commit path (nightly or pre-release).</li>
+          <li><strong>Step 5 — Production safety nets:</strong> Use canary releases and synthetic checks, and make test configuration structurally unable to reach production endpoints or secrets.</li>
+        </ul>
+        <p>Put each risk <strong>at the cheapest layer that can catch it</strong>.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Use <strong>DI to make every dependency swappable</strong>, then combine fast fakes for logic, contract tests for service agreements, and ephemeral integration tests for failure behavior. Avoid relying on one shared mock server, shared staging, or stubs alone.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

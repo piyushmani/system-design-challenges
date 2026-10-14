@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Applying Backpressure to Bursty Mobile Telemetry Ingestion — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">20 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Backpressure</span>
+      <span class="tag tag--green">Traffic Bursts</span>
+      <span class="tag tag--amber">Resiliency</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Applying Backpressure to Bursty Mobile Telemetry Ingestion</h1>
+      <p class="q-scenario"><strong>Maya</strong>, a backend engineer, owns an ingestion service for <strong>mobile telemetry</strong>. Events arrive in <strong>large bursts</strong> (apps resuming, devices regaining connectivity), while the downstream enrichment and ML-scoring stages are <strong>stateful and much slower</strong>. During spikes, ingestion accepts events far faster than downstream can drain them, causing <strong>memory growth, long GC pauses, and intermittent outages</strong>. She needs a backpressure design that keeps the system <strong>available, observable, and predictable</strong> while giving mobile clients a decent experience. Which architectural strategy is most appropriate?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Utilize a bounded, durable message broker (such as Kafka or a persistent queue) to decouple the ingestion tier from the consumers. Apply a strict quota on the queue; when it approaches capacity, respond to mobile clients with a 429 status and a Retry-After header so they can back off exponentially. Scale downstream consumers based on lag metrics, and introduce circuit breakers, alerts, and monitoring around queue depth and consumer lag.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Maintain synchronous ingestion by keeping the mobile clients&#x27; HTTP connections open until downstream services have fully finished processing the events. Horizontally autoscale the entire pipeline and expand thread pools to handle requests inline, creating the illusion of immediate consistency for the clients.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Deploy an unbounded, large in-memory buffer at the edge layer (such as the API gateway) to absorb all traffic spikes, subsequently draining events to downstream systems as processing capacity becomes available. Depend on reactive, aggressive autoscaling if the buffers expand, tolerating increased memory usage and the potential for out-of-memory crashes during severe bursts.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Transition the architecture to a fully reactive streaming protocol (like gRPC streams or HTTP/2) so that transport-level flow-control signals from downstream processors propagate all the way back to the mobile clients. This approach dynamically slows down client transmission in real time via stream flow-control instead of queuing or dropping requests.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Bounded Durable Queue with Explicit Load Shedding (429 + Retry-After)</h3>
+        <p>The root problem is a <strong>rate mismatch with no place to put the excess</strong>: ingestion holds the backlog in heap memory. The right fix moves the backlog to a <strong>durable, bounded buffer</strong> and gives the system an <strong>explicit overload signal</strong> to push back on producers, so that overload becomes a controlled, visible condition instead of a crash. Here's why this option stands out:</p>
+        <ul>
+          <li><strong>Decouples the two rates:</strong> Ingestion acknowledges an event once it is durably appended to the log; consumers pull at their own pace. The backlog lives on disk, so ingestion heap usage stays flat and GC pauses disappear.</li>
+          <li><strong>Bounded by design:</strong> A quota on lag, bytes, or oldest-message age defines the point at which the system sheds load. Rejecting with <code>429</code> + <code>Retry-After</code> turns 'unpredictable OOM' into 'predictable, observable rejection'.</li>
+          <li><strong>Cooperative clients:</strong> A well-behaved mobile SDK honors <code>Retry-After</code>, applies exponential backoff <em>with jitter</em> (so a fleet resuming at once does not retry in lockstep), and buffers events locally on the device until accepted.</li>
+          <li><strong>Scales on the right signal:</strong> Consumer <strong>lag</strong> and <strong>oldest-message age</strong> are leading indicators of falling behind; CPU is a lagging one. Stateful consumers scale with the number of partitions, so partition count sets the parallelism ceiling.</li>
+          <li><strong>Observability falls out naturally:</strong> Queue depth, lag, end-to-end freshness, 429 rate, and circuit-breaker state give a clear SLO dashboard and alerting story.</li>
+        </ul>
+        <p>A complete design has <strong>admission control at the edge</strong>, a <strong>durable bounded log</strong>, <strong>lag-driven autoscaling</strong>, <strong>idempotent consumers with a dead-letter queue</strong>, and a <strong>client SDK that backs off with jitter</strong>. Reactive streams are still useful <em>inside</em> each process for in-process demand signaling.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>B — Synchronous Ingestion with Held Connections</h4>
+          </div>
+          <p>Holding client connections open until processing finishes <strong>couples client latency to the slowest stage</strong> and moves the queue into threads, sockets, and heap, which is the same failure in a different place. Mobile networks time out and retry, so duplicates amplify the load. Autoscaling <em>stateful</em> consumers is slow (state warm-up and rebalancing), far slower than a burst, so it cannot save a synchronous design. 'Immediate consistency' is also unnecessary for telemetry.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">💥</span>
+            <h4>C — Unbounded In-Memory Edge Buffer</h4>
+          </div>
+          <p>This <strong>is the current failure mode</strong>, relocated to the gateway. An unbounded in-memory buffer guarantees eventual OOM or GC thrash during a big burst, loses every buffered event on a crash (no durability), and sends no signal upstream, so clients keep sending. Reactive autoscaling lags the burst and is not a substitute for a limit.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌊</span>
+            <h4>D — End-to-End Stream Flow Control (gRPC / HTTP/2)</h4>
+          </div>
+          <p>Elegant in theory, weak here. HTTP/2 and gRPC flow control are <strong>per-hop and per-connection</strong>; load balancers and proxies terminate and re-originate them, so demand from a slow ML stage does not propagate to a phone. Mobile apps resuming from background typically send short-lived requests, not long-lived streams. It also <strong>does not absorb the burst</strong>: it pushes all waiting onto clients (battery, latency) and offers no durable buffer. Use reactive streams <em>within</em> services, not as the sole end-to-end mechanism.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Bounded Durable Queue with Explicit Load Shedding (429 + Retry-After) ✓</h4>
+          </div>
+          <p>Utilize a bounded, durable message broker (such as Kafka or a persistent queue) to decouple the ingestion tier from the consumers. Apply a strict quota on the queue; when it approaches capacity, respo</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Protects Ingestion Memory</th><th>Burst Absorption</th><th>Durability of Accepted Events</th><th>Client Experience Under Overload</th><th>Operational Complexity</th><th>Observability</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Bounded Durable Queue + 429 ✓</td><td>High ✅</td><td>High (disk-backed) ✅</td><td>High ✅</td><td>Graceful (429 + backoff) ✅</td><td>Medium ⚠</td><td>High ✅</td></tr>
+            <tr><td class="tt-option">B — Synchronous Held Connections</td><td>Low ❌</td><td>None ❌</td><td>Low ❌</td><td>Timeouts and retries ❌</td><td>Low ✅</td><td>Low ⚠</td></tr>
+            <tr><td class="tt-option">C — Unbounded In-Memory Buffer</td><td>None ❌</td><td>High until OOM ⚠</td><td>None ❌</td><td>Hidden until crash ❌</td><td>Low ✅</td><td>Low ❌</td></tr>
+            <tr><td class="tt-option">D — End-to-End Flow Control</td><td>Medium ⚠</td><td>Low ❌</td><td>Low ❌</td><td>Variable on mobile ⚠</td><td>High ❌</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Bounded Durable Queue + 429</h4>
+          </div>
+          <p>Bursty producers, slower stateful consumers, and clients that can retry or buffer locally. The default for telemetry, events, and any at-least-once ingestion.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Synchronous Held Connections</h4>
+          </div>
+          <p>Low-volume request/response flows where the client genuinely needs the processed result and per-request cost is small and predictable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Unbounded In-Memory Buffer</h4>
+          </div>
+          <p>Essentially never in production. At most a small, strictly bounded buffer to smooth micro-bursts of milliseconds.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — End-to-End Flow Control</h4>
+          </div>
+          <p>Long-lived streaming connections (service-to-service, or persistent client streams) where every hop supports flow control, as a complement to a durable buffer.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Ingestion with Admission Control and Durable Buffer</h3>
+        <p>The edge checks pressure first, then durably appends. Consumers pull at their own pace:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant M as Mobile Client
+    participant I as Ingestion API
+    participant B as Durable Log
+    participant C as Consumers
+    M-&gt;&gt;I: POST events batch
+    I-&gt;&gt;I: 1. Check lag and quota
+    alt Under quota
+        I-&gt;&gt;B: 2. Append with batch id
+        B--&gt;&gt;I: 3. Durable ack
+        I--&gt;&gt;M: 202 Accepted
+        C-&gt;&gt;B: 4. Pull at own pace
+        C-&gt;&gt;C: 5. Enrich and score
+        C-&gt;&gt;B: 6. Commit offset
+    else Over quota
+        I--&gt;&gt;M: 429 with Retry-After
+        M-&gt;&gt;M: Backoff with jitter and keep local buffer
+    end">sequenceDiagram
+    participant M as Mobile Client
+    participant I as Ingestion API
+    participant B as Durable Log
+    participant C as Consumers
+    M-&gt;&gt;I: POST events batch
+    I-&gt;&gt;I: 1. Check lag and quota
+    alt Under quota
+        I-&gt;&gt;B: 2. Append with batch id
+        B--&gt;&gt;I: 3. Durable ack
+        I--&gt;&gt;M: 202 Accepted
+        C-&gt;&gt;B: 4. Pull at own pace
+        C-&gt;&gt;C: 5. Enrich and score
+        C-&gt;&gt;B: 6. Commit offset
+    else Over quota
+        I--&gt;&gt;M: 429 with Retry-After
+        M-&gt;&gt;M: Backoff with jitter and keep local buffer
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Admission Control and Client Backoff</h3>
+        <p>The edge sheds load before the buffer overflows; the client honors Retry-After with jittered exponential backoff; the consumer pulls only what it can process:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Ingestion API ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleIngest</span>(request):</span>
+<span class="line">    batch <span class="tk-op">=</span> <span class="tk-fn">parseAndValidate</span>(request.body)               <span class="tk-com">// cheap checks only</span></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> rateLimiter.<span class="tk-fn">allow</span>(request.deviceId):</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">429</span>(retryAfter <span class="tk-op">=</span> <span class="tk-num">5s</span>)                       <span class="tk-com">// per-device fairness</span></span>
+<span class="line"></span>
+<span class="line">    lagSeconds <span class="tk-op">=</span> metrics.<span class="tk-fn">cached</span>(<span class="tk-str">&#x27;consumer_oldest_age&#x27;</span>)    <span class="tk-com">// refreshed about once per second</span></span>
+<span class="line">    usedRatio  <span class="tk-op">=</span> metrics.<span class="tk-fn">cached</span>(<span class="tk-str">&#x27;log_bytes_used&#x27;</span>) <span class="tk-op">/</span> QUOTA_BYTES</span>
+<span class="line">    <span class="tk-kw">if</span> lagSeconds <span class="tk-op">&gt;</span> MAX_LAG <span class="tk-kw">or</span> usedRatio <span class="tk-op">&gt;</span> <span class="tk-num">0.9</span>:</span>
+<span class="line">        wait <span class="tk-op">=</span> <span class="tk-fn">clamp</span>(lagSeconds <span class="tk-op">/</span> <span class="tk-num">2</span>, <span class="tk-num">1s</span>, <span class="tk-num">60s</span>) <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-num">3s</span>)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">429</span>(retryAfter <span class="tk-op">=</span> wait)                     <span class="tk-com">// shed early, before OOM or disk full</span></span>
+<span class="line"></span>
+<span class="line">    ok <span class="tk-op">=</span> log.<span class="tk-fn">append</span>(topic, key <span class="tk-op">=</span> batch.deviceId, value <span class="tk-op">=</span> batch,</span>
+<span class="line">                    idempotencyKey <span class="tk-op">=</span> batch.id, acks <span class="tk-op">=</span> <span class="tk-str">&#x27;all&#x27;</span>, timeout <span class="tk-op">=</span> <span class="tk-num">200ms</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> ok:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">503</span>(retryAfter <span class="tk-op">=</span> <span class="tk-num">2s</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-num">202</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Mobile SDK ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">upload</span>(batch):</span>
+<span class="line">    attempt <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">    <span class="tk-kw">while</span> attempt <span class="tk-op">&lt;</span> MAX_ATTEMPTS:</span>
+<span class="line">        response <span class="tk-op">=</span> http.<span class="tk-fn">post</span>(<span class="tk-str">&#x27;/events&#x27;</span>, batch)</span>
+<span class="line">        <span class="tk-kw">if</span> response.status <span class="tk-op">==</span> <span class="tk-num">202</span>:</span>
+<span class="line">            localStore.<span class="tk-fn">delete</span>(batch)</span>
+<span class="line">            <span class="tk-kw">return</span></span>
+<span class="line">        base <span class="tk-op">=</span> response.retryAfter ?? <span class="tk-fn">min</span>(<span class="tk-num">60s</span>, <span class="tk-num">2s</span> <span class="tk-op">*</span> <span class="tk-num">2</span>^attempt)</span>
+<span class="line">        <span class="tk-fn">sleep</span>(base <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, base <span class="tk-op">*</span> <span class="tk-num">0.3</span>))               <span class="tk-com">// jitter prevents lockstep retries</span></span>
+<span class="line">        attempt <span class="tk-op">+</span><span class="tk-op">=</span> <span class="tk-num">1</span></span>
+<span class="line">    localStore.<span class="tk-fn">keep</span>(batch)                                <span class="tk-com">// try again on next app foreground</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Consumer ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">consumeLoop</span>():</span>
+<span class="line">    <span class="tk-kw">while</span> <span class="tk-lit">true</span>:</span>
+<span class="line">        records <span class="tk-op">=</span> log.<span class="tk-fn">poll</span>(maxRecords <span class="tk-op">=</span> <span class="tk-fn">inFlightBudget</span>())  <span class="tk-com">// pull only what we can handle</span></span>
+<span class="line">        <span class="tk-kw">for</span> r <span class="tk-kw">in</span> records:</span>
+<span class="line">            <span class="tk-kw">if</span> dedupeStore.<span class="tk-fn">seen</span>(r.idempotencyKey): <span class="tk-kw">continue</span></span>
+<span class="line">            <span class="tk-fn">process</span>(r)                                      <span class="tk-com">// enrich, score, persist state</span></span>
+<span class="line">            dedupeStore.<span class="tk-fn">mark</span>(r.idempotencyKey)</span>
+<span class="line">        log.<span class="tk-fn">commit</span>(records)</span>
+<span class="line">        <span class="tk-com">// slow downstream shrinks inFlightBudget, so lag grows and admission control reacts</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Unbounded queues anywhere in the path:</strong> An unbounded queue is not backpressure, it is deferred failure. Every buffer needs a size or age limit and a defined overflow behavior.</li>
+          <li><strong>Scaling on CPU instead of lag:</strong> A consumer can be badly behind while CPU looks fine (blocked on I/O or state). Scale on lag and oldest-message age.</li>
+          <li><strong>Retrying without jitter:</strong> Thousands of devices resuming together will retry in synchronized waves. Add randomized jitter and honor <code>Retry-After</code>.</li>
+          <li><strong>Returning generic 500s:</strong> Clients cannot distinguish 'slow down' from 'broken'. Use <code>429</code> or <code>503</code> with <code>Retry-After</code>.</li>
+          <li><strong>No idempotency keys:</strong> At-least-once delivery plus retries creates duplicates; without dedupe, ML features and counts get corrupted.</li>
+          <li><strong>Ignoring the partition ceiling:</strong> Adding consumers beyond the partition count does nothing; hot keys cap throughput.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Mature telemetry pipelines layer several controls, each protecting a different boundary:</p>
+        <ul>
+          <li><strong>Step 0 — Define loss tolerance and freshness SLOs:</strong> Which events can be sampled, delayed, or dropped, and how stale is too stale?</li>
+          <li><strong>Step 1 — Durable log as the shock absorber:</strong> Kafka, Pulsar, or a managed equivalent, sized for peak burst x expected downstream recovery time.</li>
+          <li><strong>Step 2 — Admission control at the edge:</strong> Token buckets per device or tenant plus a global lag-based shed rule, returning 429 + Retry-After.</li>
+          <li><strong>Step 3 — Smart client SDK:</strong> On-device batching and disk buffer, exponential backoff with jitter, a cap on local buffer size, and priority classes.</li>
+          <li><strong>Step 4 — Lag-driven consumer scaling and DLQ:</strong> Scale on lag or age, cap by partition count, send poison messages to a dead-letter queue.</li>
+          <li><strong>Step 5 — In-process backpressure:</strong> Reactive pull, bounded executors, and circuit breakers around the enrichment and ML dependencies.</li>
+        </ul>
+        <p>Backpressure is a chain: every hop needs a bound, and the bound must be visible to the hop before it.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When a producer can outrun a consumer, <strong>put the excess in a bounded, durable buffer and tell producers to slow down explicitly</strong>. Never let the backlog live in unbounded memory, and never rely on autoscaling alone to absorb a burst.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

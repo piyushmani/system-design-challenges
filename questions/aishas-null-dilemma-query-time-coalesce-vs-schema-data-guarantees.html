@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aisha&#x27;s NULL dilemma: query-time COALESCE vs schema data guarantees — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">17 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Data Quality</span>
+      <span class="tag tag--green">Null Handling</span>
+      <span class="tag tag--amber">Database Design</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Aisha&#x27;s NULL dilemma: query-time COALESCE vs schema data guarantees</h1>
+      <p class="q-scenario"><strong>Aisha</strong>, a backend engineer, owns the <strong>User Summary</strong> service behind a worldwide mobile and web app. It handles <strong>millions of reads per minute</strong> and must keep <strong>p95 read latency under 50 ms</strong>. The user profile schema has several optional columns (<code>timezone</code>, <code>avatar_url</code>, <code>display_name</code>) that are frequently <strong>NULL</strong> because of legacy creation flows. Product wants a <strong>single, simple API</strong> that always returns <strong>non-null defaults</strong> (such as <code>Anonymous</code>, <code>UTC</code>, or a standard avatar URL). Aisha must choose a solution that balances <strong>observability, consistency, latency, availability, and scalability</strong>, and that includes a <strong>viable production migration strategy</strong> for legacy records. Which architectural path is the best choice?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Retain the current schema and implement defaulting/COALESCE logic within all read queries (e.g., SELECT COALESCE(display_name, &#x27;Anonymous&#x27;) ...). Make no modifications to the write path, adopting COALESCE as the definitive method for supplying default values to clients.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Standardize defaults during write operations: update the service&#x27;s write logic to consistently store non-null canonical values (applying defaults on updates and inserts), incorporate application-tier validation, and execute a gradual background backfill for historical data. Maintain straightforward read queries (without COALESCE) and introduce a NOT NULL constraint after the backfill finishes.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Execute a single, blocking synchronous schema migration during a dedicated maintenance window to swap NULLs for default values and modify the columns to NOT NULL. Subsequently, adjust both read and write operations to depend on these NOT NULL columns.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Keep the database unmodified and manage NULLs at the application level through lazy fetching: if a NULL is encountered during a read, make a synchronous request to the primary profile/identity microservice to retrieve defaults or supplement the data, and then cache the outcome for subsequent read requests.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Defaults on Write, Online Backfill, Then NOT NULL</h3>
+        <p>Fix the data at its source: store canonical values on every insert and update, <strong>backfill legacy rows in small online batches</strong>, and then lock the guarantee in with a <code>NOT NULL</code> constraint. Reads become plain column projections with one source of truth, and the schema itself enforces the API contract. The migration follows the expand/contract pattern, so each step is incremental, observable, and reversible, with no downtime and no big bang. Here's why it stands out:</p>
+        <ul>
+          <li><strong>One source of truth:</strong> Default logic lives in one place (the write path plus a database <code>DEFAULT</code>) instead of being copied into every query, mapper, batch job, and downstream consumer. Exports, analytics, and other services see the same non-null values.</li>
+          <li><strong>Simple, fast reads:</strong> Reads stay a plain projection. COALESCE itself is cheap per row, so the real win is not CPU: it is removing defaulting from every query path, which also keeps columns usable in filters, joins, and indexes without expression wrappers.</li>
+          <li><strong>Zero-downtime migration:</strong> Keyset-paginated, throttled batches avoid long locks. In PostgreSQL, adding the constraint as <code>NOT VALID</code> and validating it later does not block writes, and <code>SET NOT NULL</code> on PostgreSQL 12+ skips the table scan when a validated CHECK already proves the column is non-null.</li>
+          <li><strong>Schema-enforced guarantee:</strong> NOT NULL prevents regressions from new code paths, stale mobile clients, and ad-hoc scripts, so the API contract becomes something the database enforces, not something every developer must remember.</li>
+          <li><strong>Measurable and reversible:</strong> Progress is a number (<code>COUNT(*)</code> of rows still NULL trending to zero), alongside backfill rate, replication lag, and p95 latency. Every phase can be paused or rolled back until the constraint is validated.</li>
+        </ul>
+        <p>Run it as six phases: <strong>(1)</strong> write-path defaults plus DB DEFAULT, <strong>(2)</strong> a NOT VALID CHECK to block new NULLs, <strong>(3)</strong> throttled backfill, <strong>(4)</strong> verify zero NULLs, <strong>(5)</strong> VALIDATE then SET NOT NULL, <strong>(6)</strong> remove COALESCE. Track NULL counts, backfill throughput, replication lag, and p95 read latency throughout.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>A — COALESCE in Every Read Query</h4>
+          </div>
+          <p>It works immediately, carries almost no per-row cost, and is low risk, but it leaves the underlying data dirty. Defaults are re-implemented in every query, service, and report (and drift apart), NULLs still leak into exports, joins, and filters, nothing prevents new NULLs, and there is no plan for legacy records at all. <strong>Caveat:</strong> it is a good <em>temporary bridge</em> during the migration, not an end state.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>C — Single Blocking Migration in a Maintenance Window</h4>
+          </div>
+          <p>A bulk UPDATE of every row followed by <code>SET NOT NULL</code> can hold heavy locks, generate huge WAL and replication lag, and bloat the table. A worldwide service has no quiet window, and shipping read and write changes in lockstep removes the ability to roll back safely. The same end state is reachable with phased, online steps and far less risk.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>D — Lazy Fetch from the Identity Service</h4>
+          </div>
+          <p>Putting a synchronous network call on the read path threatens the 50 ms p95 budget, adds failure coupling, risks thundering herds on cold caches, and can amplify into N+1 call patterns. The data stays dirty, and cached defaults can go stale or diverge from the database. This only makes sense when the missing data genuinely lives in another system.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Defaults on Write, Online Backfill, Then NOT NULL ✓</h4>
+          </div>
+          <p>Standardize defaults during write operations: update the service&#x27;s write logic to consistently store non-null canonical values (applying defaults on updates and inserts), incorporate application-tier</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read Latency</th><th>Data Consistency</th><th>Migration Risk</th><th>Downtime</th><th>Guards Against Future NULLs</th><th>Operational Effort</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — COALESCE on Reads</td><td>Negligible overhead ✅</td><td>Defaults scattered, NULLs persist ❌</td><td>None ✅</td><td>None ✅</td><td>No ❌</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Write Defaults + Backfill + NOT NULL ✓</td><td>Plain reads ✅</td><td>Single source of truth ✅</td><td>Low (phased, reversible) ✅</td><td>None ✅</td><td>Yes (NOT NULL) ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — Blocking Migration Window</td><td>Plain reads ✅</td><td>Consistent after cutover ✅</td><td>High (long locks, hard rollback) ❌</td><td>Required ❌</td><td>Yes ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Lazy Fetch from Identity Service</td><td>Adds a network hop, p95 at risk ❌</td><td>Stale or divergent defaults ❌</td><td>Low ✅</td><td>None ✅</td><td>No ❌</td><td>High (new dependency) ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — COALESCE on Reads</h4>
+          </div>
+          <p>A quick fix or a temporary bridge during migration, or when you cannot modify the data (read-only replicas, third-party schemas). Acceptable when NULL semantics are limited to a single read path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Write Defaults + Backfill + NOT NULL</h4>
+          </div>
+          <p>You own the schema, the data is large and live, and you want a durable guarantee with a zero-downtime path. The right default for production services with many readers.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Blocking Migration Window</h4>
+          </div>
+          <p>Small tables, internal tools, or systems with a genuine quiet period where a brief lock is harmless and the migration has been rehearsed on a production-sized copy.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Lazy Fetch from Identity Service</h4>
+          </div>
+          <p>The missing data legitimately belongs to another system of record and is rarely needed, with strict timeouts and caching. Not for latency-critical, high-volume read paths.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Zero-Downtime NULL Migration Phases</h3>
+        <p>Defaults are enforced on write first, then history is repaired online, and only then is the guarantee made permanent:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TD
+    P0[Phase 0: Measure NULLs per column] --&gt; P1[Phase 1: Write-path defaults plus DB DEFAULT]
+    P1 --&gt; P2[Phase 2: Add CHECK NOT VALID to block new NULLs]
+    P2 --&gt; P3[Phase 3: Throttled batch backfill]
+    P3 --&gt; V{Zero NULL rows left?}
+    V --&gt;|No| P3
+    V --&gt;|Yes| P4[Phase 4: VALIDATE CONSTRAINT then SET NOT NULL]
+    P4 --&gt; P5[Phase 5: Remove COALESCE and the temporary check]">flowchart TD
+    P0[Phase 0: Measure NULLs per column] --&gt; P1[Phase 1: Write-path defaults plus DB DEFAULT]
+    P1 --&gt; P2[Phase 2: Add CHECK NOT VALID to block new NULLs]
+    P2 --&gt; P3[Phase 3: Throttled batch backfill]
+    P3 --&gt; V{Zero NULL rows left?}
+    V --&gt;|No| P3
+    V --&gt;|Yes| P4[Phase 4: VALIDATE CONSTRAINT then SET NOT NULL]
+    P4 --&gt; P5[Phase 5: Remove COALESCE and the temporary check]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Online Migration: Defaults, Backfill, Enforce</h3>
+        <p>Shown for <code>timezone</code>; repeat the same steps for the other columns. New rows get defaults first, history is repaired in throttled batches, and the constraint is added without blocking writes:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">-- Phase 1: database default for new rows (metadata-only change, safe on a hot table)</span></span>
+<span class="line">ALTER TABLE user_profile ALTER COLUMN timezone SET DEFAULT <span class="tk-str">&#x27;UTC&#x27;</span>;</span>
+<span class="line"><span class="tk-com">-- The application write path also normalizes input: timezone = input.timezone or &#x27;UTC&#x27;</span></span>
+<span class="line"><span class="tk-com">-- For display-only defaults (name, avatar) consider defaulting in the API mapper instead,</span></span>
+<span class="line"><span class="tk-com">-- so a future label change does not need another backfill and &#x27;unset&#x27; stays distinguishable.</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Phase 2: reject NEW NULLs immediately without scanning existing rows</span></span>
+<span class="line">SET lock_timeout <span class="tk-op">=</span> <span class="tk-str">&#x27;3s&#x27;</span>;                                <span class="tk-com">-- never queue behind long transactions</span></span>
+<span class="line">ALTER TABLE user_profile</span>
+<span class="line">    ADD CONSTRAINT user_profile_timezone_nn <span class="tk-fn">CHECK</span> (timezone IS NOT NULL) NOT VALID;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Phase 3: throttled, resumable backfill (pseudocode loop around plain SQL)</span></span>
+<span class="line">lastId <span class="tk-op">=</span> checkpoint.<span class="tk-fn">load</span>()</span>
+<span class="line"><span class="tk-kw">loop</span>:</span>
+<span class="line">    ids <span class="tk-op">=</span> SELECT id FROM user_profile</span>
+<span class="line">          WHERE id <span class="tk-op">&gt;</span> :lastId AND timezone IS NULL</span>
+<span class="line">          ORDER BY id LIMIT <span class="tk-num">5000</span></span>
+<span class="line">    <span class="tk-kw">if</span> ids.<span class="tk-fn">isEmpty</span>(): <span class="tk-kw">break</span></span>
+<span class="line">    UPDATE user_profile SET timezone <span class="tk-op">=</span> <span class="tk-str">&#x27;UTC&#x27;</span></span>
+<span class="line">     WHERE id IN :ids AND timezone IS NULL                <span class="tk-com">-- short transaction per batch, idempotent</span></span>
+<span class="line">    lastId <span class="tk-op">=</span> <span class="tk-fn">max</span>(ids)</span>
+<span class="line">    checkpoint.<span class="tk-fn">save</span>(lastId)</span>
+<span class="line">    <span class="tk-kw">while</span> <span class="tk-fn">replicaLag</span>() <span class="tk-op">&gt;</span> <span class="tk-num">2s</span> <span class="tk-kw">or</span> <span class="tk-fn">dbCpu</span>() <span class="tk-op">&gt;</span> <span class="tk-num">70</span><span class="tk-op">%</span>:             <span class="tk-com">// back off under pressure</span></span>
+<span class="line">        <span class="tk-fn">sleep</span>(<span class="tk-num">1s</span>)</span>
+<span class="line">    <span class="tk-fn">sleep</span>(<span class="tk-num">100ms</span>)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Phase 4: verify, then make the guarantee permanent</span></span>
+<span class="line">SELECT <span class="tk-fn">count</span>(<span class="tk-op">*</span>) FROM user_profile WHERE timezone IS NULL;                   <span class="tk-com">-- must be 0</span></span>
+<span class="line">ALTER TABLE user_profile VALIDATE CONSTRAINT user_profile_timezone_nn;      <span class="tk-com">-- scans, but does not block writes</span></span>
+<span class="line">ALTER TABLE user_profile ALTER COLUMN timezone SET NOT NULL;                <span class="tk-com">-- PG 12+: skips the scan thanks to the validated CHECK</span></span>
+<span class="line">ALTER TABLE user_profile DROP CONSTRAINT user_profile_timezone_nn;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Phase 5: delete COALESCE and defaulting code from read queries and mappers</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Adding NOT NULL directly on a large table:</strong> It scans the whole table under an exclusive lock and can stall every query. Add a NOT VALID CHECK first, validate it, then set NOT NULL, and set a <code>lock_timeout</code> so DDL never queues behind long transactions.</li>
+          <li><strong>One giant UPDATE for the backfill:</strong> It creates a huge transaction, replication lag, table bloat, and lock waits. Use small keyset batches with pauses.</li>
+          <li><strong>Backfilling before fixing the write path:</strong> The target keeps moving as old writers produce new NULLs. Fix writers and block new NULLs first.</li>
+          <li><strong>Treating presentation text as data:</strong> Storing 'Anonymous' in every row makes later changes to that label costly and hides who never set a name. Separate invariants from display defaults.</li>
+          <li><strong>Removing COALESCE before verifying zero NULLs:</strong> Clients then receive null values and crash. Verify, enforce the constraint, and only then delete the bridge.</li>
+          <li><strong>Ignoring other writers and readers:</strong> ETL jobs, admin scripts, old mobile versions, and downstream consumers may rely on NULL meaning 'unset'. Inventory them before you change semantics.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams treat this as an expand/contract migration and keep a temporary bridge in place while the data is repaired. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Measure:</strong> Count NULLs per column, find every write source that produces them (legacy flows, ETL, old app versions), and classify each default as a data invariant or a presentation default.</li>
+          <li><strong>Step 1 — Bridge:</strong> Keep COALESCE (or an API-layer mapper) in place so clients get stable output while the data is repaired.</li>
+          <li><strong>Step 2 — Fix the write path:</strong> Add application-tier normalization and a database <code>DEFAULT</code>, deploy to all writers, and add a <code>CHECK (col IS NOT NULL) NOT VALID</code> constraint to block new NULLs.</li>
+          <li><strong>Step 3 — Backfill online:</strong> Run a resumable, keyset-paginated job in small batches, throttled on replication lag and CPU, with a checkpoint so it can pause and resume safely.</li>
+          <li><strong>Step 4 — Enforce:</strong> Verify zero NULLs, run <code>VALIDATE CONSTRAINT</code>, set <code>NOT NULL</code>, and drop the temporary CHECK.</li>
+          <li><strong>Step 5 — Clean up:</strong> Remove COALESCE and defaulting code, update API contracts and docs, and add a CI lint that flags new nullable columns without a justification.</li>
+        </ul>
+        <p>Treat the schema as the contract and repair data in small, observable steps.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Don't paper over dirty data in every query. <strong>Enforce defaults on write, backfill history online, then make the database guarantee it with NOT NULL.</strong> COALESCE is a fine temporary bridge, but the durable fix is one source of truth in the schema, reached through a phased, zero-downtime migration.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

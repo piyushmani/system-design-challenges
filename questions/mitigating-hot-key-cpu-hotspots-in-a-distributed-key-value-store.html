@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mitigating Hot-Key CPU Hotspots in a Distributed Key-Value Store — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">20 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Hotspots</span>
+      <span class="tag tag--green">Rate Limiting</span>
+      <span class="tag tag--amber">Cluster Protection</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Mitigating Hot-Key CPU Hotspots in a Distributed Key-Value Store</h1>
+      <p class="q-scenario"><strong>Aisha</strong> supports a <strong>distributed key-value store</strong> holding profile and session data for a large social network. Monitoring shows a few nodes pinned at <strong>90-100% CPU</strong> with severely degraded <strong>p99 write latency</strong>, while most of the cluster sits idle. The cause is a handful of extremely <strong>hot keys</strong> (mega-chat channels, celebrity users) absorbing hundreds of writes per second. The store uses <strong>synchronous durable writes</strong>, <strong>range-based partitioning</strong>, and basic per-node autoscaling. She must reduce CPU hotspots and tail latency while preserving <strong>high availability</strong> and avoiding <strong>major consistency anomalies</strong>. Which change should she make?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Introduce a centralized, stateful request routing layer in front of the database cluster. This router would monitor the load on individual nodes and dynamically forward requests aimed at hot partitions to nodes with spare capacity, while keeping the underlying range partitioning and synchronous write mechanisms intact.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Transition the entire system away from range partitioning and adopt consistent hashing utilizing numerous virtual nodes (vnodes), alongside shifting to client-side hashing. Depend solely on the naturally superior data distribution provided by hashing to organically dissipate hotspots, avoiding any special logic for specific hot keys.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Retain the baseline distribution strategy, but integrate an online hotspot detection mechanism that dynamically isolates excessively accessed keys, migrating them to specialized &#x27;hot&#x27; nodes. For these migrated keys, implement write coalescing, utilize dedicated in-memory stores that flush asynchronously to disk, and deploy read replicas to handle massive read volumes. Continue providing strong consistency for regular keys while explicitly documenting the slightly relaxed write ordering for the hot ones.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Place a massive, global in-memory caching layer (similar to Redis) in front of the entire cluster, setting it up as the definitive write-through path. Allow this caching tier to absorb traffic bursts and asynchronously flush data to the persistent underlying store, leaving the original database&#x27;s partitioning scheme completely unmodified.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Hot-Key Detection, Isolation, and Write Coalescing</h3>
+        <p>A <strong>key is the unit of ownership</strong>: every write to it serializes through one replica group. No partitioning scheme, whether range or hash, can spread a single key across nodes. The remedy must therefore act <strong>at the key level</strong>: find the few hot keys, take them off the shared nodes, and reduce the per-write cost for them. Here's why this option stands out:</p>
+        <ul>
+          <li><strong>Targets the real cause:</strong> A few keys create the skew. Detecting them online (heavy-hitter tracking such as top-k or count-min sketch over a time window) lets you treat the exception without redesigning the whole cluster.</li>
+          <li><strong>Blast-radius containment:</strong> Moving hot keys to dedicated nodes works like a bulkhead, so ordinary tenants' keys stop sharing CPU with celebrity traffic and p99 recovers.</li>
+          <li><strong>Cuts the cost per logical write:</strong> Coalescing (group commit) merges many writes within a few milliseconds into one durable operation, sharply reducing CPU and fsync overhead for the same key.</li>
+          <li><strong>Reads scale separately:</strong> Read replicas or in-memory serving offload the huge read volume that accompanies hot keys.</li>
+          <li><strong>Honest consistency trade-off:</strong> Strong consistency is retained for the vast majority of keys, and the relaxed ordering for hot keys is explicit and documented, so there are no surprise anomalies.</li>
+        </ul>
+        <p>Combine <strong>online detection</strong>, <strong>isolation to a hot tier</strong>, <strong>write coalescing with replicated durability</strong>, <strong>read replicas</strong>, and <strong>per-key rate limits</strong>, and document the consistency contract for hot keys.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧭</span>
+            <h4>A — Centralized Stateful Router</h4>
+          </div>
+          <p>A router can balance <em>many</em> keys but cannot split the load of <em>one</em> key: every write still has to reach whichever node owns it. Forwarding hot-key writes to nodes 'with spare capacity' breaks ownership and risks conflicting writers unless the key is actually migrated. A central stateful router also becomes a new bottleneck and single point of failure, adding a hop to every request.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>B — Consistent Hashing with Virtual Nodes</h4>
+          </div>
+          <p>Hashing evens out <strong>many-key skew</strong> (such as sequential-key range hotspots), but a hot key still hashes to exactly one place, so the observed problem remains. It also demands a large migration, gives up efficient range scans, and changes client behavior. It may help if range adjacency is a secondary cause, but it is not a fix for hot keys.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧊</span>
+            <h4>D — Global Write-Through Cache with Async Flush</h4>
+          </div>
+          <p>The description contradicts itself: <strong>write-through is synchronous</strong>, while asynchronous flush is <strong>write-back</strong>. Making a global cache the definitive write path moves the source of truth into a volatile tier, increasing durability and consistency risk for the <em>entire</em> dataset to solve a problem affecting a few keys. The cache nodes also suffer the same hot-key concentration.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Hot-Key Detection, Isolation, and Write Coalescing ✓</h4>
+          </div>
+          <p>Retain the baseline distribution strategy, but integrate an online hotspot detection mechanism that dynamically isolates excessively accessed keys, migrating them to specialized &#x27;hot&#x27; nodes. For these</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Fixes Single-Key Hotspots</th><th>Tail Latency Improvement</th><th>Durability Risk</th><th>Consistency Impact</th><th>Implementation Complexity</th><th>Blast Radius of Change</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Stateful Router</td><td>No ❌</td><td>Low ❌</td><td>Low ✅</td><td>Risk of dual owners ⚠</td><td>Medium ⚠</td><td>Medium (new SPOF) ⚠</td></tr>
+            <tr><td class="tt-option">B — Consistent Hashing and Vnodes</td><td>No ❌</td><td>Low ❌</td><td>Low ✅</td><td>Low ✅</td><td>High ❌</td><td>High ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Hot-Key Isolation and Coalescing ✓</td><td>Yes ✅</td><td>High ✅</td><td>Medium ⚠ (needs replicated buffer)</td><td>Relaxed only for hot keys ⚠</td><td>High ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">D — Global Write-Through Cache</td><td>Partial ⚠</td><td>Medium ⚠</td><td>High ❌</td><td>High risk ❌</td><td>Medium ⚠</td><td>Very high ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Stateful Router</h4>
+          </div>
+          <p>Many moderately warm partitions are unevenly loaded and traffic can be rebalanced by moving whole partitions, not splitting single keys.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Consistent Hashing and Vnodes</h4>
+          </div>
+          <p>Range partitioning causes skew from sequential or clustered keys across many keys, and range scans are not required.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hot-Key Isolation and Coalescing</h4>
+          </div>
+          <p>A small, identifiable set of keys dominates traffic and the rest of the keyspace must stay strongly consistent and fast.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Global Write-Through Cache</h4>
+          </div>
+          <p>Read-heavy data where a cache is purely an accelerator in front of the source of truth, with writes remaining synchronous and durable.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Hot-Key Detection and Isolation</h3>
+        <p>Normal keys stay on regular partitions; keys flagged hot move to a dedicated tier that has its own write path and read replicas:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    CL[Clients] --&gt; GW[Thin Routing Layer with key map]
+    GW --&gt;|normal keys| P[Regular Partitions strong consistency]
+    GW --&gt;|hot keys| H[Hot Tier Leader]
+    TK[Top-K Detector] -.-&gt;|promote and demote| GW
+    P --&gt; TK
+    H --&gt; RR[Read Replicas for hot keys]
+    H --&gt; LOG[Replicated Commit Log]
+    LOG --&gt; ST[Persistent Store async apply]">flowchart LR
+    CL[Clients] --&gt; GW[Thin Routing Layer with key map]
+    GW --&gt;|normal keys| P[Regular Partitions strong consistency]
+    GW --&gt;|hot keys| H[Hot Tier Leader]
+    TK[Top-K Detector] -.-&gt;|promote and demote| GW
+    P --&gt; TK
+    H --&gt; RR[Read Replicas for hot keys]
+    H --&gt; LOG[Replicated Commit Log]
+    LOG --&gt; ST[Persistent Store async apply]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Hot-Key Promotion and Write Coalescer</h3>
+        <p>Detect heavy hitters with hysteresis, then batch writes per hot key and acknowledge only after quorum replication:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">PROMOTE_WPS <span class="tk-op">=</span> <span class="tk-num">300</span>        <span class="tk-com">// writes per second per key</span></span>
+<span class="line">DEMOTE_WPS  <span class="tk-op">=</span> <span class="tk-num">100</span></span>
+<span class="line">COOLDOWN    <span class="tk-op">=</span> 5min</span>
+<span class="line">BATCH_WINDOW <span class="tk-op">=</span> <span class="tk-num">5ms</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Detection loop (every 1s) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">detectHotKeys</span>():</span>
+<span class="line">    <span class="tk-kw">for</span> (key, wps) <span class="tk-kw">in</span> sketch.<span class="tk-fn">topK</span>(window <span class="tk-op">=</span> <span class="tk-num">10s</span>, k <span class="tk-op">=</span> <span class="tk-num">100</span>):</span>
+<span class="line">        <span class="tk-kw">if</span> wps <span class="tk-op">&gt;=</span> PROMOTE_WPS <span class="tk-kw">and</span> <span class="tk-kw">not</span> hotMap.<span class="tk-fn">contains</span>(key) <span class="tk-kw">and</span> <span class="tk-fn">cooldownPassed</span>(key):</span>
+<span class="line">            <span class="tk-fn">migrateToHotTier</span>(key)</span>
+<span class="line">        <span class="tk-kw">else</span> <span class="tk-kw">if</span> wps <span class="tk-op">&lt;=</span> DEMOTE_WPS <span class="tk-kw">and</span> hotMap.<span class="tk-fn">contains</span>(key) <span class="tk-kw">and</span> <span class="tk-fn">heldLongerThan</span>(key, COOLDOWN):</span>
+<span class="line">            <span class="tk-fn">migrateBack</span>(key)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">migrateToHotTier</span>(key):</span>
+<span class="line">    token <span class="tk-op">=</span> fencing.<span class="tk-fn">nextToken</span>(key)                           <span class="tk-com">// new owner gets a higher token</span></span>
+<span class="line">    <span class="tk-fn">pauseWrites</span>(key, maxPause <span class="tk-op">=</span> <span class="tk-num">50ms</span>)</span>
+<span class="line">    state <span class="tk-op">=</span> regularPartition.<span class="tk-fn">snapshot</span>(key)</span>
+<span class="line">    hotTier.<span class="tk-fn">install</span>(key, state, token)</span>
+<span class="line">    hotMap.<span class="tk-fn">put</span>(key, hotTier.node, token)</span>
+<span class="line">    regularPartition.<span class="tk-fn">revokeOwnership</span>(key, token)             <span class="tk-com">// old owner rejects stale tokens</span></span>
+<span class="line">    <span class="tk-fn">resumeWrites</span>(key)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Hot tier write path ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleHotWrite</span>(key, op):</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> rateLimiter.<span class="tk-fn">allow</span>(key, op.clientId):</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">429</span></span>
+<span class="line">    batch <span class="tk-op">=</span> batches.<span class="tk-fn">getOrCreate</span>(key)                         <span class="tk-com">// flushes after BATCH_WINDOW</span></span>
+<span class="line">    <span class="tk-kw">return</span> batch.<span class="tk-fn">add</span>(op)                                     <span class="tk-com">// future resolved on quorum ack</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">flush</span>(batch):                                        <span class="tk-com">// runs every BATCH_WINDOW per key</span></span>
+<span class="line">    merged <span class="tk-op">=</span> <span class="tk-fn">applyInOrder</span>(batch.ops)                         <span class="tk-com">// per-key order preserved by the leader</span></span>
+<span class="line">    <span class="tk-fn">quorumAppend</span>(replicatedLog, key, merged)                 <span class="tk-com">// durable on majority before acking</span></span>
+<span class="line">    batch.<span class="tk-fn">completeAll</span>(OK)</span>
+<span class="line">    <span class="tk-fn">asyncApplyToStore</span>(key, merged)                           <span class="tk-com">// lag is bounded and monitored</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Reads ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleHotRead</span>(key):</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">nearestReplica</span>(key).<span class="tk-fn">read</span>(key)                     <span class="tk-com">// bounded-staleness reads</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Treating it as a capacity problem:</strong> Adding nodes or autoscaling does not help when one key is bound to one replica group.</li>
+          <li><strong>Acknowledging writes before they are durable on more than one node:</strong> In-memory coalescing without replication risks lost writes on crash.</li>
+          <li><strong>Flapping classification:</strong> Keys that move in and out of the hot tier every few seconds cause churn. Use hysteresis and cooldowns.</li>
+          <li><strong>Unsafe key handoff:</strong> Without fencing, two nodes can accept writes for the same key and diverge.</li>
+          <li><strong>Using sharded counters for ordered data:</strong> Splitting a key that requires ordering (chat messages) destroys ordering guarantees.</li>
+          <li><strong>No per-key rate limits:</strong> A buggy or abusive client can still overwhelm even a dedicated hot node.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Production systems treat hot keys as a first-class operational concern:</p>
+        <ul>
+          <li><strong>Step 0 — Measure per-key traffic:</strong> Sampled key-level metrics and top-k reports; distinguish read-hot from write-hot keys.</li>
+          <li><strong>Step 1 — Protect with limits:</strong> Per-key and per-client rate limits, plus client batching, to stop runaway load early.</li>
+          <li><strong>Step 2 — Offload reads:</strong> Replicas, local caches with short TTLs, and request coalescing for read-hot keys.</li>
+          <li><strong>Step 3 — Split commutative write load:</strong> Key suffix sharding (<code>key#0..N</code>) or CRDT counters, aggregated on read.</li>
+          <li><strong>Step 4 — Isolate and coalesce:</strong> Dedicated hot tier with group commit and replicated durability for non-commutative hot keys.</li>
+          <li><strong>Step 5 — Review partitioning:</strong> Fix any range-key design that creates adjacency hotspots, as a separate improvement.</li>
+        </ul>
+        <p>Fix skew at the granularity where it occurs: the key.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When a few keys dominate traffic, <strong>no partitioning scheme can split a single key</strong>. Detect and isolate the hot keys, reduce write cost with coalescing, offload reads, and be explicit about the consistency contract on the hot tier.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

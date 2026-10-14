@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elena&#x27;s API gateway dilemma: choosing between central gateway, BFFs, GraphQL, or edge logic — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">19 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">API Gateway</span>
+      <span class="tag tag--green">BFF</span>
+      <span class="tag tag--amber">GraphQL</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Elena&#x27;s API gateway dilemma: choosing between central gateway, BFFs, GraphQL, or edge logic</h1>
+      <p class="q-scenario"><strong>Elena</strong>, lead backend engineer at a fast-growing e-commerce company, is designing the API layer in front of several microservices (user profiles, catalog, inventory, pricing, recommendations) whose <strong>response times differ widely</strong>. Clients are <strong>Android, iOS, and a SPA</strong>. She must keep latency low for <strong>mobile users</strong>, ship <strong>client-specific payloads</strong>, run <strong>per-client A/B tests</strong> quickly, enforce <strong>global rate limits and authentication</strong>, and keep <strong>fault isolation and observability</strong> strong at very large scale. Client teams release on different cadences, and the backend services should stay client-agnostic. She needs the API Gateway + Backend-for-Frontend (BFF) architecture with the best trade-off among latency, consistency, availability, scalability, and operational overhead.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Build a monolithic API Gateway that owns client-specific logic, transformation, aggregation, routing, and auth for every client, scaled vertically and horizontally, with feature flags and caching built in.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Use the API Gateway only for cross-cutting concerns (routing, rate limiting, edge caching, TLS, auth) and build a lightweight BFF per client type (web, Android, iOS) that handles aggregation, response shaping, client-specific caching, retries, and A/B tests, scaled independently.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Put a single unified GraphQL gateway in front of the services so clients fetch exactly the fields they need, with field-level resolvers, global caching and rate limiting at the GraphQL tier, and schema directives for auth.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Move most caching and transformation to the edge/CDN using serverless functions (Lambda@Edge/Workers) as minimal BFFs, leaving the core backend services unchanged.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Gateway + Per-Client BFFs</h3>
+        <p>Elena's requirements split cleanly into two kinds of concerns: <strong>cross-cutting, client-agnostic</strong> ones (TLS, authentication, global rate limits, routing, coarse edge caching) and <strong>client-specific</strong> ones (payload shape, aggregation, A/B experiments, retries, caching). Option B is the only design that gives each kind its own home: a thin, stable gateway for the first and small, independently deployable BFFs for the second. That keeps the blast radius of any one client's change small, lets each BFF be tuned for its client's network profile, and avoids turning one tier into a bottleneck for every team. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Mobile latency:</strong> The BFF calls profile, catalog, pricing, inventory, and recommendations in parallel inside the data center and returns one right-sized payload, so a phone makes one round trip instead of five. Per-call timeouts and fallbacks (for example, drop recommendations if they are slow) keep tail latency bounded by the slowest <em>critical</em> dependency rather than the slowest dependency overall.</li>
+          <li><strong>Fault isolation:</strong> Separate BFF deployments mean a bad release, memory leak, or traffic spike in the web BFF does not take down the iOS or Android experience. Bulkheads and circuit breakers per downstream service live in the BFF, close to the code that knows what is optional.</li>
+          <li><strong>Fast per-client experimentation:</strong> Each client team owns its BFF and can bucket users, ship a variant, and roll back without a coordinated gateway release or a change to the shared backend services.</li>
+          <li><strong>Clean separation of cross-cutting policy:</strong> Authentication, global rate limits, WAF, and TLS stay centrally enforced at the gateway, so security and traffic policy are applied once and consistently regardless of which BFF serves the request.</li>
+          <li><strong>Independent scaling and observability:</strong> Each BFF scales on its own traffic profile and emits per-client metrics, traces, and error budgets, which makes it obvious which client or dependency is hurting.</li>
+          <li><strong>Proven pattern:</strong> The BFF pattern (documented by Sam Newman and used at companies such as SoundCloud) and Netflix's published API redesign away from a one-size-fits-all API toward device-specific adapters were driven by the same problem: different clients need different shapes, and a shared general-purpose API becomes a bottleneck for all of them.</li>
+        </ul>
+        <p>A well-run BFF layer has <strong>per-dependency timeouts and circuit breakers</strong>, <strong>parallel fan-out with partial-response fallbacks</strong>, <strong>deterministic experiment bucketing</strong>, <strong>propagated trace IDs</strong>, and <strong>short client-specific caches</strong> for non-personalized data. Measure p95/p99 per client and per downstream call before and after rollout; if one BFF's latency is dominated by a single slow service, fix or cache that service rather than adding more tiers.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>A — Monolithic Gateway</h4>
+          </div>
+          <p>A single gateway that carries every client's transformation, aggregation, and experiment logic becomes a <strong>shared bottleneck and a shared failure domain</strong>: one team's change or one noisy client can degrade every client, releases need cross-team coordination, and it tends to turn into a distributed monolith. Scaling the whole tier to satisfy the heaviest client is wasteful, and keeping three clients' experiments in one codebase raises the risk of cross-client regressions. <strong>Caveat:</strong> for a small team with one or two near-identical clients, a single gateway is the simplest thing that works and a reasonable starting point before the clients diverge.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>C — Unified GraphQL Gateway</h4>
+          </div>
+          <p>GraphQL solves <strong>over-fetching and under-fetching</strong> well, but making it the single global tier has real costs: HTTP caching is harder (usually POST to one endpoint, so CDN caching and per-URL rate limiting do not work out of the box), rate limiting must account for <strong>query cost and depth</strong> rather than request count, resolvers can create N+1 fan-out against slow services, and one gateway still concentrates failure and ownership. Per-client A/B tests and payload tuning still need client-aware logic somewhere. <strong>Caveat:</strong> GraphQL composes well <em>inside</em> a BFF (or as the BFF for the SPA); persisted queries, DataLoader-style batching, and cost limits mitigate most of its issues.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>D — Edge/CDN Functions as BFFs</h4>
+          </div>
+          <p>Edge functions are excellent for <strong>cacheable, low-compute shaping</strong> such as header-based variants and trimming static payloads, and they put logic close to users. But aggregating five microservices from the edge means many long-haul calls back to the origin region (often <em>slower</em>, not faster), edge runtimes have tight CPU, memory, and execution-time limits, local state and observability are harder, and logic is spread across a vendor's global fleet, which complicates debugging and rollouts. <strong>Caveat:</strong> use the edge as an <em>accelerator</em> (CDN caching of public catalog data, geo routing, simple A/B assignment), not as the primary orchestration layer.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Gateway + Per-Client BFFs ✓</h4>
+          </div>
+          <p>Use the API Gateway only for cross-cutting concerns (routing, rate limiting, edge caching, TLS, auth) and build a lightweight BFF per client type (web, Android, iOS) that handles aggregation, response</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Mobile Latency</th><th>Fault Isolation</th><th>Per-Client A/B Speed</th><th>Cross-Cutting Policy Consistency</th><th>Operational Overhead</th><th>Team Autonomy</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Monolithic Gateway</td><td>Moderate ⚠</td><td>Poor ❌</td><td>Slow (shared releases) ❌</td><td>Strong ✅</td><td>Low (one tier) ✅</td><td>Low ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Gateway + BFFs ✓</td><td>Very good ✅</td><td>Strong ✅</td><td>Fast ✅</td><td>Strong ✅</td><td>Medium ⚠</td><td>High ✅</td></tr>
+            <tr><td class="tt-option">C — GraphQL Gateway</td><td>Good (fewer round trips) ✅</td><td>Moderate ⚠</td><td>Moderate ⚠</td><td>Moderate (cost-based limits) ⚠</td><td>Medium–High ⚠</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Edge Functions</td><td>Good for cached data, poor for aggregation ⚠</td><td>Moderate ⚠</td><td>Fast for simple variants ⚠</td><td>Weak (split with origin) ❌</td><td>Medium (vendor-specific) ⚠</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Monolithic Gateway</h4>
+          </div>
+          <p>A small team with one or two similar clients, early in the product's life, where simplicity matters more than isolation. Revisit when client needs or release cadences diverge.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Gateway + BFFs</h4>
+          </div>
+          <p>Several client types with different payload, caching, and experiment needs; multiple teams; a requirement for fault isolation and independent releases.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — GraphQL Gateway</h4>
+          </div>
+          <p>Many clients with highly variable data needs, a strong schema-governance culture, and the capacity to invest in persisted queries, cost limiting, and resolver performance. Often best used inside or alongside BFFs.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Edge Functions</h4>
+          </div>
+          <p>Mostly cacheable, public, read-mostly content (catalog pages, images, static config), geo routing, and simple variant assignment close to users.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Gateway + BFF Request Flow</h3>
+        <p>The gateway enforces shared policy once; each BFF fans out in parallel to domain services and returns a client-shaped payload:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    AND[Android app] --&gt; GW
+    IOS[iOS app] --&gt; GW
+    SPA[Web SPA] --&gt; GW
+    GW[API Gateway - TLS, auth, global rate limits, routing, edge cache]
+    GW --&gt; BA[Android BFF]
+    GW --&gt; BI[iOS BFF]
+    GW --&gt; BW[Web BFF]
+    BA --&gt; S1[User Profile]
+    BA --&gt; S2[Catalog]
+    BA --&gt; S3[Inventory]
+    BA --&gt; S4[Pricing]
+    BA --&gt; S5[Recommendations]
+    BI --&gt; S2
+    BI --&gt; S3
+    BI --&gt; S4
+    BW --&gt; S2
+    BW --&gt; S4
+    BW --&gt; S5">flowchart LR
+    AND[Android app] --&gt; GW
+    IOS[iOS app] --&gt; GW
+    SPA[Web SPA] --&gt; GW
+    GW[API Gateway - TLS, auth, global rate limits, routing, edge cache]
+    GW --&gt; BA[Android BFF]
+    GW --&gt; BI[iOS BFF]
+    GW --&gt; BW[Web BFF]
+    BA --&gt; S1[User Profile]
+    BA --&gt; S2[Catalog]
+    BA --&gt; S3[Inventory]
+    BA --&gt; S4[Pricing]
+    BA --&gt; S5[Recommendations]
+    BI --&gt; S2
+    BI --&gt; S3
+    BI --&gt; S4
+    BW --&gt; S2
+    BW --&gt; S4
+    BW --&gt; S5</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> BFF Aggregation with Deadlines, Fallbacks, and Deterministic A/B Bucketing</h3>
+        <p>A mobile BFF handler that fans out in parallel under one deadline, degrades gracefully when optional services are slow, buckets users deterministically, and returns one trimmed payload:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">assignVariant</span>(userId, experimentKey):</span>
+<span class="line">    bucket <span class="tk-op">=</span> <span class="tk-fn">hash32</span>(userId <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> experimentKey) mod <span class="tk-num">100</span>      <span class="tk-com">// stable across BFFs and sessions</span></span>
+<span class="line">    <span class="tk-kw">return</span> bucket <span class="tk-op">&lt;</span> <span class="tk-num">50</span> ? <span class="tk-str">&#x27;control&#x27;</span> : <span class="tk-str">&#x27;treatment&#x27;</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getProductScreen</span>(request, productId):</span>
+<span class="line">    start    <span class="tk-op">=</span> <span class="tk-fn">now</span>()</span>
+<span class="line">    userId   <span class="tk-op">=</span> request.auth.userId                             <span class="tk-com">// already authenticated at the gateway</span></span>
+<span class="line">    variant  <span class="tk-op">=</span> <span class="tk-fn">assignVariant</span>(userId, <span class="tk-str">&#x27;pdp-layout-v2&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Fan out in parallel; each call has its own timeout and circuit breaker</span></span>
+<span class="line">    productF <span class="tk-op">=</span> <span class="tk-kw">async</span> <span class="tk-fn">call</span>(<span class="tk-str">&#x27;catalog&#x27;</span>,   productId,         timeout <span class="tk-op">=</span> <span class="tk-num">150ms</span>, critical <span class="tk-op">=</span> <span class="tk-lit">true</span>)</span>
+<span class="line">    priceF   <span class="tk-op">=</span> <span class="tk-kw">async</span> <span class="tk-fn">call</span>(<span class="tk-str">&#x27;pricing&#x27;</span>,   productId, userId, timeout <span class="tk-op">=</span> <span class="tk-num">150ms</span>, critical <span class="tk-op">=</span> <span class="tk-lit">true</span>)</span>
+<span class="line">    stockF   <span class="tk-op">=</span> <span class="tk-kw">async</span> <span class="tk-fn">call</span>(<span class="tk-str">&#x27;inventory&#x27;</span>, productId,         timeout <span class="tk-op">=</span> <span class="tk-num">150ms</span>, critical <span class="tk-op">=</span> <span class="tk-lit">true</span>)</span>
+<span class="line">    recsF    <span class="tk-op">=</span> <span class="tk-kw">async</span> <span class="tk-fn">call</span>(<span class="tk-str">&#x27;recs&#x27;</span>,      productId, userId, timeout <span class="tk-op">=</span> <span class="tk-num">120ms</span>, critical <span class="tk-op">=</span> <span class="tk-lit">false</span>)</span>
+<span class="line">    profileF <span class="tk-op">=</span> <span class="tk-kw">async</span> <span class="tk-fn">call</span>(<span class="tk-str">&#x27;profile&#x27;</span>,   userId,            timeout <span class="tk-op">=</span> <span class="tk-num">100ms</span>, critical <span class="tk-op">=</span> <span class="tk-lit">false</span>)</span>
+<span class="line"></span>
+<span class="line">    product <span class="tk-op">=</span> <span class="tk-kw">await</span> productF                                   <span class="tk-com">// critical: failure fails the screen</span></span>
+<span class="line">    price   <span class="tk-op">=</span> <span class="tk-kw">await</span> priceF</span>
+<span class="line">    stock   <span class="tk-op">=</span> <span class="tk-kw">await</span> stockF</span>
+<span class="line">    recs    <span class="tk-op">=</span> <span class="tk-fn">awaitOrDefault</span>(recsF, [])                        <span class="tk-com">// optional: degrade to an empty carousel</span></span>
+<span class="line">    profile <span class="tk-op">=</span> <span class="tk-fn">awaitOrDefault</span>(profileF, GUEST_DEFAULTS)</span>
+<span class="line"></span>
+<span class="line">    metrics.<span class="tk-fn">record</span>(<span class="tk-str">&#x27;bff.android.pdp.latency_ms&#x27;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> start, tags <span class="tk-op">=</span> { variant: variant, degraded: recs.<span class="tk-fn">isEmpty</span>() })</span>
+<span class="line">    <span class="tk-fn">logExposure</span>(userId, <span class="tk-str">&#x27;pdp-layout-v2&#x27;</span>, variant)              <span class="tk-com">// lets analytics attribute results to the variant</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">shapeForAndroid</span>(product, price, stock, recs, profile, variant)   <span class="tk-com">// trimmed, mobile-sized payload</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">call</span>(service, args, timeout, critical):</span>
+<span class="line">    <span class="tk-kw">if</span> breaker[service].<span class="tk-fn">isOpen</span>():</span>
+<span class="line">        <span class="tk-kw">if</span> critical: <span class="tk-kw">throw</span> <span class="tk-fn">ServiceUnavailable</span>(service)</span>
+<span class="line">        <span class="tk-kw">return</span> DEFAULT                                         <span class="tk-com">// fail fast instead of queueing behind a sick dependency</span></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        result <span class="tk-op">=</span> http.<span class="tk-fn">get</span>(service, args, timeout <span class="tk-op">=</span> timeout, traceId <span class="tk-op">=</span> <span class="tk-fn">currentTraceId</span>())</span>
+<span class="line">        breaker[service].<span class="tk-fn">recordSuccess</span>()</span>
+<span class="line">        <span class="tk-kw">return</span> result</span>
+<span class="line">    <span class="tk-kw">catch</span> Timeout, ServerError:</span>
+<span class="line">        breaker[service].<span class="tk-fn">recordFailure</span>()                       <span class="tk-com">// no retry here: retry at one layer only</span></span>
+<span class="line">        <span class="tk-kw">throw</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Letting business logic leak into BFFs:</strong> Pricing or eligibility rules copied into three BFFs drift apart. Keep decisions in domain services; BFFs only shape and orchestrate.</li>
+          <li><strong>Sequential downstream calls:</strong> Calling profile, then catalog, then pricing in series adds up latencies. Fan out in parallel and set a per-call deadline.</li>
+          <li><strong>All-or-nothing responses:</strong> Failing the whole screen because recommendations timed out. Mark dependencies as critical or optional and degrade gracefully.</li>
+          <li><strong>No shared timeout budget:</strong> Each layer retrying independently multiplies load (gateway × BFF × client). Propagate a single deadline and retry at one layer only.</li>
+          <li><strong>One shared BFF for all clients:</strong> That quietly rebuilds the monolithic gateway. Split by client family, not by team preference.</li>
+          <li><strong>Inconsistent experiment bucketing:</strong> If each BFF buckets users differently, one user sees different variants on web and mobile. Use a shared deterministic assignment (hash of a stable user ID plus the experiment key).</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams <strong>evolve</strong> toward this architecture and keep each layer thin. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Measure first:</strong> Trace the top user journeys (home, product page, checkout) and list the downstream calls each client makes, their payload sizes, and their p95/p99. This shows where aggregation and shaping will actually pay off.</li>
+          <li><strong>Step 1 — Thin gateway:</strong> Centralize TLS, authN/Z, rate limiting, WAF, routing, and request IDs at the gateway. No business or client-specific logic.</li>
+          <li><strong>Step 2 — BFF per client family:</strong> Start with the heaviest client (usually mobile), then split web if its needs diverge. Give each BFF to the client team that consumes it.</li>
+          <li><strong>Step 3 — Resilience defaults:</strong> Add parallel fan-out, per-call timeouts, circuit breakers, and partial-response fallbacks to a shared BFF template.</li>
+          <li><strong>Step 4 — Experimentation:</strong> Use a central experiment service for assignment and configuration; BFFs apply the variants and log exposure.</li>
+          <li><strong>Step 5 — Edge and GraphQL as accelerators:</strong> Cache public catalog responses at the CDN, and adopt GraphQL inside a BFF (typically the SPA's) if over-fetching becomes the main pain.</li>
+        </ul>
+        <p>Add layers in response to measured pain, not architectural fashion.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Keep <strong>cross-cutting policy at the gateway</strong> and <strong>client-specific orchestration in small, client-owned BFFs</strong>. That gives mobile users one fast, right-sized round trip, keeps failures contained per client, and lets teams experiment independently. It costs more deployables and some duplication, so keep BFFs thin and share what is truly common. If you only have one client shape, a single gateway is enough.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

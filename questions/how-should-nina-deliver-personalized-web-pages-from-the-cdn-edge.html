@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How should Nina deliver personalized web pages from the CDN edge? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">18 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">CDN</span>
+      <span class="tag tag--green">Edge Computing</span>
+      <span class="tag tag--amber">Personalization</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">How should Nina deliver personalized web pages from the CDN edge?</h1>
+      <p class="q-scenario"><strong>Nina</strong>, a backend engineer at a busy news platform, serves a mix of <strong>public static assets</strong> (CSS, images, article HTML) and <strong>lightly personalized elements</strong> (saved-article counts, greetings, custom headlines). During major news events traffic surges, and the current setup, where a single CDN fetches fully personalized HTML from the origin with very short TTLs, causes <strong>heavy origin CPU usage</strong> and slow responses. The article body is identical for every reader, only small fragments depend on the user, and those fragments tolerate <strong>seconds of staleness</strong>. She must choose the architecture that minimizes <strong>latency and origin load</strong> while keeping personalized data accurate and reasonably fresh.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep origin-rendered full HTML, but add a multi-CDN strategy with traffic steering and origin shielding, short TTLs, and push-based invalidation.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Move personalization to the edge: cache public parts (assets, shared article HTML) at the CDN and run lightweight edge functions that fetch user-specific data from fast regional stores or APIs, with versioned cache keys and stale-while-revalidate on the static pieces.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Treat every request as uncacheable: pass everything to the origin, scale the origin pool horizontally, and add a Redis read-through cache for strongly consistent personalized responses.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Keep origin-rendered HTML but use push-driven, granular invalidation events to the CDN (via its API) whenever content or personalization data changes, forcing fresh fetches from the origin.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Edge Composition with Cached Shared Content</h3>
+        <p>The root cause is architectural: the system treats the whole page as a single <em>per-user</em> object, so the CDN cannot cache anything and the origin re-renders identical article HTML for every reader. Splitting the page into a <strong>shared, highly cacheable shell</strong> and a <strong>small personalized fragment</strong>, then composing them at the edge, removes that waste. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Origin load collapses to what is truly unique:</strong> The article HTML and assets are served from CDN cache (with origin shielding for the few misses), so origin CPU is spent only on cache fills and on a small personalization lookup, not on rendering whole pages per user.</li>
+          <li><strong>Latency drops where users are:</strong> The shell comes from the nearest PoP, and the edge function reads a small user record from a regional store or key-value service in a single short hop. That is usually far cheaper than a full origin render that crosses continents.</li>
+          <li><strong>Freshness is targeted, not global:</strong> Shared content uses <code>Cache-Control: s-maxage=…, stale-while-revalidate=…</code> plus versioned keys or surrogate-key purges when editors publish. Personalized fragments are fetched fresh (or with a few-second TTL) and never stored in the shared cache.</li>
+          <li><strong>Handles surges gracefully:</strong> Breaking-news spikes hit the same few URLs, which is ideal for CDN request collapsing, while personalization lookups are small, cheap key reads that scale horizontally.</li>
+          <li><strong>Failure isolation:</strong> If the personalization lookup is slow or fails, the edge function can return the generic page with a default greeting after a tight timeout instead of failing the whole request.</li>
+        </ul>
+        <p>A solid implementation has <strong>shell and fragment separation</strong>, <strong>surrogate-key purges or versioned URLs</strong> for editorial changes, a <strong>tight timeout with generic fallback</strong> on the personalization call, and dashboards tracking <strong>edge hit ratio, origin requests per second, and p95 fragment latency</strong>. If the shell hit ratio stays low, check whether cookies or query strings are leaking into the cache key.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>A — Multi-CDN with Origin Shielding</h4>
+          </div>
+          <p>Multi-CDN and shielding improve <strong>availability and reduce duplicate origin fetches</strong>, but the HTML is still rendered per user at the origin, so the expensive work (CPU per request) is unchanged. Short TTLs on personalized HTML give a near-zero hit ratio, and a second CDN doubles configuration, logging, and purge complexity. <strong>Caveat:</strong> multi-CDN is a good resilience investment once the architecture is cache-friendly. It is not a fix for per-user rendering cost.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏭</span>
+            <h4>C — Everything Uncacheable + Scaled Origin</h4>
+          </div>
+          <p>Scaling the origin and adding Redis treats the symptom. Every request still travels to the origin, the same article HTML is re-rendered for every reader, and cost grows linearly with traffic in exactly the moments (breaking news) when you want it to flatten. Strong consistency on something like a saved-article count is also unnecessary here, so you pay for a guarantee the product does not need.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧹</span>
+            <h4>D — Push-Driven Invalidation of Origin HTML</h4>
+          </div>
+          <p>Invalidation is the right tool for <strong>shared</strong> content (an editor corrects an article), but personalized HTML has effectively one cache entry per user, so you would be purging millions of keys, through CDN purge APIs that are rate-limited and not instantaneous across PoPs. The origin also still renders every cache miss, so surge load is not reduced. <strong>Caveat:</strong> keep push-based purging for the shared shell, which is already part of the best answer.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Edge Composition with Cached Shared Content ✓</h4>
+          </div>
+          <p>Move personalization to the edge: cache public parts (assets, shared article HTML) at the CDN and run lightweight edge functions that fetch user-specific data from fast regional stores or APIs, with v</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Origin Load Reduction</th><th>Latency Under Surge</th><th>Personalization Freshness</th><th>Implementation Complexity</th><th>Failure Isolation</th><th>Cost at Scale</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Multi-CDN + Shielding</td><td>Low ❌</td><td>Moderate ⚠</td><td>High ✅</td><td>High ❌</td><td>Good for CDN outages only ⚠</td><td>High ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Edge Composition ✓</td><td>High ✅</td><td>Low (served near user) ✅</td><td>Seconds-level ✅</td><td>Medium ⚠</td><td>Good (generic fallback) ✅</td><td>Lower per request ✅</td></tr>
+            <tr><td class="tt-option">C — Uncacheable + Scaled Origin</td><td>None ❌</td><td>Poor at peak ❌</td><td>Strong ✅</td><td>Medium ⚠</td><td>Weak (origin is the choke point) ❌</td><td>Very high ❌</td></tr>
+            <tr><td class="tt-option">D — Push Invalidation</td><td>Low–Moderate ⚠ (misses still render at origin)</td><td>Moderate ⚠</td><td>High right after purge ✅</td><td>High ❌ (purge storms)</td><td>Weak ❌</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Multi-CDN + Shielding</h4>
+          </div>
+          <p>Your content is already highly cacheable and the main risk is CDN outages or regional performance gaps. Pair it with a cache-friendly architecture first.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Edge Composition</h4>
+          </div>
+          <p>A page mixes a large shared body with small per-user fragments, traffic is spiky, and seconds of staleness on the personalized part are acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Uncacheable + Scaled Origin</h4>
+          </div>
+          <p>Responses are fully unique per user, must reflect the latest write (checkout, account settings), and cannot be assembled from shared parts.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Push Invalidation</h4>
+          </div>
+          <p>Shared content changes unpredictably (editor corrections, breaking updates) and must reach all users within seconds. Use it alongside edge caching, not instead of it.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Edge Read Path: Cached Shell + Personalized Fragment</h3>
+        <p>The shared shell is served from cache (or refilled once through the shield), and only the small fragment is fetched per request:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U as Reader
+    participant E as Edge PoP with Function
+    participant S as Origin Shield
+    participant O as Origin
+    participant P as Regional User Store
+    U-&gt;&gt;E: GET /article/123 with session cookie
+    E-&gt;&gt;E: 1. Normalize cache key (drop cookies and tracking params)
+    alt Shell cached
+        E-&gt;&gt;E: 2a. HIT shared article shell
+    else Shell missing or hard-expired
+        E-&gt;&gt;S: 2b. Fetch shell
+        S-&gt;&gt;O: 3. One collapsed fetch per region
+        O--&gt;&gt;S: Shell plus surrogate-key tags
+        S--&gt;&gt;E: Shell (cached for next readers)
+    end
+    E-&gt;&gt;P: 4. GET user fragment (timeout about 150 ms)
+    P--&gt;&gt;E: Greeting and saved-article count
+    E--&gt;&gt;U: 5. Shell plus fragment (Cache-Control private)">sequenceDiagram
+    participant U as Reader
+    participant E as Edge PoP with Function
+    participant S as Origin Shield
+    participant O as Origin
+    participant P as Regional User Store
+    U-&gt;&gt;E: GET /article/123 with session cookie
+    E-&gt;&gt;E: 1. Normalize cache key (drop cookies and tracking params)
+    alt Shell cached
+        E-&gt;&gt;E: 2a. HIT shared article shell
+    else Shell missing or hard-expired
+        E-&gt;&gt;S: 2b. Fetch shell
+        S-&gt;&gt;O: 3. One collapsed fetch per region
+        O--&gt;&gt;S: Shell plus surrogate-key tags
+        S--&gt;&gt;E: Shell (cached for next readers)
+    end
+    E-&gt;&gt;P: 4. GET user fragment (timeout about 150 ms)
+    P--&gt;&gt;E: Greeting and saved-article count
+    E--&gt;&gt;U: 5. Shell plus fragment (Cache-Control private)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Edge Composition with Safe Fallback</h3>
+        <p>An edge function that serves the shared shell from cache, fetches the small personalized fragment with a tight timeout, never stores personalized output in the shared cache, and falls back to the generic page on failure:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">SHELL_TTL        <span class="tk-op">=</span> <span class="tk-num">60s</span>       <span class="tk-com">// s-maxage for shared article HTML</span></span>
+<span class="line">SWR_WINDOW       <span class="tk-op">=</span> <span class="tk-num">300s</span>      <span class="tk-com">// stale-while-revalidate window</span></span>
+<span class="line">FRAGMENT_TIMEOUT <span class="tk-op">=</span> <span class="tk-num">150ms</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleRequest</span>(req):</span>
+<span class="line">    <span class="tk-com">// 1. Shared shell: key excludes cookies, auth headers and tracking params</span></span>
+<span class="line">    shellKey <span class="tk-op">=</span> <span class="tk-fn">normalize</span>(req.url)                       <span class="tk-com">// path plus whitelisted params only</span></span>
+<span class="line">    shell <span class="tk-op">=</span> edgeCache.<span class="tk-fn">get</span>(shellKey)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> shell <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> shell.<span class="tk-fn">isHardExpired</span>():</span>
+<span class="line">        shell <span class="tk-op">=</span> origin.<span class="tk-fn">fetch</span>(shellKey)                  <span class="tk-com">// via origin shield, requests collapsed</span></span>
+<span class="line">        edgeCache.<span class="tk-fn">put</span>(shellKey, shell,</span>
+<span class="line">                      ttl  <span class="tk-op">=</span> SHELL_TTL,</span>
+<span class="line">                      swr  <span class="tk-op">=</span> SWR_WINDOW,</span>
+<span class="line">                      tags <span class="tk-op">=</span> shell.surrogateKeys)       <span class="tk-com">// e.g. story-123, section-world</span></span>
+<span class="line">    <span class="tk-kw">else</span> <span class="tk-kw">if</span> shell.<span class="tk-fn">isStale</span>():</span>
+<span class="line">        <span class="tk-fn">background</span>(<span class="tk-fn">refresh</span>(shellKey))                   <span class="tk-com">// serve stale now, revalidate async</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 2. Personalized fragment: never stored in the shared cache</span></span>
+<span class="line">    session  <span class="tk-op">=</span> <span class="tk-fn">verifySessionToken</span>(req.<span class="tk-fn">cookie</span>(<span class="tk-str">&quot;sid&quot;</span>))    <span class="tk-com">// local signature check, no origin call</span></span>
+<span class="line">    fragment <span class="tk-op">=</span> DEFAULT_FRAGMENT                         <span class="tk-com">// generic greeting, no counts</span></span>
+<span class="line">    <span class="tk-kw">if</span> session <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            fragment <span class="tk-op">=</span> userStore.<span class="tk-fn">get</span>(<span class="tk-str">&quot;user:&quot;</span> <span class="tk-op">+</span> session.userId, timeout <span class="tk-op">=</span> FRAGMENT_TIMEOUT)</span>
+<span class="line">        <span class="tk-kw">catch</span> Timeout, Unavailable:</span>
+<span class="line">            metrics.<span class="tk-fn">increment</span>(<span class="tk-str">&quot;fragment_fallback&quot;</span>)      <span class="tk-com">// degrade, do not fail the page</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 3. Compose and respond</span></span>
+<span class="line">    html <span class="tk-op">=</span> shell.body.<span class="tk-fn">replacePlaceholder</span>(<span class="tk-str">&quot;{{user}}&quot;</span>, <span class="tk-fn">render</span>(fragment))</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">Response</span>(html, headers <span class="tk-op">=</span> {</span>
+<span class="line">        <span class="tk-str">&quot;Cache-Control&quot;</span>: <span class="tk-str">&quot;private, no-store&quot;</span>,           <span class="tk-com">// response contains user data</span></span>
+<span class="line">        <span class="tk-str">&quot;Vary&quot;</span>: <span class="tk-str">&quot;Accept-Encoding&quot;</span></span>
+<span class="line">    })</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Caching personalized responses in a shared cache:</strong> One misconfigured header can serve one reader's greeting or saved items to another. Mark personalized responses <code>private</code> or <code>no-store</code> and test with two different sessions.</li>
+          <li><strong>Letting cookies pollute the cache key:</strong> If every session cookie is part of the key, the hit ratio falls to near zero. Whitelist only the cookies that truly change shared content and strip the rest at the edge.</li>
+          <li><strong>Misusing the <code>Vary</code> header:</strong> A missing or overly broad <code>Vary</code> either serves wrong variants or fragments the cache. Prefer explicit normalized cache keys over <code>Vary: Cookie</code>.</li>
+          <li><strong>No timeout or fallback on the personalization call:</strong> A slow user-data store then slows every page. Set a tight timeout (tens to low hundreds of milliseconds) and render the generic page on failure.</li>
+          <li><strong>Purging by URL instead of by tag:</strong> A story appears on many URLs (home, section, related lists). Use surrogate keys so one purge refreshes all of them.</li>
+          <li><strong>Cache stampede after a purge:</strong> A hard purge of a hot story sends every PoP to the origin at once. Use soft purge with stale-while-revalidate and shielding so only one request per region refills the cache.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, news platforms layer several techniques and <strong>decide per page component</strong> what can be shared. A typical rollout looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Classify the page:</strong> Mark each element as shared (article body, images, CSS), semi-shared (varies by locale or paywall state), or per-user (greeting, saved count). Only the last category needs per-request work.</li>
+          <li><strong>Step 1 — Cache the shell at the edge:</strong> Normalize the cache key (strip tracking params, ignore irrelevant cookies) and enable origin shielding and request collapsing for surge protection.</li>
+          <li><strong>Step 2 — Add edge or client composition:</strong> Fetch personalized fragments through an edge function or a small API call, with a tight timeout and a generic fallback.</li>
+          <li><strong>Step 3 — Use stale-while-revalidate and surrogate-key purges:</strong> Let editors purge a story by tag within seconds while readers keep getting stale-but-fast copies during revalidation.</li>
+          <li><strong>Step 4 — Add multi-CDN only when needed:</strong> Introduce a second CDN for resilience or regional performance once the cache design is stable.</li>
+          <li><strong>Step 5 — Load test with real surge shapes:</strong> Replay a breaking-news traffic profile and verify the origin request rate stays flat as edge traffic rises.</li>
+        </ul>
+        <p>Optimize by <strong>making most of the page shareable</strong>, then spend per-request compute only on what is genuinely user-specific.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Don't scale the origin to render the same article for every reader. <strong>Cache what is shared at the edge, compute only the small personalized fragment per request</strong>, and keep that fragment out of the shared cache. This cuts origin load and latency together while keeping user data fresh.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

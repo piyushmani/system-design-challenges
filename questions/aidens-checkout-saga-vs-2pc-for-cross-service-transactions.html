@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aiden&#x27;s Checkout: Saga vs. 2PC for Cross-Service Transactions — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">16 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Saga Pattern</span>
+      <span class="tag tag--green">2PC</span>
+      <span class="tag tag--amber">Distributed Transactions</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Aiden&#x27;s Checkout: Saga vs. 2PC for Cross-Service Transactions</h1>
+      <p class="q-scenario"><strong>Aiden</strong>, a backend tech lead, is building checkout across four independently owned microservices: <strong>Orders, Inventory, Payments, and Shipping</strong>. Each has its own database and is owned by a different team. A checkout must end in exactly one of two states: <strong>all steps succeeded</strong>, or the system is <strong>back to a consistent state and the customer is notified</strong>. The platform handles <strong>hundreds of requests per second</strong>, has strict <strong>tail-latency</strong> and <strong>availability</strong> goals, and operators must be able to see <em>where a given checkout is stuck</em> and why it failed. Payments uses an external provider that supports idempotency keys but not XA, and a captured payment cannot be rolled back, only refunded. Which distributed-transaction approach fits best?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Employ a distributed two-phase commit (XA/2PC) spanning all services: establish a centralized transaction coordinator, configure each service with an XA resource manager, and execute synchronous prepare and commit phases to maintain strong consistency across all databases.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Utilize an orchestrated Saga pattern: create a centralized Saga orchestrator service to sequentially direct the workflow (reserve inventory, process payment, arrange shipping), save the saga&#x27;s state, apply the outbox pattern in each service for reliable asynchronous messaging, and define compensating actions with timeouts and retries for handling failures.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Adopt a choreography-based Saga pattern: configure each service to emit domain events (e.g., OrderCreated -&gt; InventoryReserved -&gt; PaymentCaptured) and allow downstream services to react and emit subsequent events. Manage failures by publishing compensating events and depend on event bus delivery along with idempotent event handlers.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Shun cross-service distributed transactions altogether: maintain strict local transactions within each microservice, send a response to the user as soon as the Order service logs the order, and rely on client-side retries, asynchronous reconciliation processes, and periodic background scripts to identify and correct state inconsistencies.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Orchestrated Saga with Outbox</h3>
+        <p>An <strong>orchestrated Saga</strong> replaces one global ACID transaction with a sequence of <em>local</em> transactions, each paired with a <strong>compensating action</strong>, driven by a central orchestrator that persists the saga's state. With four services, four teams, and a hard requirement to explain and recover from failures, a single place that owns the workflow gives the best balance of correctness, availability, and observability. Here's why it stands out:</p>
+        <ul>
+          <li><strong>No cross-service locks:</strong> Each service commits locally and releases its locks immediately. Nothing blocks on a global coordinator, so throughput stays high and tail latency stays bounded.</li>
+          <li><strong>Explicit failure semantics:</strong> Every step has a defined compensation (release inventory, void or refund payment, cancel shipment, cancel order) with timeouts and retries. The saga always ends in a clear COMPLETED or COMPENSATED state, which is exactly the business requirement.</li>
+          <li><strong>Observability by construction:</strong> The orchestrator persists one saga record (state, current step, attempts, last error), so support can answer 'where is order 42 and why?' with a single query, and every transition emits a metric and a trace span.</li>
+          <li><strong>Reliable messaging via the outbox:</strong> Each service writes its state change and the outgoing message in the <em>same local transaction</em>, and a relay publishes it. That closes the gap between 'database committed' and 'message sent'.</li>
+          <li><strong>Fits external dependencies:</strong> A payment provider with idempotency keys and refunds fits the retry-and-compensate model, whereas 2PC cannot enlist it at all.</li>
+          <li><strong>Team autonomy:</strong> Services only expose commands, events, and a local compensation. They do not need to understand the whole workflow.</li>
+        </ul>
+        <p>A production-grade saga includes a <strong>durable saga log</strong>, <strong>per-step timeouts and retries with backoff</strong>, <strong>idempotency keys</strong> on every command, an <strong>outbox with idempotent consumers</strong>, <strong>idempotent compensations</strong>, a <strong>dead-letter / manual-intervention queue</strong>, and dashboards of sagas by state and age. Page on sagas that are stuck longer than their SLA.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🤝</span>
+            <h4>A — Distributed Two-Phase Commit (XA/2PC)</h4>
+          </div>
+          <p>2PC gives atomic commit, but every participant must support XA, <strong>hold locks across both the prepare and commit phases</strong>, and rely on a coordinator whose failure can leave participants <strong>blocked in doubt</strong>. At hundreds of requests per second across four databases and four teams, lock hold time becomes the sum of the slowest participants, so contention and tail latency both grow, and availability becomes the product of all four services plus the coordinator. The external payment provider, and many managed and NoSQL stores, do not support XA at all. <strong>Caveat:</strong> 2PC remains reasonable inside one organization and one database cluster, with XA-capable resources and low contention.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">💃</span>
+            <h4>C — Choreography-Based Saga</h4>
+          </div>
+          <p>Choreography has no central coordinator, which suits flows with two or three services. With four services and compensations, the workflow becomes <strong>implicit</strong>, spread across event handlers: nobody owns the end-to-end state, cyclic dependencies creep in, and answering 'why is order 42 stuck?' means correlating events from four services. Compensation logic is scattered, and adding a step changes several teams' code. <strong>Caveat:</strong> for short, linear flows with few participants, choreography is lighter and avoids a central component.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧹</span>
+            <h4>D — No Distributed Coordination (Local Transactions + Reconciliation)</h4>
+          </div>
+          <p>Replying as soon as the Order service logs the order and 'fixing it later' offers <strong>no guarantee of reaching a consistent end state</strong>. It relies on scripts to discover failures that a saga would detect and handle immediately, and customers see 'confirmed' orders that later fail on payment or stock. It is effectively an informal saga with no state machine, timeouts, or ownership. <strong>Caveat:</strong> responding immediately with a 'processing' status is a good UX for this flow, provided a real saga drives the work behind it and reconciliation is only the safety net.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Orchestrated Saga with Outbox ✓</h4>
+          </div>
+          <p>Utilize an orchestrated Saga pattern: create a centralized Saga orchestrator service to sequentially direct the workflow (reserve inventory, process payment, arrange shipping), save the saga&#x27;s state,</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Atomicity Guarantee</th><th>Throughput / Tail Latency</th><th>Availability</th><th>Failure Observability</th><th>Fit with External Services</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — 2PC (XA)</td><td>✅ Strong, all-or-nothing</td><td>❌ Locks held across services</td><td>❌ Coordinator + every participant</td><td>⚠ Coordinator logs only</td><td>❌ Needs XA support</td><td>⚠ Medium (infrastructure heavy)</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Orchestrated Saga ✓</td><td>⚠ Eventual, via compensation</td><td>✅ Local commits, no cross-service locks</td><td>✅ No global blocking</td><td>✅ Central saga state</td><td>✅ Idempotency keys + refunds</td><td>⚠ Medium to high</td></tr>
+            <tr><td class="tt-option">C — Choreography Saga</td><td>⚠ Eventual, via compensation</td><td>✅ Local commits</td><td>✅ No coordinator</td><td>❌ Scattered across services</td><td>✅ Event driven</td><td>⚠ Grows with every step</td></tr>
+            <tr><td class="tt-option">D — No Coordination</td><td>❌ No guarantee</td><td>✅ Fast reply</td><td>✅ High</td><td>❌ Found by reconciliation</td><td>⚠ Ad hoc</td><td>⚠ Low upfront, high later</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — 2PC (XA)</h4>
+          </div>
+          <p>A few participants inside one trust boundary, XA-capable databases, low contention, and a strict need for atomic isolation (for example a ledger spanning two schemas).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Orchestrated Saga</h4>
+          </div>
+          <p>Multi-team flows with three or more steps, external dependencies, a requirement to explain and recover failures, and a need for central visibility.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Choreography Saga</h4>
+          </div>
+          <p>Short, linear flows with two or three services where teams value loose coupling and the workflow rarely changes.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — No Coordination</h4>
+          </div>
+          <p>Non-critical side effects (analytics, notifications) where occasional inconsistency is acceptable and repairable. Never for money or stock.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Orchestrated Saga: Happy Path</h3>
+        <p>The orchestrator drives each step through commands. Each service commits locally and replies through its outbox:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant O as Saga Orchestrator
+    participant ORD as Orders
+    participant INV as Inventory
+    participant PAY as Payments
+    participant SHP as Shipping
+    C-&gt;&gt;O: 1. Checkout request
+    O--&gt;&gt;C: 2. 202 Accepted with sagaId
+    O-&gt;&gt;ORD: 3. CreateOrder (PENDING)
+    ORD--&gt;&gt;O: OrderCreated
+    O-&gt;&gt;INV: 4. ReserveInventory
+    INV--&gt;&gt;O: InventoryReserved
+    O-&gt;&gt;PAY: 5. AuthorizePayment
+    PAY--&gt;&gt;O: PaymentAuthorized
+    O-&gt;&gt;SHP: 6. CreateShipment
+    SHP--&gt;&gt;O: ShipmentCreated
+    O-&gt;&gt;ORD: 7. ConfirmOrder
+    O--&gt;&gt;C: 8. Status CONFIRMED via push or poll
+    Note over O,SHP: Each hop is a command, a local transaction, and an outbox event">sequenceDiagram
+    participant C as Client
+    participant O as Saga Orchestrator
+    participant ORD as Orders
+    participant INV as Inventory
+    participant PAY as Payments
+    participant SHP as Shipping
+    C-&gt;&gt;O: 1. Checkout request
+    O--&gt;&gt;C: 2. 202 Accepted with sagaId
+    O-&gt;&gt;ORD: 3. CreateOrder (PENDING)
+    ORD--&gt;&gt;O: OrderCreated
+    O-&gt;&gt;INV: 4. ReserveInventory
+    INV--&gt;&gt;O: InventoryReserved
+    O-&gt;&gt;PAY: 5. AuthorizePayment
+    PAY--&gt;&gt;O: PaymentAuthorized
+    O-&gt;&gt;SHP: 6. CreateShipment
+    SHP--&gt;&gt;O: ShipmentCreated
+    O-&gt;&gt;ORD: 7. ConfirmOrder
+    O--&gt;&gt;C: 8. Status CONFIRMED via push or poll
+    Note over O,SHP: Each hop is a command, a local transaction, and an outbox event</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Saga Orchestrator State Machine with Outbox</h3>
+        <p>Each event updates the saga state and writes the next command to the outbox in a single local transaction. Failures trigger reverse-order compensation:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Saga definition: each step has a command and a compensation</span></span>
+<span class="line">STEPS <span class="tk-op">=</span> [</span>
+<span class="line">    { name: <span class="tk-str">&quot;createOrder&quot;</span>,      <span class="tk-kw">do</span>: Orders.create,      undo: Orders.cancel },</span>
+<span class="line">    { name: <span class="tk-str">&quot;reserveInventory&quot;</span>, <span class="tk-kw">do</span>: Inventory.reserve,  undo: Inventory.release },</span>
+<span class="line">    { name: <span class="tk-str">&quot;authorizePayment&quot;</span>, <span class="tk-kw">do</span>: Payments.authorize, undo: Payments.void },     <span class="tk-com">// pivot: capture only after shipping succeeds</span></span>
+<span class="line">    { name: <span class="tk-str">&quot;createShipment&quot;</span>,   <span class="tk-kw">do</span>: Shipping.create,    undo: Shipping.cancel }</span>
+<span class="line">]</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onEvent</span>(sagaId, event):</span>
+<span class="line">    saga <span class="tk-op">=</span> sagaStore.<span class="tk-fn">load</span>(sagaId)                          <span class="tk-com">// durable state, one row per saga</span></span>
+<span class="line">    <span class="tk-kw">if</span> event.id <span class="tk-kw">in</span> saga.processedEventIds: <span class="tk-kw">return</span>          <span class="tk-com">// idempotent handling of duplicate events</span></span>
+<span class="line"></span>
+<span class="line">    tx <span class="tk-op">=</span> sagaStore.<span class="tk-kw">begin</span>()</span>
+<span class="line">    <span class="tk-kw">if</span> event.type <span class="tk-op">==</span> <span class="tk-str">&quot;StepSucceeded&quot;</span>:</span>
+<span class="line">        saga.completed.<span class="tk-fn">push</span>(event.step)</span>
+<span class="line">        <span class="tk-kw">if</span> saga.completed.length <span class="tk-op">==</span> STEPS.length:</span>
+<span class="line">            saga.state <span class="tk-op">=</span> <span class="tk-str">&quot;COMPLETED&quot;</span></span>
+<span class="line">            tx.outbox.<span class="tk-fn">add</span>(Orders.<span class="tk-fn">confirm</span>(sagaId))</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            next <span class="tk-op">=</span> STEPS[saga.completed.length]</span>
+<span class="line">            tx.outbox.<span class="tk-fn">add</span>(next.<span class="tk-kw">do</span>(sagaId, idempotencyKey <span class="tk-op">=</span> sagaId <span class="tk-op">+</span> <span class="tk-str">&quot;:&quot;</span> <span class="tk-op">+</span> next.name))</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">else</span> <span class="tk-kw">if</span> event.type <span class="tk-kw">in</span> [<span class="tk-str">&quot;StepFailed&quot;</span>, <span class="tk-str">&quot;StepTimedOut&quot;</span>]:</span>
+<span class="line">        <span class="tk-kw">if</span> event.retryable <span class="tk-kw">and</span> saga.attempts[event.step] <span class="tk-op">&lt;</span> MAX_RETRIES:</span>
+<span class="line">            saga.attempts[event.step] <span class="tk-op">+</span><span class="tk-op">=</span> <span class="tk-num">1</span></span>
+<span class="line">            tx.outbox.<span class="tk-fn">add</span>(<span class="tk-fn">retry</span>(event.step, delay <span class="tk-op">=</span> <span class="tk-fn">backoff</span>(saga.attempts[event.step])))</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            saga.state <span class="tk-op">=</span> <span class="tk-str">&quot;COMPENSATING&quot;</span></span>
+<span class="line">            <span class="tk-com">// On a timeout the outcome of the failed step is unknown, so undo it too (undo must be safe to repeat)</span></span>
+<span class="line">            toUndo <span class="tk-op">=</span> <span class="tk-fn">reverse</span>(saga.completed) <span class="tk-op">+</span> (event.type <span class="tk-op">==</span> <span class="tk-str">&quot;StepTimedOut&quot;</span> ? [event.step] : [])</span>
+<span class="line">            <span class="tk-kw">for</span> step <span class="tk-kw">in</span> toUndo:</span>
+<span class="line">                tx.outbox.<span class="tk-fn">add</span>(step.<span class="tk-fn">undo</span>(sagaId, idempotencyKey <span class="tk-op">=</span> sagaId <span class="tk-op">+</span> <span class="tk-str">&quot;:undo:&quot;</span> <span class="tk-op">+</span> step.name))</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">else</span> <span class="tk-kw">if</span> event.type <span class="tk-op">==</span> <span class="tk-str">&quot;UndoSucceeded&quot;</span>:</span>
+<span class="line">        saga.undone.<span class="tk-fn">push</span>(event.step)</span>
+<span class="line">        <span class="tk-kw">if</span> saga.undone covers all steps <span class="tk-kw">in</span> toUndo:</span>
+<span class="line">            saga.state <span class="tk-op">=</span> <span class="tk-str">&quot;COMPENSATED&quot;</span></span>
+<span class="line">            tx.outbox.<span class="tk-fn">add</span>(Notifications.<span class="tk-fn">customerFailure</span>(sagaId))</span>
+<span class="line"></span>
+<span class="line">    saga.processedEventIds.<span class="tk-fn">add</span>(event.id)</span>
+<span class="line">    saga.deadline <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">+</span> STEP_TIMEOUT</span>
+<span class="line">    tx.<span class="tk-fn">save</span>(saga)</span>
+<span class="line">    tx.<span class="tk-fn">commit</span>()                                            <span class="tk-com">// state change and outgoing commands are atomic</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Outbox relay (separate process): publishes unsent outbox rows to the broker, then marks them sent</span></span>
+<span class="line"><span class="tk-com">// Timeout sweeper: finds sagas whose deadline has passed and feeds them StepTimedOut events</span></span>
+<span class="line"><span class="tk-com">// Stuck-saga alert: any saga older than its SLA in a non-terminal state pages the on-call</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Skipping idempotency:</strong> With at-least-once messaging, a retried command charges the card twice or reserves stock twice. Every command and compensation needs an idempotency key.</li>
+          <li><strong>Dual-write instead of the outbox:</strong> Updating the database and then publishing a message separately loses messages on a crash, and the saga stalls silently.</li>
+          <li><strong>Irreversible steps too early:</strong> Capturing payment or notifying a carrier before reversible steps forces refunds and apologies. Order the steps by reversibility.</li>
+          <li><strong>Compensations with no failure plan:</strong> A refund call that times out must be retried until it succeeds or escalates to a manual queue. 'Best effort' leaves inconsistent state behind.</li>
+          <li><strong>Treating compensation as rollback:</strong> A compensation is a new business action with its own side effects (fees, emails). It does not erase history.</li>
+          <li><strong>No timeouts or saga SLA:</strong> Without a deadline, a saga waiting for a lost reply stays 'in progress' forever and holds reserved stock.</li>
+          <li><strong>Business rules in the orchestrator:</strong> It should sequence steps. Domain decisions belong to the owning services, or the orchestrator becomes a distributed monolith.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Mature e-commerce platforms rarely hand-roll the whole thing. They combine a few well-known patterns:</p>
+        <ul>
+          <li><strong>Step 0 - Model the states:</strong> Draw the state machine (PENDING, INVENTORY_RESERVED, PAYMENT_AUTHORIZED, SHIPPING_CREATED, CONFIRMED, plus the compensating states) and decide which step is the pivot.</li>
+          <li><strong>Step 1 - Order steps by reversibility:</strong> Reserve inventory first (cheap to release), authorize (not capture) the payment, create the shipment, and capture after shipping is confirmed if the business allows it.</li>
+          <li><strong>Step 2 - Make every command idempotent:</strong> Use <code>sagaId + step</code> as the idempotency key for Inventory, Payments, and Shipping calls.</li>
+          <li><strong>Step 3 - Outbox everywhere:</strong> Each service writes its state change and an outbox row in one local transaction, and a relay (Debezium or a poller) publishes it to the broker.</li>
+          <li><strong>Step 4 - Pick a workflow engine:</strong> Temporal, Camunda, or AWS Step Functions provide durable state, timers, retries, and visibility. A hand-written orchestrator is justified only for simple flows.</li>
+          <li><strong>Step 5 - Operate:</strong> Dashboards of sagas by state and age, alerts for stuck sagas, a dead-letter queue with replay tooling, and a runbook for manual compensation.</li>
+        </ul>
+        <p>Choose local transactions plus explicit compensation: centralize the workflow, not the data.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Across independent services and databases, <strong>use a Saga, not a distributed lock</strong>. For a four-service, multi-team flow that needs clear failure handling and traceability, an <strong>orchestrated saga with the outbox pattern, idempotent steps, and well-defined compensations</strong> gives the best balance of throughput, availability, and observability. Accept eventual consistency and design the intermediate states deliberately.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

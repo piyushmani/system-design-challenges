@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stop the Lock Step: Selecting a Deadlock-Aware Concurrency Strategy — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">19 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Deadlocks</span>
+      <span class="tag tag--green">Concurrency</span>
+      <span class="tag tag--amber">Locking Strategies</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Stop the Lock Step: Selecting a Deadlock-Aware Concurrency Strategy</h1>
+      <p class="q-scenario"><strong>Alex</strong> is a backend engineer reworking order processing for a fast-growing e-commerce platform. Each order creates <strong>accounting records in the Billing service</strong> and <strong>reserves stock in the Inventory service</strong>. The current design takes a simple <strong>distributed lock</strong> per request to serialize updates across services, which causes <strong>high latency</strong>, occasional <strong>system-wide stalls</strong>, and <strong>distributed deadlocks</strong> when transactions lock different accounts and SKUs in different orders. Alex needs an approach that <strong>eliminates deadlocks</strong>, keeps <strong>latency low</strong>, stays <strong>available during partial outages</strong>, and gives <strong>clear visibility into conflicts</strong>. Stock must never be oversold, billing records must stay accurate, and the business can accept a short-lived 'pending' order state while the workflow completes.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A central distributed lock manager: keep serializing multi-service updates through a replicated locking coordinator (such as Redlock on Redis or ZooKeeper) with deadlock detection, lock timeouts, and wait-time instrumentation, giving strict consistency but a serialized design.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Optimistic concurrency control with the Saga pattern: remove global locks in favor of per-entity versioning (row version or compare-and-set) with idempotent operations and fast retries, use a Saga with compensating actions for cross-service consistency, and monitor traces and conflict/retry metrics.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Distributed transactions with Two-Phase Commit: a transaction coordinator drives a single atomic commit across Billing and Inventory, holding locks at both participants to provide strict ACID guarantees.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Eventual consistency with commutative updates (mergeable events or CRDTs): let the services process updates concurrently and resolve conflicts through background reconciliation or CRDT merges, accepting an eventually consistent model.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Optimistic Concurrency + Saga</h3>
+        <p>Distributed deadlocks come from <strong>holding locks while waiting for other locks across service boundaries</strong>. The cure is to stop holding locks across services at all. Option B does that: each service protects its own invariant with a <strong>short, local, conditional write</strong> (compare-and-set or a guarded decrement), conflicts become fast retries instead of waits, and the cross-service workflow is a <strong>Saga</strong> in which every step is idempotent and has a compensating action. Nothing blocks on anything else, so there is nothing to deadlock, and a failure in one service only delays or compensates its own step. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Deadlocks are structurally eliminated:</strong> Deadlock requires waiting while holding. With optimistic writes there is no waiting; a conflicting writer fails the compare-and-set and retries. Any remaining local row locks inside a single database should be taken in a consistent global order (for example, SKUs sorted by ID).</li>
+          <li><strong>Latency scales with the work, not the queue:</strong> There is no lock queue in front of each order. A reservation is a single conditional update, typically sub-millisecond to a few milliseconds in the owning database, and orders for different SKUs proceed fully in parallel.</li>
+          <li><strong>Oversell is prevented by the invariant, not by the lock:</strong> A guarded update such as <code>available = available - q WHERE available &gt;= q</code> is atomic in the Inventory database, so two orders cannot both take the last unit.</li>
+          <li><strong>Availability during partial outages:</strong> If Billing is slow or down, the saga pauses at that step (the order stays pending) or compensates by releasing the reservation, while Inventory keeps serving other orders. No coordinator or lock service is a hard dependency for every request.</li>
+          <li><strong>Clear conflict visibility:</strong> Version conflicts, retry counts, saga step durations, and compensation counts are first-class metrics, and a saga log gives every order an inspectable state history.</li>
+          <li><strong>Proven pattern:</strong> Sagas were introduced by Garcia-Molina and Salem (SIGMOD 1987) for long-lived transactions and are now standard in microservice order flows; optimistic concurrency with compare-and-set underlies most modern NoSQL stores and is widely used with SQL.</li>
+        </ul>
+        <p>A production saga has <strong>a persisted state machine per order</strong>, <strong>idempotency keys on every step</strong>, <strong>reservations with TTLs</strong>, <strong>bounded retries with jittered backoff</strong>, <strong>compensations that retry until success</strong>, and <strong>dashboards for conflict rate, saga duration, and compensation counts</strong>. If conflict rates on a few hot rows dominate, introduce per-key serialization for those keys rather than going back to global locks.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔐</span>
+            <h4>A — Central Distributed Lock Manager</h4>
+          </div>
+          <p>A lock manager keeps the <strong>serialization that causes the latency</strong>: every order waits on the coordinator, and deadlock detection merely resolves deadlocks after they have already stalled work. It also adds a critical dependency, and lock-based mutual exclusion in distributed systems is subtle (Martin Kleppmann's analysis of Redlock argues that without fencing tokens, a paused client holding an expired lock can corrupt data). <strong>Caveat:</strong> for a rare, genuinely exclusive operation (a nightly migration, a singleton job), a lock with a fencing token is appropriate; it just should not sit on the hot path of every order.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🤝</span>
+            <h4>C — Two-Phase Commit (2PC)</h4>
+          </div>
+          <p>2PC gives atomicity but <strong>holds locks at every participant for the entire protocol</strong>, including at least one network round trip, so latency rises and contention grows. It is a blocking protocol: if the coordinator fails between prepare and commit, participants stay locked until it recovers. It does not remove deadlocks either, since each participant still takes local locks in whatever order requests arrive. <strong>Caveat:</strong> within a single database or a tightly coupled pair of resources on reliable infrastructure, 2PC can be acceptable, but it is a poor fit for independently owned microservices.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">♾️</span>
+            <h4>D — Eventual Consistency + CRDTs</h4>
+          </div>
+          <p>Commutative merges are great for counters, sets, and presence, but <strong>stock reservation has a hard invariant</strong> (never below zero) and billing needs exact, auditable totals. Plain CRDT counters let concurrent decrements both succeed, which oversells inventory, and background reconciliation after the fact means customers may be charged for goods that do not exist. <strong>Caveat:</strong> bounded counters or escrow-style reservations (each region owns a slice of stock) can enforce limits with limited coordination, but that is a purpose-built design rather than generic 'eventual consistency'.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Optimistic Concurrency + Saga ✓</h4>
+          </div>
+          <p>Optimistic concurrency control with the Saga pattern: remove global locks in favor of per-entity versioning (row version or compare-and-set) with idempotent operations and fast retries, use a Saga wit</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Deadlock Risk</th><th>Latency under Load</th><th>Availability in Partial Outage</th><th>Consistency / Oversell Protection</th><th>Conflict Observability</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Central Lock Manager</td><td>Detected, not prevented ⚠</td><td>High (serialized) ❌</td><td>Weak (lock service is a dependency) ❌</td><td>Strong ✅</td><td>Good (wait times) ✅</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — OCC + Saga ✓</td><td>None by design ✅</td><td>Low ✅</td><td>Strong ✅</td><td>Strong per entity, eventual across services ⚠</td><td>Strong ✅</td><td>Medium–High ⚠</td></tr>
+            <tr><td class="tt-option">C — Two-Phase Commit</td><td>Still possible locally ⚠</td><td>High ❌</td><td>Weak (blocks on coordinator failure) ❌</td><td>Strongest (atomic) ✅</td><td>Moderate ⚠</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">D — Eventual + CRDTs</td><td>None ✅</td><td>Very low ✅</td><td>Strong ✅</td><td>Weak (invariants not enforced) ❌</td><td>Weak ❌</td><td>High (merge design) ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Central Lock Manager</h4>
+          </div>
+          <p>Rare, genuinely exclusive operations (leader election, migrations, singleton jobs) with fencing tokens; not a per-request hot path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — OCC + Saga</h4>
+          </div>
+          <p>Multi-service business workflows (orders, bookings, payments) where each service owns its data, contention is moderate, and short-lived intermediate states are acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Two-Phase Commit</h4>
+          </div>
+          <p>A small number of tightly coupled resources on reliable infrastructure that truly need atomic commit, often inside one database or a transaction manager you control.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Eventual + CRDTs</h4>
+          </div>
+          <p>Naturally mergeable data (counters without limits, sets, collaborative state, presence) where invariants are weak or enforced by bounded designs.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Order Saga with Compensation</h3>
+        <p>No locks are held across services: each step is idempotent, and failures trigger compensating actions instead of waiting:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant O as Order Orchestrator
+    participant I as Inventory Service
+    participant B as Billing Service
+    O-&gt;&gt;O: 1. Persist order as PENDING
+    O-&gt;&gt;I: 2. Reserve stock with idempotency key and TTL
+    I--&gt;&gt;O: 3. Reserved, or OUT_OF_STOCK
+    alt Stock reserved
+        O-&gt;&gt;B: 4. Create ledger entry and charge with idempotency key
+        alt Billing succeeded
+            B--&gt;&gt;O: 5a. Charged
+            O-&gt;&gt;I: 6a. Confirm reservation
+            O-&gt;&gt;O: 7a. Mark order CONFIRMED
+        else Billing failed or timed out after retries
+            B--&gt;&gt;O: 5b. Failed
+            O-&gt;&gt;I: 6b. Compensate by releasing the reservation
+            O-&gt;&gt;O: 7b. Mark order FAILED
+        end
+    else Out of stock
+        O-&gt;&gt;O: 4c. Mark order REJECTED, nothing to compensate
+    end">sequenceDiagram
+    participant O as Order Orchestrator
+    participant I as Inventory Service
+    participant B as Billing Service
+    O-&gt;&gt;O: 1. Persist order as PENDING
+    O-&gt;&gt;I: 2. Reserve stock with idempotency key and TTL
+    I--&gt;&gt;O: 3. Reserved, or OUT_OF_STOCK
+    alt Stock reserved
+        O-&gt;&gt;B: 4. Create ledger entry and charge with idempotency key
+        alt Billing succeeded
+            B--&gt;&gt;O: 5a. Charged
+            O-&gt;&gt;I: 6a. Confirm reservation
+            O-&gt;&gt;O: 7a. Mark order CONFIRMED
+        else Billing failed or timed out after retries
+            B--&gt;&gt;O: 5b. Failed
+            O-&gt;&gt;I: 6b. Compensate by releasing the reservation
+            O-&gt;&gt;O: 7b. Mark order FAILED
+        end
+    else Out of stock
+        O-&gt;&gt;O: 4c. Mark order REJECTED, nothing to compensate
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Guarded Reservation, Version-Checked Update, and Saga Orchestration</h3>
+        <p>Inventory enforces its invariant in one atomic statement, other entities use version checks with bounded retries, local row locks follow a consistent order, and the saga drives forward or compensates without holding cross-service locks:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Inventory service: the invariant is enforced in one atomic statement, no global lock</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reserveStock</span>(orderId, sku, qty):</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        tx <span class="tk-op">=</span> db.<span class="tk-kw">begin</span>()</span>
+<span class="line">        <span class="tk-kw">if</span> tx.<span class="tk-fn">exists</span>(<span class="tk-str">&#x27;reservations&#x27;</span>, orderId, sku):</span>
+<span class="line">            tx.<span class="tk-fn">rollback</span>(); <span class="tk-kw">return</span> ALREADY_RESERVED             <span class="tk-com">// safe redelivery</span></span>
+<span class="line">        updated <span class="tk-op">=</span> tx.<span class="tk-fn">execute</span>(<span class="tk-str">&#x27;UPDATE stock SET available = available - ? WHERE sku = ? AND available &gt;= ?&#x27;</span>, qty, sku, qty)</span>
+<span class="line">        <span class="tk-kw">if</span> updated <span class="tk-op">==</span> <span class="tk-num">0</span>:</span>
+<span class="line">            tx.<span class="tk-fn">rollback</span>(); <span class="tk-kw">return</span> OUT_OF_STOCK                 <span class="tk-com">// invariant protected, nothing was changed</span></span>
+<span class="line">        tx.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;reservations&#x27;</span>, { orderId: orderId, sku: sku, qty: qty, expiresAt: <span class="tk-fn">now</span>() <span class="tk-op">+</span> 15min })   <span class="tk-com">// UNIQUE(orderId, sku)</span></span>
+<span class="line">        tx.<span class="tk-fn">commit</span>()</span>
+<span class="line">        <span class="tk-kw">return</span> RESERVED</span>
+<span class="line">    <span class="tk-kw">catch</span> UniqueViolation:</span>
+<span class="line">        <span class="tk-kw">return</span> ALREADY_RESERVED                                <span class="tk-com">// a concurrent duplicate won the race</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reserveOrderLines</span>(orderId, lines):</span>
+<span class="line">    <span class="tk-kw">for</span> line <span class="tk-kw">in</span> <span class="tk-fn">sortBy</span>(lines, line.sku):                       <span class="tk-com">// consistent order removes local deadlocks</span></span>
+<span class="line">        result <span class="tk-op">=</span> <span class="tk-fn">reserveStock</span>(orderId, line.sku, line.qty)</span>
+<span class="line">        <span class="tk-kw">if</span> result <span class="tk-op">==</span> OUT_OF_STOCK:</span>
+<span class="line">            <span class="tk-fn">releaseAll</span>(orderId)                                <span class="tk-com">// compensate lines already reserved</span></span>
+<span class="line">            <span class="tk-kw">return</span> OUT_OF_STOCK</span>
+<span class="line">    <span class="tk-kw">return</span> RESERVED</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// For entities that need read-modify-write: optimistic version check, bounded retries</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">updateWithVersion</span>(entityId, mutate, maxAttempts <span class="tk-op">=</span> <span class="tk-num">5</span>):</span>
+<span class="line">    <span class="tk-kw">for</span> attempt <span class="tk-kw">in</span> <span class="tk-num">1</span>..maxAttempts:</span>
+<span class="line">        row <span class="tk-op">=</span> db.<span class="tk-fn">get</span>(entityId)                                 <span class="tk-com">// includes the version column</span></span>
+<span class="line">        newState <span class="tk-op">=</span> <span class="tk-fn">mutate</span>(row.state)</span>
+<span class="line">        updated <span class="tk-op">=</span> db.<span class="tk-fn">execute</span>(<span class="tk-str">&#x27;UPDATE entities SET state = ?, version = version + 1 WHERE id = ? AND version = ?&#x27;</span>, newState, entityId, row.version)</span>
+<span class="line">        <span class="tk-kw">if</span> updated <span class="tk-op">==</span> <span class="tk-num">1</span>: <span class="tk-kw">return</span> Ok</span>
+<span class="line">        metrics.<span class="tk-fn">increment</span>(<span class="tk-str">&#x27;occ_conflict&#x27;</span>, entityType)</span>
+<span class="line">        <span class="tk-fn">sleep</span>(<span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-num">20ms</span> <span class="tk-op">*</span> <span class="tk-num">2</span>^attempt))                     <span class="tk-com">// jittered backoff</span></span>
+<span class="line">    <span class="tk-kw">return</span> Conflict                                            <span class="tk-com">// surface a clear error, never block</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Saga orchestrator: persisted state machine, every step idempotent</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">processOrder</span>(orderId):</span>
+<span class="line">    order <span class="tk-op">=</span> orderStore.<span class="tk-fn">load</span>(orderId)                           <span class="tk-com">// survives crashes and restarts</span></span>
+<span class="line">    <span class="tk-kw">if</span> order.state <span class="tk-kw">in</span> (RESERVED) <span class="tk-kw">and</span> <span class="tk-fn">now</span>() <span class="tk-op">&gt;</span> order.deadline:</span>
+<span class="line">        order.<span class="tk-fn">transition</span>(COMPENSATING)                         <span class="tk-com">// do not wait forever on a stuck step</span></span>
+<span class="line">    <span class="tk-kw">switch</span> order.state:</span>
+<span class="line">        <span class="tk-kw">case</span> PENDING:</span>
+<span class="line">            r <span class="tk-op">=</span> inventory.<span class="tk-fn">reserveOrderLines</span>(orderId, order.lines)</span>
+<span class="line">            order.<span class="tk-fn">transition</span>(r <span class="tk-op">==</span> RESERVED ? RESERVED : REJECTED)</span>
+<span class="line">        <span class="tk-kw">case</span> RESERVED:</span>
+<span class="line">            r <span class="tk-op">=</span> billing.<span class="tk-fn">charge</span>(orderId, order.total, idempotencyKey <span class="tk-op">=</span> orderId <span class="tk-op">+</span> <span class="tk-str">&#x27;:charge&#x27;</span>)   <span class="tk-com">// last, hardest to undo</span></span>
+<span class="line">            <span class="tk-kw">if</span> r <span class="tk-op">==</span> OK:                        order.<span class="tk-fn">transition</span>(PAID)</span>
+<span class="line">            <span class="tk-kw">elif</span> r <span class="tk-op">==</span> FAILED_PERMANENT:        order.<span class="tk-fn">transition</span>(COMPENSATING)</span>
+<span class="line">            <span class="tk-kw">else</span>:                              <span class="tk-fn">scheduleRetry</span>(orderId, <span class="tk-fn">backoffWithJitter</span>())   <span class="tk-com">// transient: stay RESERVED</span></span>
+<span class="line">        <span class="tk-kw">case</span> PAID:</span>
+<span class="line">            inventory.<span class="tk-fn">confirmReservations</span>(orderId)</span>
+<span class="line">            order.<span class="tk-fn">transition</span>(CONFIRMED)</span>
+<span class="line">        <span class="tk-kw">case</span> COMPENSATING:</span>
+<span class="line">            inventory.<span class="tk-fn">releaseReservations</span>(orderId)             <span class="tk-com">// idempotent, retried until it succeeds</span></span>
+<span class="line">            billing.<span class="tk-fn">reverseIfCharged</span>(orderId)                  <span class="tk-com">// posts a reversal entry, never deletes</span></span>
+<span class="line">            order.<span class="tk-fn">transition</span>(FAILED)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Read-modify-write without a precondition:</strong> Reading stock, computing in the app, and writing back races with other writers. Use a conditional update or a version check so stale writes fail.</li>
+          <li><strong>Unbounded optimistic retries:</strong> Retry loops without limits or jitter turn contention into a storm. Cap attempts, add jitter, and fail with a clear error.</li>
+          <li><strong>Non-idempotent saga steps:</strong> Redelivered commands double-reserve or double-bill. Use idempotency keys per order and step.</li>
+          <li><strong>Reservations that never expire:</strong> A crashed workflow strands stock. Give reservations a TTL and a reaper, and make confirmation idempotent.</li>
+          <li><strong>Compensating by deleting:</strong> Removing a ledger row destroys the audit trail. Post a reversal entry instead.</li>
+          <li><strong>Wrong step order:</strong> Charging the customer before reserving stock forces refunds on every stock-out. Put the hardest-to-undo step last.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams <strong>shrink the scope of coordination</strong> step by step:</p>
+        <ul>
+          <li><strong>Step 0 — Draw the lock graph:</strong> Find which operations hold which locks and in what order. Wait-time metrics and traces usually point at a few hot rows or inconsistent lock order.</li>
+          <li><strong>Step 1 — Fix lock ordering locally:</strong> Within each database, acquire row locks in a consistent order (for example, sorted by SKU) and keep transactions short, which often removes most deadlocks quickly.</li>
+          <li><strong>Step 2 — Use guarded atomic writes:</strong> Replace read-then-lock-then-write with conditional updates that enforce invariants in a single statement.</li>
+          <li><strong>Step 3 — Replace the cross-service lock with a Saga:</strong> Persist order state, make each step idempotent, and define compensations.</li>
+          <li><strong>Step 4 — Handle hot keys:</strong> Shard counters or serialize hot SKUs through a per-key queue.</li>
+          <li><strong>Step 5 — Observe conflicts:</strong> Track compare-and-set failure rate, retries per request, saga duration, and compensation rate, and alert on drift.</li>
+        </ul>
+        <p>Keep invariants enforced where the data lives; coordinate across services with workflows, not locks.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Deadlocks vanish when nothing <strong>waits while holding a lock across services</strong>. Enforce each invariant locally with <strong>conditional, versioned writes</strong>, and coordinate across Billing and Inventory with a <strong>Saga of idempotent steps and compensations</strong>. Accept visible intermediate states, design for hot keys, and keep locks only for rare, truly exclusive operations.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

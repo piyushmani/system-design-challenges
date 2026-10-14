@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lucas Must Decide: One Database for Everything or Split OLTP and Analytics? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">16 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">OLTP vs OLAP</span>
+      <span class="tag tag--green">Database Split</span>
+      <span class="tag tag--amber">Analytics</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Lucas Must Decide: One Database for Everything or Split OLTP and Analytics?</h1>
+      <p class="q-scenario"><strong>Lucas</strong> is a backend developer on an e-commerce site whose row-oriented OLTP database handles <strong>50k transactions per second</strong> at peak checkout. Product now wants <strong>near-real-time dashboards</strong> (conversion funnels, inventory heatmaps, user cohorts) with <strong>data freshness under 10 seconds</strong>. Today everything lives in the OLTP database, so analytical scans compete with checkout for CPU, I/O, and buffer cache. Lucas must keep <strong>transaction latency low</strong>, make analytics <strong>scalable and fast</strong>, and keep the pipeline <strong>fault-tolerant and observable</strong>. Dashboards may be <em>eventually consistent</em> inside the 10-second budget, but checkout itself must stay strongly consistent. He needs the best way to combine row-based and columnar storage and to move data between them.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Maintain a single row-oriented OLTP database to serve both transactional operations and analytical queries. Scale the system using read replicas and extensive indexing, and rely on query caching and materialized views within the same database to accelerate analytics while keeping data strongly consistent.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Separate OLTP and analytics workloads: retain the row-oriented database for core transactions and stream Change Data Capture (CDC) events (e.g., using Debezium and Kafka) into a columnar analytics database (like ClickHouse or BigQuery) for reporting dashboards. Develop idempotent consumers, implement a schema evolution strategy, and track offsets for observability, accepting eventual consistency for analytical reads.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Configure the application to perform synchronous dual-writes for every transaction to both the row-based OLTP database and the columnar analytics store during the critical request path. This ensures dashboards are always strongly consistent, relying on distributed transactions or two-phase commits for reliable write operations.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Stick with the row-based OLTP database and execute a scheduled batch ETL process (running every 5 to 15 minutes or hourly) to extract and transform data into a columnar data warehouse. Leave the OLTP system unaltered and tolerate stale dashboard data in exchange for a simpler operational setup.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: OLTP + CDC Stream into a Columnar Store</h3>
+        <p>Option B gives each workload the storage engine built for it: a <strong>row store</strong> for point reads, point writes, and ACID checkout, and a <strong>column store</strong> for scans and aggregations. They are joined by a <strong>log-based CDC stream</strong> that reads the database's write-ahead log, so nothing is added to the request path. It is the only option that satisfies <em>both</em> the sub-10-second freshness target and workload isolation. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Workload isolation:</strong> Analytical scans never touch the OLTP buffer cache, locks, or CPU, so checkout latency no longer depends on dashboard load.</li>
+          <li><strong>Right engine for the job:</strong> A columnar store reads only the columns a query needs, compresses well (often several-fold better than rows), and uses vectorized execution. Funnel and cohort aggregations over billions of rows typically return in sub-seconds to seconds, whereas a row store must read whole rows.</li>
+          <li><strong>Freshness inside the budget:</strong> Log-based CDC typically adds hundreds of milliseconds, Kafka tens of milliseconds, and batched inserts one to two seconds, so end-to-end freshness of a few seconds is realistic against a 10-second target.</li>
+          <li><strong>Zero impact on the write path:</strong> CDC reads the WAL or binlog asynchronously. There is no dual-write and no distributed transaction, so an analytics outage can never fail a checkout.</li>
+          <li><strong>Replayable and observable:</strong> Kafka retains the change log, so a new consumer or a rebuilt dashboard table can replay from an offset. Consumer lag and end-to-end freshness (now minus source commit time) become first-class metrics.</li>
+        </ul>
+        <p>A production setup uses <strong>log-based CDC</strong> (not polling), a <strong>schema registry</strong>, <strong>idempotent batched writers</strong>, <strong>dead-letter handling</strong>, a <strong>replication-slot lag alert</strong>, and an <strong>end-to-end freshness SLO</strong> measured as now() minus source commit time. If the SLO is breached, degrade the dashboard (show a stale banner), never the checkout.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>A — Single OLTP Database with Replicas and Materialized Views</h4>
+          </div>
+          <p>One engine keeps things simple, but the engine is the problem. Analytical scans over wide rows read data the query never needs, and replicas still pay for it in I/O and cache. Replicas also apply the WAL, so a long-running analytical query can conflict with replay and cause <strong>replication lag</strong> (or cancelled queries), which makes the dashboards stale. Materialized views refreshed on a schedule are costly and rarely reach 10-second freshness at this write rate, and indexing everything taxes the 50k TPS write path. <strong>Caveat:</strong> for small datasets (millions of rows) and light dashboards, this is the simplest and often sufficient answer.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">✌️</span>
+            <h4>C — Synchronous Dual-Writes in the Request Path</h4>
+          </div>
+          <p>Synchronous dual-writes put a second system into the checkout critical path: latency becomes the <em>slower</em> of the two stores and availability becomes the <em>product</em> of both. There is no practical atomic commit across a transactional database and a columnar analytics store (analytics engines do not take part in XA/2PC), so partial failures still happen: the OLTP commit succeeds, the analytics write fails, and the two silently diverge. Columnar stores also want large batches, not 50k single-row inserts per second. <strong>Caveat:</strong> if two stores truly must change together, use a transactional outbox rather than dual-writing from the request path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>D — Scheduled Batch ETL (5-15 Minutes or Hourly)</h4>
+          </div>
+          <p>Batch ETL is operationally simple and cheap, but it misses the 10-second freshness requirement by a factor of <strong>30-90x</strong> (or more for hourly runs). Large extraction queries can also hit the OLTP database in bursts unless they run against a replica or use CDC. <strong>Caveat:</strong> if the business only needs hourly or daily reporting, batch ETL beats a streaming system on cost and operational effort. Here, the stated freshness requirement is what rules it out.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — OLTP + CDC Stream into a Columnar Store ✓</h4>
+          </div>
+          <p>Separate OLTP and analytics workloads: retain the row-oriented database for core transactions and stream Change Data Capture (CDC) events (e.g., using Debezium and Kafka) into a columnar analytics dat</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Checkout Latency Isolation</th><th>Dashboard Freshness (&lt;10 s)</th><th>Analytics Speed at Scale</th><th>Operational Complexity</th><th>Failure Isolation</th><th>Dashboard Consistency</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Single DB + Replicas/Views</td><td>❌ Shared CPU, I/O, cache</td><td>⚠ Seconds to minutes (view refresh, replica lag)</td><td>❌ Row scans, index overhead</td><td>✅ Low</td><td>❌ Analytics can slow checkout</td><td>✅ Strong (same DB)</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — CDC to Columnar ✓</td><td>✅ Fully isolated</td><td>✅ ~2-5 s typical</td><td>✅ Columnar, vectorized</td><td>❌ High (CDC + Kafka + OLAP)</td><td>✅ Pipeline outage ≠ checkout outage</td><td>⚠ Eventual (seconds)</td></tr>
+            <tr><td class="tt-option">C — Synchronous Dual-Writes</td><td>❌ Adds a second write</td><td>✅ Near-instant</td><td>✅ Columnar</td><td>⚠ Medium code, hard failure handling</td><td>❌ Either store failing fails checkout</td><td>⚠ Divergence on partial failure</td></tr>
+            <tr><td class="tt-option">D — Scheduled Batch ETL</td><td>⚠ Mostly isolated (extract bursts)</td><td>❌ 5-15+ minutes</td><td>✅ Columnar</td><td>✅ Low to medium</td><td>✅ Isolated</td><td>⚠ Stale by design</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single DB + Replicas/Views</h4>
+          </div>
+          <p>Small datasets, light and infrequent dashboards, and a team that wants one system, or as an interim step while the pipeline is being built.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — CDC to Columnar</h4>
+          </div>
+          <p>High-volume OLTP plus dashboards with seconds-level freshness, large history, and a team able to operate Kafka and a columnar store (or buy them managed).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Synchronous Dual-Writes</h4>
+          </div>
+          <p>Almost never. When two stores must change together, use the transactional outbox pattern instead of dual-writing in the request path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Scheduled Batch ETL</h4>
+          </div>
+          <p>Daily or hourly reporting, finance close, or any case where freshness of many minutes is acceptable and simplicity matters more than latency.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> OLTP to Columnar via CDC</h3>
+        <p>Checkout writes only to the OLTP database. Changes flow asynchronously through the log into the analytics store:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    APP[&quot;Checkout Service&quot;] --&gt;|&quot;ACID writes&quot;| PG[(&quot;OLTP Database&quot;)]
+    PG --&gt;|&quot;WAL or binlog&quot;| DBZ[&quot;Debezium Connector&quot;]
+    DBZ --&gt; K[(&quot;Kafka Topics + Schema Registry&quot;)]
+    K --&gt; SINK[&quot;Idempotent Batch Sink&quot;]
+    SINK --&gt; CH[(&quot;Columnar Store: ClickHouse or BigQuery&quot;)]
+    CH --&gt; DASH[&quot;Dashboards: funnels, heatmaps, cohorts&quot;]
+    K -.-&gt; DLQ[&quot;Dead-Letter Topic&quot;]
+    SINK -.-&gt;|&quot;lag and freshness metrics&quot;| MON[&quot;Monitoring and Alerts&quot;]">flowchart LR
+    APP[&quot;Checkout Service&quot;] --&gt;|&quot;ACID writes&quot;| PG[(&quot;OLTP Database&quot;)]
+    PG --&gt;|&quot;WAL or binlog&quot;| DBZ[&quot;Debezium Connector&quot;]
+    DBZ --&gt; K[(&quot;Kafka Topics + Schema Registry&quot;)]
+    K --&gt; SINK[&quot;Idempotent Batch Sink&quot;]
+    SINK --&gt; CH[(&quot;Columnar Store: ClickHouse or BigQuery&quot;)]
+    CH --&gt; DASH[&quot;Dashboards: funnels, heatmaps, cohorts&quot;]
+    K -.-&gt; DLQ[&quot;Dead-Letter Topic&quot;]
+    SINK -.-&gt;|&quot;lag and freshness metrics&quot;| MON[&quot;Monitoring and Alerts&quot;]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent Batch Sink with Freshness Metric</h3>
+        <p>Batches events by size or time, writes them with a deterministic dedupe token, commits offsets only after the insert succeeds, and publishes freshness and lag metrics:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">BATCH_MAX_ROWS <span class="tk-op">=</span> 10_000</span>
+<span class="line">BATCH_MAX_WAIT <span class="tk-op">=</span> <span class="tk-num">1s</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">loop</span> forever:</span>
+<span class="line">    events <span class="tk-op">=</span> kafka.<span class="tk-fn">poll</span>(maxRecords <span class="tk-op">=</span> BATCH_MAX_ROWS, maxWait <span class="tk-op">=</span> BATCH_MAX_WAIT)</span>
+<span class="line">    <span class="tk-kw">if</span> events.<span class="tk-fn">isEmpty</span>(): <span class="tk-kw">continue</span></span>
+<span class="line"></span>
+<span class="line">    rows <span class="tk-op">=</span> []</span>
+<span class="line">    <span class="tk-kw">for</span> e <span class="tk-kw">in</span> events:</span>
+<span class="line">        rows.<span class="tk-fn">append</span>({</span>
+<span class="line">            pk:         e.key,</span>
+<span class="line">            version:    e.source.lsn,             <span class="tk-com">// increases with every change to the row</span></span>
+<span class="line">            is_deleted: (e.op <span class="tk-op">==</span> <span class="tk-str">&quot;d&quot;</span>),            <span class="tk-com">// tombstone instead of a physical delete</span></span>
+<span class="line">            payload:    e.after ?? e.before,</span>
+<span class="line">            event_ts:   e.source.commit_ts</span>
+<span class="line">        })</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Deterministic token: if the same batch is replayed, the store ignores the duplicate insert</span></span>
+<span class="line">    token <span class="tk-op">=</span> <span class="tk-fn">hash</span>(events.partition, events.firstOffset, events.lastOffset)</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        columnarStore.<span class="tk-fn">insert</span>(<span class="tk-str">&quot;orders_raw&quot;</span>, rows, dedupeToken <span class="tk-op">=</span> token)   <span class="tk-com">// ReplacingMergeTree(version) collapses leftovers</span></span>
+<span class="line">    <span class="tk-kw">catch</span> TransientError:</span>
+<span class="line">        <span class="tk-fn">sleep</span>(backoff.<span class="tk-fn">next</span>())</span>
+<span class="line">        <span class="tk-kw">continue</span>                                   <span class="tk-com">// do NOT commit offsets, retry the same batch</span></span>
+<span class="line">    <span class="tk-kw">catch</span> PoisonError <span class="tk-kw">as</span> err:</span>
+<span class="line">        dlq.<span class="tk-fn">publish</span>(events, err)                   <span class="tk-com">// park the bad batch so the pipeline keeps moving</span></span>
+<span class="line"></span>
+<span class="line">    kafka.<span class="tk-fn">commitOffsets</span>(events)                    <span class="tk-com">// only after the insert (or DLQ handoff) succeeded</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Observability</span></span>
+<span class="line">    metrics.<span class="tk-fn">gauge</span>(<span class="tk-str">&quot;freshness_seconds&quot;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> <span class="tk-fn">max</span>(rows.event_ts))</span>
+<span class="line">    metrics.<span class="tk-fn">gauge</span>(<span class="tk-str">&quot;consumer_lag_records&quot;</span>, kafka.<span class="tk-fn">lag</span>())</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Read side: collapse versions at query time or through a materialized view</span></span>
+<span class="line"><span class="tk-com">// SELECT count() FROM orders_raw FINAL WHERE is_deleted = 0 AND event_ts &gt; now() - INTERVAL 1 HOUR</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Polling with <code>updated_at</code> queries instead of log-based CDC:</strong> Polling misses hard deletes, adds repeated load to the OLTP database, and loses intermediate row states under heavy write rates.</li>
+          <li><strong>Unbounded replication slot:</strong> A stalled consumer makes PostgreSQL retain WAL until the disk fills and the primary goes down. Monitor slot lag and set <code>max_slot_wal_keep_size</code>.</li>
+          <li><strong>Non-idempotent sinks:</strong> At-least-once delivery produces duplicate rows and wrong funnel counts. Dedupe on primary key plus a version or LSN (for example ReplacingMergeTree or a MERGE statement).</li>
+          <li><strong>Ignoring updates and deletes:</strong> Columnar stores favor appends. Without tombstones or versioned rows, dashboards keep counting deleted or superseded orders.</li>
+          <li><strong>Skipping schema evolution:</strong> An unannounced <code>ALTER TABLE</code> can break the connector or silently drop columns. Use a schema registry with compatibility checks.</li>
+          <li><strong>Tiny inserts into the columnar store:</strong> One row per insert creates huge numbers of small parts and slows queries. Batch by size or time (for example 10k rows or 1 second).</li>
+          <li><strong>Not measuring freshness:</strong> Consumer lag in messages is not freshness in seconds. Track now minus the source commit timestamp.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams that move from one database to a split architecture usually evolve in stages instead of flipping a switch:</p>
+        <ul>
+          <li><strong>Step 0 - Measure:</strong> Confirm with slow-query logs and replica lag that analytics contention really hurts checkout, and define the freshness SLO (for example p99 under 10 seconds).</li>
+          <li><strong>Step 1 - Quick relief:</strong> Point dashboards at a dedicated read replica to isolate load while the pipeline is built.</li>
+          <li><strong>Step 2 - Add CDC:</strong> Run Debezium against the WAL or binlog, publish one topic per table, and register schemas (Avro or Protobuf) in a schema registry.</li>
+          <li><strong>Step 3 - Land in the columnar store:</strong> A batched sink (the ClickHouse Kafka engine or Kafka Connect, or the BigQuery Storage Write API) writes into a deduplicating table.</li>
+          <li><strong>Step 4 - Model for dashboards:</strong> Build pre-aggregated rollups or materialized views for funnels and cohorts so common queries stay sub-second.</li>
+          <li><strong>Step 5 - Operate:</strong> Alert on connector status, consumer lag, replication-slot lag, dead-letter depth, and freshness, and run periodic row-count or checksum reconciliation against the OLTP database.</li>
+        </ul>
+        <p>Move analytics off the transaction path rather than onto it, and measure freshness end to end.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Use <strong>OLTP for transactions and a columnar store for analytics</strong>, connected by <strong>log-based CDC</strong>. Keep analytics work off the request path, make consumers idempotent, and measure freshness end to end. Accept eventual consistency for dashboards, because strong consistency across two heterogeneous stores would cost checkout latency and availability.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

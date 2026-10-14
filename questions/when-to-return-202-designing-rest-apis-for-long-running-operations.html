@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>When to return 202: designing REST APIs for long-running operations — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">17 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">REST API</span>
+      <span class="tag tag--green">Asynchronous Processing</span>
+      <span class="tag tag--amber">HTTP 202</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">When to return 202: designing REST APIs for long-running operations</h1>
+      <p class="q-scenario"><strong>Lena</strong>, a backend engineer at a fast-growing e-commerce company, is designing the REST API for a <strong>create order</strong> endpoint. Placing an order triggers <strong>inventory reservation</strong>, <strong>fraud evaluation</strong>, <strong>payment processing</strong>, and <strong>downstream fulfillment</strong>. Several of these steps are unstable or slow and can take <strong>seconds to minutes</strong>. Product needs <strong>transparent tracking</strong> of the final success or failure of each order, while users expect <strong>immediate feedback</strong> in the UI. Lena must choose a RESTful strategy that optimizes <strong>observability, fault tolerance, consistency, availability, and latency</strong> while avoiding excessive coupling among microservices. Which architectural design should she select?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Design the /orders POST to be synchronous: manage all downstream requests sequentially and return a 200 OK only once every single downstream service reports success. Should any step fail, send a 4xx or 5xx error back to the client.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Implement distributed two-phase commit (2PC) encompassing the necessary services, causing the /orders POST request to block until a system-wide commit is achieved, thereby guaranteeing strict consistency across all services prior to returning a response.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Receive the order request and instantly respond with a 202 Accepted, including a Location header that references an /orders/{id}/status endpoint. Place the task onto a durable message queue to be handled by idempotent consumers, provide an optional webhook for callbacks, and allow clients to periodically check the status resource. Integrate metrics and distributed tracing to ensure observability.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Reply with a 200 OK straight away once the initial request is saved, without offering idempotency guarantees or a dedicated status endpoint; instead, depend on eventual consistency across services and background reconciliation processes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: 202 Accepted with a Status Resource and Durable Queue</h3>
+        <p>When work takes seconds to minutes and depends on flaky services, holding the HTTP request open ties the user's experience and your availability to the slowest dependency. The REST-native answer is to <strong>durably accept</strong> the order, return <code>202 Accepted</code> immediately with a <code>Location</code> header pointing at a <strong>status resource</strong>, and finish the work asynchronously through a queue with idempotent consumers. The client gets instant feedback and a reliable way (polling or webhook) to learn the final outcome. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Fast, predictable latency:</strong> The response time is just validation plus one durable write, typically tens of milliseconds, regardless of how slow fraud checks, payment, or fulfillment are.</li>
+          <li><strong>Fault tolerance and availability:</strong> The queue buffers spikes and downstream outages, consumers retry with backoff, and poison messages go to a dead-letter queue. A slow payment provider no longer shows up as 5xx errors and timeouts at the edge.</li>
+          <li><strong>Loose coupling:</strong> The order service does not call every downstream system synchronously. Steps run as an orchestrated or choreographed saga, so new steps can be added without changing the client-facing contract.</li>
+          <li><strong>Transparent outcomes:</strong> A status resource backed by an explicit state machine (PENDING to CONFIRMED or FAILED), optional signed webhooks, and a <code>Retry-After</code> hint give clients a clear, honest way to track progress.</li>
+          <li><strong>Strong observability:</strong> The order id and trace context (W3C <code>traceparent</code>) flow from the request into the messages. Queue depth and age, time-to-confirm, failure reasons by step, and DLQ counts become direct SLIs.</li>
+        </ul>
+        <p>A solid contract has <strong>durable acceptance</strong>, an <strong>Idempotency-Key</strong>, a <strong>Location</strong> header to the status resource, <strong>idempotent consumers</strong> with dead-lettering, <strong>compensating actions</strong> for failure, and <strong>trace propagation</strong> across the async boundary. Add a sweeper that flags orders stuck in PENDING beyond their SLA.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⏳</span>
+            <h4>A — Fully Synchronous Orchestration</h4>
+          </div>
+          <p>Simple to reason about, but total latency is the <strong>sum</strong> of every step and availability is the <strong>product</strong> of every dependency's availability. A timeout leaves the outcome ambiguous (did the payment go through?), clients retry and create duplicates, threads and connections stay tied up, and a single HTTP status cannot express partial progress. <strong>Caveat:</strong> it is fine for fast, reliable, few-step flows, and cheap validation should stay synchronous even in the async design.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔐</span>
+            <h4>B — Distributed Two-Phase Commit</h4>
+          </div>
+          <p>2PC blocks the request while locks are held across inventory, payment, and fulfillment, the coordinator becomes a single point of failure, and throughput falls as participants are added. External providers such as payment gateways and fraud APIs do not take part in XA transactions at all. The standard alternative for cross-service workflows is a <strong>saga</strong> with compensating actions.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🙈</span>
+            <h4>D — Immediate 200 OK, No Idempotency, No Status Endpoint</h4>
+          </div>
+          <p>It looks fast but fails the explicit requirement for transparent tracking: 200 OK claims the work is done when it is not, clients have no way to learn the outcome, and retries create duplicate orders. Relying on background reconciliation as the <em>primary</em> mechanism turns failures into silent, delayed surprises.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — 202 Accepted with a Status Resource and Durable Queue ✓</h4>
+          </div>
+          <p>Receive the order request and instantly respond with a 202 Accepted, including a Location header that references an /orders/{id}/status endpoint. Place the task onto a durable message queue to be hand</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>User-Perceived Latency</th><th>Fault Tolerance</th><th>Consistency Model</th><th>Coupling Between Services</th><th>Client Complexity</th><th>Observability of Outcome</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Fully Synchronous</td><td>High (sum of all steps) ❌</td><td>Low (any failure fails the call) ❌</td><td>Immediate ✅</td><td>Tight ❌</td><td>Low ✅</td><td>Limited (HTTP status only) ⚠</td></tr>
+            <tr><td class="tt-option">B — Distributed 2PC</td><td>Very high (blocks on commit) ❌</td><td>Low (coordinator and locks) ❌</td><td>Strong ✅</td><td>Very tight ❌</td><td>Low ✅</td><td>Limited ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — 202 + Status + Queue ✓</td><td>Low (fast accept) ✅</td><td>High (queue, retries, DLQ) ✅</td><td>Eventual ⚠</td><td>Loose ✅</td><td>Medium (status or callback handling) ⚠</td><td>Strong (status resource, traces) ✅</td></tr>
+            <tr><td class="tt-option">D — Immediate 200, No Status</td><td>Low ✅</td><td>Low (silent loss) ❌</td><td>Eventual and unverified ❌</td><td>Loose ✅</td><td>Low ✅</td><td>Poor ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Fully Synchronous</h4>
+          </div>
+          <p>A short, reliable chain of fast operations (typically under a second in total) where the client genuinely needs the final result in the same response.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Distributed 2PC</h4>
+          </div>
+          <p>Rare cases with a small number of cooperating XA-capable resources in one trust domain and a hard requirement for atomic commit. Almost never for microservices or third-party providers.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — 202 + Status + Queue</h4>
+          </div>
+          <p>Multi-step workflows with slow or unreliable dependencies, durations from seconds to minutes, and a need for transparent tracking and resilience, as in orders, payments, exports, and provisioning.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Immediate 200, No Status</h4>
+          </div>
+          <p>Fire-and-forget, low-stakes notifications such as best-effort analytics events, where losing or repeating an item is acceptable.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Asynchronous Order Creation (202 Accepted)</h3>
+        <p>The API acknowledges after a durable write, the workflow runs in the background, and the client learns the outcome by polling or callback:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant API as Orders API
+    participant DB as Orders DB
+    participant Q as Durable Queue
+    participant W as Order Workflow
+    C-&gt;&gt;API: 1. POST /orders with Idempotency-Key
+    API-&gt;&gt;DB: 2. Insert order PENDING and outbox row in one transaction
+    API--&gt;&gt;C: 3. 202 Accepted with Location header to the status resource
+    DB--&gt;&gt;Q: 4. Relay publishes OrderCreated
+    Q-&gt;&gt;W: 5. Deliver at least once
+    W-&gt;&gt;W: 6. Reserve stock, check fraud, charge payment, start fulfillment
+    W-&gt;&gt;DB: 7. Update status to CONFIRMED or FAILED
+    C-&gt;&gt;API: 8. GET status resource
+    API--&gt;&gt;C: 9. 200 with current status, or a webhook callback">sequenceDiagram
+    participant C as Client
+    participant API as Orders API
+    participant DB as Orders DB
+    participant Q as Durable Queue
+    participant W as Order Workflow
+    C-&gt;&gt;API: 1. POST /orders with Idempotency-Key
+    API-&gt;&gt;DB: 2. Insert order PENDING and outbox row in one transaction
+    API--&gt;&gt;C: 3. 202 Accepted with Location header to the status resource
+    DB--&gt;&gt;Q: 4. Relay publishes OrderCreated
+    Q-&gt;&gt;W: 5. Deliver at least once
+    W-&gt;&gt;W: 6. Reserve stock, check fraud, charge payment, start fulfillment
+    W-&gt;&gt;DB: 7. Update status to CONFIRMED or FAILED
+    C-&gt;&gt;API: 8. GET status resource
+    API--&gt;&gt;C: 9. 200 with current status, or a webhook callback</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent 202 Handler, Consumer, and Status Endpoint</h3>
+        <p>Accepts the order durably with an idempotency key, processes it through an at-least-once queue with compensations, and exposes the status resource with polling hints:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// POST /orders</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">createOrder</span>(request):</span>
+<span class="line">    key <span class="tk-op">=</span> request.<span class="tk-fn">header</span>(<span class="tk-str">&#x27;Idempotency-Key&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> key <span class="tk-op">==</span> <span class="tk-lit">null</span>: <span class="tk-kw">return</span> <span class="tk-num">400</span>(<span class="tk-str">&#x27;Idempotency-Key header required&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line">    previous <span class="tk-op">=</span> idempotencyStore.<span class="tk-fn">get</span>(key)</span>
+<span class="line">    <span class="tk-kw">if</span> previous <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> previous.response                         <span class="tk-com">// replay of the original 202: no duplicate order</span></span>
+<span class="line"></span>
+<span class="line">    errors <span class="tk-op">=</span> <span class="tk-fn">validate</span>(request.body)                      <span class="tk-com">// only cheap, fast checks stay synchronous</span></span>
+<span class="line">    <span class="tk-kw">if</span> errors: <span class="tk-kw">return</span> <span class="tk-num">422</span>(errors)</span>
+<span class="line"></span>
+<span class="line">    order <span class="tk-op">=</span> <span class="tk-lit">null</span></span>
+<span class="line">    db.transaction:</span>
+<span class="line">        order <span class="tk-op">=</span> db.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;orders&#x27;</span>, id <span class="tk-op">=</span> <span class="tk-fn">newId</span>(), status <span class="tk-op">=</span> <span class="tk-str">&#x27;PENDING&#x27;</span>, payload <span class="tk-op">=</span> request.body)</span>
+<span class="line">        db.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;outbox&#x27;</span>, type <span class="tk-op">=</span> <span class="tk-str">&#x27;OrderCreated&#x27;</span>, key <span class="tk-op">=</span> order.id,</span>
+<span class="line">                  payload <span class="tk-op">=</span> order, traceContext <span class="tk-op">=</span> <span class="tk-fn">currentTrace</span>())      <span class="tk-com">// atomic with the order</span></span>
+<span class="line">        idempotencyStore.<span class="tk-fn">put</span>(key, response <span class="tk-op">=</span> <span class="tk-fn">Accepted</span>(order.id))</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-num">202</span> Accepted</span>
+<span class="line">        header Location    <span class="tk-op">=</span> <span class="tk-str">&#x27;/orders/&#x27;</span> <span class="tk-op">+</span> order.id <span class="tk-op">+</span> <span class="tk-str">&#x27;/status&#x27;</span></span>
+<span class="line">        header Retry<span class="tk-op">-</span>After <span class="tk-op">=</span> <span class="tk-num">2</span></span>
+<span class="line">        body { orderId: order.id, status: <span class="tk-str">&#x27;PENDING&#x27;</span> }</span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Queue consumer: at-least-once delivery, so every step must be idempotent</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onOrderCreated</span>(msg):</span>
+<span class="line">    <span class="tk-kw">if</span> processed.<span class="tk-fn">contains</span>(msg.id):</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">ack</span>(msg)</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        saga.<span class="tk-fn">run</span>(msg.orderId)                            <span class="tk-com">// reserve stock -&gt; fraud -&gt; payment -&gt; fulfillment</span></span>
+<span class="line">        orders.<span class="tk-fn">updateStatus</span>(msg.orderId, <span class="tk-str">&#x27;CONFIRMED&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">catch</span> RetryableError:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">retryLater</span>(msg, backoff <span class="tk-op">=</span> exponential, maxAttempts <span class="tk-op">=</span> <span class="tk-num">5</span>)   <span class="tk-com">// then dead-letter queue</span></span>
+<span class="line">    <span class="tk-kw">catch</span> BusinessRejection <span class="tk-kw">as</span> e:</span>
+<span class="line">        saga.<span class="tk-fn">compensate</span>(msg.orderId)                     <span class="tk-com">// release stock, void authorization</span></span>
+<span class="line">        orders.<span class="tk-fn">updateStatus</span>(msg.orderId, <span class="tk-str">&#x27;FAILED&#x27;</span>, reason <span class="tk-op">=</span> e.reason)</span>
+<span class="line"></span>
+<span class="line">    webhooks.<span class="tk-fn">notify</span>(msg.orderId)                         <span class="tk-com">// optional, signed, retried delivery</span></span>
+<span class="line">    processed.<span class="tk-fn">add</span>(msg.id)</span>
+<span class="line">    <span class="tk-fn">ack</span>(msg)</span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// GET /orders/{id}/status</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getStatus</span>(id):</span>
+<span class="line">    o <span class="tk-op">=</span> orders.<span class="tk-fn">find</span>(id)</span>
+<span class="line">    response <span class="tk-op">=</span> <span class="tk-num">200</span> { status: o.status, updatedAt: o.updatedAt, failureReason: o.failureReason }</span>
+<span class="line">    response.header ETag <span class="tk-op">=</span> <span class="tk-fn">etag</span>(o.version)               <span class="tk-com">// cheap conditional polling (304)</span></span>
+<span class="line">    <span class="tk-kw">if</span> o.status <span class="tk-op">==</span> <span class="tk-str">&#x27;PENDING&#x27;</span>:</span>
+<span class="line">        response.header Retry<span class="tk-op">-</span>After <span class="tk-op">=</span> <span class="tk-num">2</span>                  <span class="tk-com">// tell clients how often to poll</span></span>
+<span class="line">    <span class="tk-kw">return</span> response</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Returning 202 before the work is durable:</strong> If the process crashes after the response but before persistence or enqueue, the order silently vanishes. Commit the order and the outbox row first.</li>
+          <li><strong>No Idempotency-Key on POST:</strong> Mobile networks retry. Without a key, one tap can create several orders or charges.</li>
+          <li><strong>No status resource or Location header:</strong> The client cannot learn the outcome, so support tickets become the monitoring system.</li>
+          <li><strong>Non-idempotent consumers and no DLQ:</strong> At-least-once delivery replays messages. Without dedupe, steps run twice, and without a DLQ, one poison message blocks the queue.</li>
+          <li><strong>Unbounded polling:</strong> Clients that poll every 100 ms create load that rivals the original problem. Send <code>Retry-After</code>, support ETag/304, and offer webhooks or SSE.</li>
+          <li><strong>No compensation or stuck-order detection:</strong> A failure in the last step must release stock and void the payment, and orders stuck in PENDING need an alert and a timeout path.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams decide which checks must be synchronous, then make everything else asynchronous with a clear status contract. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define the contract:</strong> Keep only cheap, must-fail-fast checks synchronous (authentication, schema validation, idempotency lookup, perhaps a quick stock pre-check). Everything else becomes asynchronous.</li>
+          <li><strong>Step 1 — Accept durably:</strong> Insert the order as PENDING plus an outbox row in one transaction, then return <code>202 Accepted</code> with <code>Location</code> and <code>Retry-After</code>, honoring the Idempotency-Key.</li>
+          <li><strong>Step 2 — Orchestrate with a saga:</strong> Run inventory, fraud, payment, and fulfillment as idempotent steps with compensations. Choose orchestration (a workflow engine) for complex flows or choreography for simple ones.</li>
+          <li><strong>Step 3 — Expose status:</strong> Offer <code>GET /orders/{id}/status</code> (or a status field on the order) with timestamps and a failure reason, use ETags for cheap polling, and optionally redirect with <code>303 See Other</code> to the final resource when done.</li>
+          <li><strong>Step 4 — Push where it helps:</strong> Provide signed webhooks with retries and replay, or SSE/WebSocket for live UIs, keeping polling as the fallback.</li>
+          <li><strong>Step 5 — Instrument:</strong> Propagate trace context through messages, track time-to-confirm and queue age, alert on DLQ growth, and run a stuck-order sweeper.</li>
+        </ul>
+        <p>Keep the synchronous part tiny and the status contract explicit.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For multi-step, failure-prone workflows, <strong>accept fast, process asynchronously, and make the outcome observable</strong>. Return 202 with a status resource, protect retries with idempotency, process through a durable queue, and compensate on failure. You trade immediate finality for resilience, low latency, and honest tracking.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

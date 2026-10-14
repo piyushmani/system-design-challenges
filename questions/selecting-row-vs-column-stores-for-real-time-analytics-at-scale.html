@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Selecting Row vs. Column Stores for Real-Time Analytics at Scale — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">16 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Row vs Column Stores</span>
+      <span class="tag tag--green">Real-time Analytics</span>
+      <span class="tag tag--amber">Database Choice</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Selecting Row vs. Column Stores for Real-Time Analytics at Scale</h1>
+      <p class="q-scenario"><strong>Arjun</strong>, a backend architect for a SaaS monitoring platform, must support two very different workloads. The first is <strong>transactional</strong>: user configurations and actions that need <strong>sub-100 ms writes</strong>, strong durability, and read-your-writes behavior. The second is <strong>analytical</strong>: dashboards that must answer queries over <strong>terabytes of history in under 2 seconds</strong>, fed by <strong>event streams peaking near 50k writes per second</strong>. Dashboards may be <strong>up to 2 seconds stale</strong>. He must also deliver <strong>scalability, availability, fault tolerance, data-flow observability</strong>, and a clearly defined consistency model. Configuration data is small and update-heavy, while event data is append-heavy and read in aggregate.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Utilize a single row-oriented RDBMS (like Postgres) as the primary system of record. Execute both transactional writes and analytical queries on this database, scaling read capacity with replicas and employing connection pooling, while depending on single-system strong consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Shift primary storage entirely to a columnar OLAP database (such as ClickHouse or Redshift) and process transactional writes directly within it. Use point updates or micro-batching for transactions so that analytics queries can access highly fresh data from the same storage layer.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Implement a hybrid architecture: retain a row-oriented OLTP database as the primary source of truth and asynchronously stream updates via CDC to a columnar analytics cluster. Process transactions in the row store and run analytics on the columnar store. Monitor replication delay and incorporate backpressure, retries, and observable offsets to track data freshness and ensure fault recovery.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Maintain the row-oriented OLTP database as the primary store and establish read replicas combined with materialized views for analytics within the same RDBMS. Keep these views updated using synchronous triggers or synchronous writes to the materialized tables, ensuring analytical queries access strongly consistent data without needing a separate analytics system.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Hybrid: Row-Store OLTP + CDC into a Columnar OLAP Cluster</h3>
+        <p>The two workloads have opposite access patterns. OLTP performs many <strong>small, selective, update-heavy</strong> operations, while OLAP performs <strong>a few large scans over a handful of columns</strong>. Option C assigns each workload to the engine built for it and decouples them through an <strong>asynchronous, observable change stream</strong>, so the 2-second staleness allowance becomes an engineering budget rather than a surprise. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Each SLO is met independently:</strong> The row store gives durable, sub-100 ms ACID writes. The columnar store (sorted, compressed, vectorized) reads only the needed columns, often an order of magnitude or more less I/O than scanning wide rows, which is what makes sub-2-second queries over terabytes realistic.</li>
+          <li><strong>Isolation:</strong> A heavy dashboard cannot slow a configuration write, and the OLAP cluster can be scaled, maintained, and rebuilt without touching the transactional system.</li>
+          <li><strong>Freshness is a budget you can engineer:</strong> CDC capture (roughly 100-300 ms) plus the broker (10-50 ms) plus a batch flush of at most 0.5-1 s plus insert time fits inside 2 seconds, and replication-delay monitoring makes any violation visible.</li>
+          <li><strong>Backpressure and recovery:</strong> The log absorbs 50k/s bursts and decouples producer rate from OLAP ingest rate. Offsets enable replay after failures, and retries plus a dead-letter queue handle poison data.</li>
+          <li><strong>Consistency matched to the workload:</strong> Strong where it matters (configs and user actions), bounded staleness where it is acceptable (dashboards), and one unambiguous system of record.</li>
+        </ul>
+        <p>Treat the pipeline as a product: track <strong>end-to-end freshness (p50 and p99)</strong>, <strong>consumer lag</strong>, <strong>batch flush time</strong>, <strong>OLAP insert errors</strong>, <strong>dead-letter depth</strong>, and run periodic <strong>row-count or checksum reconciliation</strong> between the systems. Decide in advance what dashboards show when freshness is breached (a stale banner) instead of silently serving old numbers.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>A — Single Row-Oriented RDBMS for Everything</h4>
+          </div>
+          <p>A single PostgreSQL instance can host both workloads at small scale, but <strong>sub-2-second aggregates over terabytes</strong> mean large scans, and a row store has to read whole rows to serve them. Read replicas scale the <em>number</em> of readers, not the efficiency of each scan, and every replica still replays the full write stream, where long analytical queries can conflict with replay and increase lag. Connection pooling helps with connection counts, not scan cost. <strong>Caveat:</strong> for gigabyte-scale data it is simple, strongly consistent, and often entirely adequate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>B — Columnar OLAP Database as the Primary Store</h4>
+          </div>
+          <p>Columnar engines such as ClickHouse and Redshift are built for <strong>bulk, append-oriented ingestion</strong> and large scans. Point updates are expensive (ClickHouse mutations rewrite data parts asynchronously, and Redshift rewrites blocks), multi-row ACID transactions are limited or absent, and micro-batching to gain throughput adds a <em>batch-window delay</em> that conflicts with sub-100 ms durable writes and read-your-writes. <strong>Caveat:</strong> for pure event and log analytics with no in-place updates, writing directly into a columnar store is excellent. It just is not a transactional system of record.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>D — Replicas + Synchronously Maintained Materialized Views</h4>
+          </div>
+          <p>Synchronous triggers or in-transaction writes to summary tables put <strong>aggregate maintenance on the write path</strong>. Every one of the 50k writes per second now touches extra rows, hot aggregate rows become <strong>lock contention points</strong>, write latency grows with every rollup you add, and a trigger failure fails the business transaction. Ad hoc queries over terabytes still scan the row store. This is the 'counter in the same transaction' anti-pattern at dashboard scale. <strong>Caveat:</strong> a few narrow, low-write-rate rollups maintained transactionally are fine.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Hybrid: Row-Store OLTP + CDC into a Columnar OLAP Cluster ✓</h4>
+          </div>
+          <p>Implement a hybrid architecture: retain a row-oriented OLTP database as the primary source of truth and asynchronously stream updates via CDC to a columnar analytics cluster. Process transactions in t</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Latency (&lt;100 ms)</th><th>Analytics Latency (&lt;2 s on TBs)</th><th>Freshness (≤2 s)</th><th>Scalability</th><th>Fault Tolerance / Recovery</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Single Row-Store RDBMS</td><td>✅ Fast point writes</td><td>❌ Row scans over TBs</td><td>✅ Immediate (same DB)</td><td>⚠ Vertical + replicas</td><td>⚠ Replicas, shared fate</td><td>✅ Low</td></tr>
+            <tr><td class="tt-option">B — Columnar as Primary</td><td>❌ Poor point updates, batching</td><td>✅ Excellent scans</td><td>⚠ Depends on batch window</td><td>✅ Scale-out OLAP</td><td>⚠ Weak transactional guarantees</td><td>⚠ Medium</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Hybrid with CDC ✓</td><td>✅ Isolated row store</td><td>✅ Columnar, vectorized</td><td>⚠ Seconds (must be engineered)</td><td>✅ Scale each tier independently</td><td>✅ Replayable log, retries</td><td>❌ High (two stores + stream)</td></tr>
+            <tr><td class="tt-option">D — Replicas + Sync Views</td><td>⚠ Write path carries rollup cost</td><td>⚠ Fast only for fixed rollups</td><td>✅ Synchronous</td><td>❌ Contention on hot aggregates</td><td>❌ Trigger failure fails writes</td><td>⚠ Medium (schema + triggers)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Row-Store RDBMS</h4>
+          </div>
+          <p>Data in the gigabytes, modest and infrequent dashboards, a strict need for one consistent view, and a small team.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Columnar as Primary</h4>
+          </div>
+          <p>Append-only event or log analytics where records are never updated in place and the OLAP store is not the transactional system of record.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hybrid with CDC</h4>
+          </div>
+          <p>Mixed transactional and analytical workloads at scale, terabytes of history, and an acceptable seconds-level staleness budget.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Replicas + Sync Views</h4>
+          </div>
+          <p>A handful of small, low-contention rollups (per-tenant totals updated at low rates) that must be exactly consistent with transactions.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Hybrid Architecture: Write Path and Analytics Path</h3>
+        <p>Transactional data lands in the row store and is streamed out by CDC. High-volume events go straight to the log. Both feed the columnar cluster that serves dashboards:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    U[&quot;Users and Agents&quot;] --&gt;|&quot;config and action writes&quot;| API[&quot;API Layer&quot;]
+    API --&gt;|&quot;ACID, sub-100 ms&quot;| OLTP[(&quot;Row-Oriented OLTP&quot;)]
+    OLTP --&gt;|&quot;CDC from WAL&quot;| BUS[(&quot;Kafka or Kinesis&quot;)]
+    EVT[&quot;Event Producers at about 50k per s&quot;] --&gt;|&quot;append-only events&quot;| BUS
+    BUS --&gt; ING[&quot;Batching Ingesters, idempotent&quot;]
+    ING --&gt;|&quot;flush every 0.5 to 1 s&quot;| OLAP[(&quot;Columnar OLAP Cluster&quot;)]
+    OLAP --&gt; DASH[&quot;Dashboards, queries under 2 s&quot;]
+    OLTP -.-&gt;|&quot;point lookups&quot;| DASH
+    ING -.-&gt;|&quot;lag, freshness, errors&quot;| MON[&quot;Monitoring and Alerts&quot;]">flowchart LR
+    U[&quot;Users and Agents&quot;] --&gt;|&quot;config and action writes&quot;| API[&quot;API Layer&quot;]
+    API --&gt;|&quot;ACID, sub-100 ms&quot;| OLTP[(&quot;Row-Oriented OLTP&quot;)]
+    OLTP --&gt;|&quot;CDC from WAL&quot;| BUS[(&quot;Kafka or Kinesis&quot;)]
+    EVT[&quot;Event Producers at about 50k per s&quot;] --&gt;|&quot;append-only events&quot;| BUS
+    BUS --&gt; ING[&quot;Batching Ingesters, idempotent&quot;]
+    ING --&gt;|&quot;flush every 0.5 to 1 s&quot;| OLAP[(&quot;Columnar OLAP Cluster&quot;)]
+    OLAP --&gt; DASH[&quot;Dashboards, queries under 2 s&quot;]
+    OLTP -.-&gt;|&quot;point lookups&quot;| DASH
+    ING -.-&gt;|&quot;lag, freshness, errors&quot;| MON[&quot;Monitoring and Alerts&quot;]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Backpressure-Aware Ingester with Freshness SLO</h3>
+        <p>Flushes on time or size, uses a replay-safe dedupe token, pauses instead of dropping data when the OLAP cluster is overloaded, and reports freshness against the SLO:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">FLUSH_INTERVAL <span class="tk-op">=</span> <span class="tk-num">750ms</span></span>
+<span class="line">MAX_BATCH_ROWS <span class="tk-op">=</span> 50_000</span>
+<span class="line">FRESHNESS_SLO  <span class="tk-op">=</span> <span class="tk-num">2s</span></span>
+<span class="line"></span>
+<span class="line">state <span class="tk-op">=</span> RUNNING</span>
+<span class="line">batch <span class="tk-op">=</span> []</span>
+<span class="line">lastFlush <span class="tk-op">=</span> <span class="tk-fn">now</span>()</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">loop</span> forever:</span>
+<span class="line">    <span class="tk-kw">if</span> state <span class="tk-op">==</span> PAUSED:</span>
+<span class="line">        <span class="tk-fn">sleep</span>(<span class="tk-num">100ms</span>)</span>
+<span class="line">        <span class="tk-kw">if</span> olap.<span class="tk-fn">insertLatencyP95</span>() <span class="tk-op">&lt;</span> <span class="tk-num">300ms</span>: state <span class="tk-op">=</span> RUNNING</span>
+<span class="line">        <span class="tk-kw">continue</span></span>
+<span class="line"></span>
+<span class="line">    records <span class="tk-op">=</span> kafka.<span class="tk-fn">poll</span>(maxWait <span class="tk-op">=</span> <span class="tk-num">100ms</span>)</span>
+<span class="line">    batch.<span class="tk-fn">addAll</span>(<span class="tk-fn">decode</span>(records))</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">len</span>(batch) <span class="tk-op">&gt;=</span> MAX_BATCH_ROWS <span class="tk-kw">or</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> lastFlush <span class="tk-op">&gt;=</span> FLUSH_INTERVAL:</span>
+<span class="line">        token  <span class="tk-op">=</span> <span class="tk-fn">hash</span>(kafka.<span class="tk-fn">positions</span>())                    <span class="tk-com">// dedupe token: safe to replay</span></span>
+<span class="line">        result <span class="tk-op">=</span> olap.<span class="tk-fn">bulkInsert</span>(<span class="tk-str">&quot;events&quot;</span>, batch, dedupeToken <span class="tk-op">=</span> token, timeout <span class="tk-op">=</span> <span class="tk-num">2s</span>)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">if</span> result.ok:</span>
+<span class="line">            kafka.<span class="tk-fn">commit</span>()</span>
+<span class="line">            freshness <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> <span class="tk-fn">max</span>(batch.sourceTimestamp)</span>
+<span class="line">            metrics.<span class="tk-fn">histogram</span>(<span class="tk-str">&quot;freshness_seconds&quot;</span>, freshness)</span>
+<span class="line">            <span class="tk-kw">if</span> freshness <span class="tk-op">&gt;</span> FRESHNESS_SLO: alerts.<span class="tk-fn">warn</span>(<span class="tk-str">&quot;freshness SLO breached&quot;</span>, freshness)</span>
+<span class="line">            batch.<span class="tk-fn">clear</span>()</span>
+<span class="line">            lastFlush <span class="tk-op">=</span> <span class="tk-fn">now</span>()</span>
+<span class="line">        <span class="tk-kw">else</span> <span class="tk-kw">if</span> result.isOverloaded:</span>
+<span class="line">            state <span class="tk-op">=</span> PAUSED                                  <span class="tk-com">// backpressure: leave data in Kafka, do not drop it</span></span>
+<span class="line">            metrics.<span class="tk-fn">increment</span>(<span class="tk-str">&quot;ingest_paused&quot;</span>)</span>
+<span class="line">        <span class="tk-kw">else</span> <span class="tk-kw">if</span> result.isPoison:</span>
+<span class="line">            dlq.<span class="tk-fn">publish</span>(batch, result.error)                <span class="tk-com">// isolate bad data, keep the pipeline flowing</span></span>
+<span class="line">            kafka.<span class="tk-fn">commit</span>()</span>
+<span class="line">            batch.<span class="tk-fn">clear</span>()</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            <span class="tk-fn">sleep</span>(backoff.<span class="tk-fn">next</span>())                           <span class="tk-com">// transient error: retry same batch, same token</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Reconciliation (every few minutes): compare per-tenant row counts and checksums for a closed</span></span>
+<span class="line"><span class="tk-com">// time window between the OLTP-derived tables and the OLAP store, and alert on drift.</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Routing the whole event stream through OLTP just to CDC it out:</strong> This burns OLTP capacity on data that is never updated. Write append-only events straight to the log.</li>
+          <li><strong>Not defining or measuring freshness:</strong> Treat 2 seconds as an SLO with a metric (now minus source commit time) and alerts. Lag in message counts hides lag in time.</li>
+          <li><strong>Tiny inserts into the columnar store:</strong> One insert per event creates many small parts and slows both ingestion and queries. Batch by time (about 0.5-1 s) and size, or use the engine's async insert feature.</li>
+          <li><strong>No backpressure policy:</strong> When OLAP ingest slows down, unbounded buffers or dropped events are the alternatives. Decide in advance: pause consumers and let the log buffer, scale out ingesters, and shed non-critical data last.</li>
+          <li><strong>Non-idempotent ingestion:</strong> At-least-once delivery duplicates rows and inflates dashboards. Use dedupe tokens or versioned rows.</li>
+          <li><strong>Poor sort and partition keys in the columnar store:</strong> A table ordered by event ID instead of <code>(tenant_id, timestamp)</code> forces wide scans and breaks the 2-second query SLO.</li>
+          <li><strong>Forgetting the data lifecycle:</strong> Terabytes keep growing. Add TTL tiers, downsampling, and cold storage early.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Monitoring and analytics SaaS platforms tend to converge on the same shape: a small transactional store for control-plane data and a log-plus-columnar pipeline for the data plane:</p>
+        <ul>
+          <li><strong>Step 0 - Classify the data:</strong> Control-plane data (configs, users, alert rules) is small, mutable, and transactional. Data-plane data (events and metrics) is huge, append-only, and read in aggregate.</li>
+          <li><strong>Step 1 - Transactional store:</strong> Use PostgreSQL, Aurora, or DynamoDB for configuration data, with replicas for availability, strong consistency, and backups.</li>
+          <li><strong>Step 2 - Stream backbone:</strong> Send events to Kafka or Kinesis, partitioned by tenant or entity, and route CDC from the OLTP database into the same backbone.</li>
+          <li><strong>Step 3 - Columnar ingestion:</strong> Use batched, idempotent inserts into ClickHouse, Druid, Pinot, or Redshift, partitioned by time and ordered by <code>(tenant, timestamp)</code>.</li>
+          <li><strong>Step 4 - Query acceleration:</strong> Add pre-aggregated rollups or materialized views, TTL tiers for old data, and result caching for popular dashboards.</li>
+          <li><strong>Step 5 - Operate:</strong> Define a freshness SLO with alerts, watch lag and dead-letter depth, set a backpressure policy, reconcile periodically, and load-test at twice the peak.</li>
+        </ul>
+        <p>Treat staleness as a measured budget, not an assumption.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Row stores serve transactions and columnar stores serve scans, so use <strong>both</strong>: keep the row store as the source of truth for transactional data, stream changes into a columnar cluster asynchronously, and engineer the <strong>2-second freshness budget</strong> with batching, backpressure, and lag monitoring. Do not ask one engine to do both jobs at 50k writes per second.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

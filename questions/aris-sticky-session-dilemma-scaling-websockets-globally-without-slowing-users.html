@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ari&#x27;s Sticky-Session Dilemma: Scaling WebSockets Globally Without Slowing Users — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">18 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Sticky Sessions</span>
+      <span class="tag tag--green">WebSockets</span>
+      <span class="tag tag--amber">Global Scale</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Ari&#x27;s Sticky-Session Dilemma: Scaling WebSockets Globally Without Slowing Users</h1>
+      <p class="q-scenario"><strong>Ari</strong>, a backend architect for a social app with <strong>millions of daily active users</strong>, serves a REST API and <strong>WebSocket</strong> connections for real-time updates. Global peaks create huge numbers of concurrent connections. Today the system uses <strong>sticky cookies on a global L7 load balancer</strong> with <strong>in-memory sessions on each node</strong>, which causes <strong>imbalanced load and dropped connections</strong> during autoscaling and node failures. Ari needs an architecture with <strong>low latency</strong>, <strong>high availability through regional outages</strong>, and <strong>no complicated cross-region session-state synchronization</strong>, balancing simplicity, observability, consistency, latency, and scalability.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep the global L7 load balancer and sticky cookies, and add DNS weight-based routing and connection draining so users keep landing on the same backend node regardless of regional changes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Make services effectively stateless: move connection and session metadata to highly available regional stores (regional DB, Redis, short-lived tokens), route users to the nearest region with simple L4/anycast or regional load balancers, accept region-level affinity for WebSockets, and recover from failures by reconnecting and restoring state from the regional store.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Use client-side load balancing with consistent hashing and service discovery so clients (or sidecars) pick and cache a node for affinity, and replicate session state asynchronously across all nodes for failover.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Centralize all session state in one globally consistent store (single primary database or single-writer Redis) and use a global L7 load balancer that routes everything through the main region for strictly consistent lookups.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Stateless Gateways with Regional State</h3>
+        <p>Sticky sessions with node-local memory make <strong>each node a single point of failure for its users</strong> and defeat load balancing. The durable fix is to make connection handlers <em>disposable</em>: keep the minimal state in a fast <strong>regional</strong> store, route users to the nearest healthy region, and treat reconnect-and-resume as the normal failure path. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Failures become reconnects, not outages:</strong> If a node dies or is scaled in, clients reconnect to any gateway in the region, which restores subscriptions and cursors from the regional store. No affinity is needed.</li>
+          <li><strong>Even load and easy autoscaling:</strong> Without stickiness, new connections can be spread by least-connections and nodes can be drained gradually. Autoscaling no longer strands in-memory sessions.</li>
+          <li><strong>Low latency by locality:</strong> Users connect to the nearest region and read state from a same-region store (typically sub-millisecond to a few milliseconds), avoiding cross-ocean round trips on the hot path.</li>
+          <li><strong>Contained blast radius and simple operations:</strong> State is regional, so there is no global session replication to build or debug. A regional outage is handled by routing clients to another region (health-checked DNS or anycast) and re-authenticating with tokens.</li>
+          <li><strong>Fits long-lived connections:</strong> L4 or regional load balancers forward TCP/TLS with little overhead and without needing to understand WebSocket framing, while REST traffic can still use L7 features.</li>
+        </ul>
+        <p>A resilient design has <strong>stateless gateways</strong>, <strong>signed short-lived tokens</strong>, a <strong>regional session and cursor store</strong>, <strong>jittered reconnect with resume</strong>, and a <strong>cross-region event backplane</strong> for message fan-out. Track <strong>reconnect rate, connections per node, resume success rate, and message loss or duplicate rate</strong> per region.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🍪</span>
+            <h4>A — Sticky Cookies + DNS Weights + Draining</h4>
+          </div>
+          <p>Stickiness ties users to specific nodes, so any node failure or scale-in still drops their connections. DNS weights are cached by resolvers and clients, so they react slowly and cannot guarantee that anyone lands on the same node, especially across regions. This adds operational tuning on top of the original problem instead of removing it.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>C — Client-Side Consistent Hashing + Async Session Replication</h4>
+          </div>
+          <p>Consistent hashing reduces churn when nodes change, but it pushes routing logic into every client, makes autoscaling visible to clients, and still moves a slice of users on every membership change. Asynchronous replication of sessions across <em>all</em> nodes is costly, lagging replicas can serve stale state after failover, and it recreates the cross-node synchronization complexity the scenario wants to avoid.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌍</span>
+            <h4>D — Single Global Strongly Consistent Store</h4>
+          </div>
+          <p>A single-writer global store gives simple semantics but puts a cross-region round trip on session lookups and makes the main region a single point of failure for the whole world. Latency rises for distant users, and a main-region outage takes sessions down everywhere. Strict global consistency is also unnecessary for session and subscription metadata.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Stateless Gateways with Regional State ✓</h4>
+          </div>
+          <p>Make services effectively stateless: move connection and session metadata to highly available regional stores (regional DB, Redis, short-lived tokens), route users to the nearest region with simple L4</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Latency</th><th>Failure Recovery</th><th>Load Balance and Autoscaling</th><th>Cross-Region Complexity</th><th>Operational Simplicity</th><th>Regional Outage Resilience</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Sticky + DNS Weights</td><td>Good ✅</td><td>Poor ❌</td><td>Poor ❌</td><td>Medium ⚠</td><td>Medium ⚠</td><td>Poor ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Stateless + Regional State ✓</td><td>Best (nearest region) ✅</td><td>Good (reconnect and resume) ✅</td><td>Good ✅</td><td>Low ✅</td><td>Good ✅</td><td>Good (reroute and re-auth) ✅</td></tr>
+            <tr><td class="tt-option">C — Client Hashing + Async Replication</td><td>Good ✅</td><td>Medium ⚠ (stale replicas)</td><td>Medium ⚠ (rebalancing)</td><td>High ❌</td><td>Low ❌</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Single Global Store</td><td>Poor for distant users ❌</td><td>Medium ⚠</td><td>Good ✅</td><td>Low ✅</td><td>Medium ⚠</td><td>Poor (single main region) ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sticky + DNS Weights</h4>
+          </div>
+          <p>Legacy apps with small user counts and no autoscaling, where moving state out is not yet feasible, as a temporary measure.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Stateless + Regional State</h4>
+          </div>
+          <p>Large, geographically distributed real-time systems that need autoscaling and regional resilience (this scenario).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Client Hashing + Async Replication</h4>
+          </div>
+          <p>Specialized systems with strong per-key affinity needs (caches, actor or game servers) where state is large and replication is designed in from the start.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Single Global Store</h4>
+          </div>
+          <p>Small deployments in a single region where strict global consistency matters more than latency or regional resilience.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Regional Stateless Gateway Architecture</h3>
+        <p>Gateways hold no authoritative state. Session data lives in a regional store, and only events cross regions:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TB
+    U[Client] --&gt; D[Geo DNS or Anycast with health checks]
+    D --&gt; LB[Regional L4 Load Balancer]
+    LB --&gt; G1[WS Gateway 1]
+    LB --&gt; G2[WS Gateway 2]
+    LB --&gt; G3[WS Gateway N]
+    G1 --&gt; S[(Regional Session and Cursor Store)]
+    G2 --&gt; S
+    G3 --&gt; S
+    G1 --&gt; B[Regional Pub-Sub Backplane]
+    G2 --&gt; B
+    G3 --&gt; B
+    B &lt;--&gt; X[Cross-Region Event Bus]">flowchart TB
+    U[Client] --&gt; D[Geo DNS or Anycast with health checks]
+    D --&gt; LB[Regional L4 Load Balancer]
+    LB --&gt; G1[WS Gateway 1]
+    LB --&gt; G2[WS Gateway 2]
+    LB --&gt; G3[WS Gateway N]
+    G1 --&gt; S[(Regional Session and Cursor Store)]
+    G2 --&gt; S
+    G3 --&gt; S
+    G1 --&gt; B[Regional Pub-Sub Backplane]
+    G2 --&gt; B
+    G3 --&gt; B
+    B &lt;--&gt; X[Cross-Region Event Bus]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Jittered Reconnect with Resume, and a Stateless Gateway Handler</h3>
+        <p>The client reconnects with exponential backoff and full jitter and resumes from its last cursor. The gateway keeps no authoritative local state, restores it from the regional store, and drains gradually on scale-in:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Client: reconnect loop ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">connectLoop</span>():</span>
+<span class="line">    attempt <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">    <span class="tk-kw">while</span> <span class="tk-lit">true</span>:</span>
+<span class="line">        cursor <span class="tk-op">=</span> storage.<span class="tk-fn">get</span>(<span class="tk-str">&quot;lastCursor&quot;</span>) <span class="tk-kw">or</span> <span class="tk-num">0</span></span>
+<span class="line">        ws <span class="tk-op">=</span> <span class="tk-fn">openWebSocket</span>(url, token <span class="tk-op">=</span> <span class="tk-fn">currentToken</span>(), resumeFrom <span class="tk-op">=</span> cursor)</span>
+<span class="line">        <span class="tk-kw">if</span> ws.connected:</span>
+<span class="line">            attempt <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">            ws.<span class="tk-fn">onMessage</span>(m):</span>
+<span class="line">                <span class="tk-fn">handle</span>(m)</span>
+<span class="line">                storage.<span class="tk-fn">set</span>(<span class="tk-str">&quot;lastCursor&quot;</span>, m.id)                   <span class="tk-com">// remember progress</span></span>
+<span class="line">            ws.<span class="tk-fn">waitUntilClosed</span>()</span>
+<span class="line">        <span class="tk-com">// exponential backoff with full jitter, capped</span></span>
+<span class="line">        delay <span class="tk-op">=</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-fn">min</span>(<span class="tk-num">30s</span>, <span class="tk-num">500ms</span> <span class="tk-op">*</span> <span class="tk-num">2</span>^attempt))</span>
+<span class="line">        <span class="tk-fn">sleep</span>(delay)</span>
+<span class="line">        attempt <span class="tk-op">+</span><span class="tk-op">=</span> <span class="tk-num">1</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Gateway: no local state is authoritative ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onConnect</span>(socket, req):</span>
+<span class="line">    claims <span class="tk-op">=</span> <span class="tk-fn">verifyJwt</span>(req.token)                                 <span class="tk-com">// local signature and expiry check</span></span>
+<span class="line">    <span class="tk-kw">if</span> claims <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> socket.<span class="tk-fn">close</span>(<span class="tk-num">4401</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">overCapacity</span>():</span>
+<span class="line">        <span class="tk-kw">return</span> socket.<span class="tk-fn">close</span>(<span class="tk-num">4503</span>, retryAfter <span class="tk-op">=</span> <span class="tk-fn">jitter</span>(<span class="tk-num">5s</span>, <span class="tk-num">30s</span>))   <span class="tk-com">// admission control</span></span>
+<span class="line"></span>
+<span class="line">    session <span class="tk-op">=</span> regionalStore.<span class="tk-fn">get</span>(<span class="tk-str">&quot;sess:&quot;</span> <span class="tk-op">+</span> claims.userId)          <span class="tk-com">// subscriptions, TTL-bound</span></span>
+<span class="line">    subs    <span class="tk-op">=</span> session.subscriptions <span class="tk-kw">or</span> <span class="tk-fn">defaultSubscriptions</span>(claims)</span>
+<span class="line">    backplane.<span class="tk-fn">subscribe</span>(subs, handler <span class="tk-op">=</span> socket.send)</span>
+<span class="line"></span>
+<span class="line">    missed <span class="tk-op">=</span> replayBuffer.<span class="tk-fn">readAfter</span>(claims.userId, req.resumeFrom, limit <span class="tk-op">=</span> <span class="tk-num">500</span>)</span>
+<span class="line">    socket.<span class="tk-fn">sendAll</span>(missed)                                        <span class="tk-com">// resume before live traffic</span></span>
+<span class="line"></span>
+<span class="line">    every <span class="tk-num">20s</span>:</span>
+<span class="line">        regionalStore.<span class="tk-fn">expire</span>(<span class="tk-str">&quot;sess:&quot;</span> <span class="tk-op">+</span> claims.userId, ttl <span class="tk-op">=</span> <span class="tk-num">60s</span>)  <span class="tk-com">// heartbeat refresh</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onDrain</span>():                                               <span class="tk-com">// deploy or scale-in</span></span>
+<span class="line">    <span class="tk-kw">for</span> batch <span class="tk-kw">in</span> connections.<span class="tk-fn">chunks</span>(size <span class="tk-op">=</span> <span class="tk-num">50</span>):</span>
+<span class="line">        batch.<span class="tk-fn">closeAll</span>(code <span class="tk-op">=</span> <span class="tk-num">4000</span>, reconnectAfter <span class="tk-op">=</span> <span class="tk-fn">jitter</span>(<span class="tk-num">1s</span>, <span class="tk-num">10s</span>))</span>
+<span class="line">        <span class="tk-fn">sleep</span>(<span class="tk-num">1s</span>)                                                 <span class="tk-com">// gradual, avoids a thundering herd</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Reconnect storms without jitter:</strong> All clients retrying on the same schedule overwhelm gateways. Use exponential backoff with full jitter and server-side admission control.</li>
+          <li><strong>Draining every connection at once:</strong> Closing all sockets on a node during a deploy causes spikes. Close gradually and tell clients when to reconnect.</li>
+          <li><strong>Storing too much in session state:</strong> Large per-connection state makes recovery slow and the store a bottleneck. Keep it to IDs, cursors, and subscriptions.</li>
+          <li><strong>No heartbeat or TTL on session entries:</strong> Dead connections linger and skew presence. Refresh TTLs from heartbeats and let entries expire automatically.</li>
+          <li><strong>Assuming the load balancer sees WebSocket health:</strong> An L4 balancer only knows the TCP connection is alive. Add application-level health checks and connection-limit awareness.</li>
+          <li><strong>Replicating regional state globally just in case:</strong> This recreates the synchronization problem. Replicate events and durable sources of truth instead.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, real-time platforms evolve <strong>from sticky to stateless-with-resume in stages</strong>. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Inventory the state:</strong> List what is actually stored per connection (auth, subscriptions, presence, cursors) and classify each item as derivable, regional, or disposable.</li>
+          <li><strong>Step 1 — Externalize session data:</strong> Move it to a regional Redis (or similar) keyed by session ID, with TTLs refreshed by heartbeats, and use signed tokens for identity.</li>
+          <li><strong>Step 2 — Remove stickiness:</strong> Let any gateway accept any user. Use least-request balancing for REST and least-connections at L4 or regional L7 for WebSockets.</li>
+          <li><strong>Step 3 — Add resume semantics:</strong> Add per-connection cursors and a replay window, plus client backoff with jitter and gradual connection draining on scale-in or deploys.</li>
+          <li><strong>Step 4 — Regional failover:</strong> Use health-checked geo-routing to a secondary region, with game-day tests that fail a region and measure recovery time and reconnect storms.</li>
+          <li><strong>Step 5 — Cross-region backplane:</strong> Add a pub/sub or event bus for cross-region delivery, keeping session state local to each region.</li>
+        </ul>
+        <p>Make connection handlers <strong>cattle, not pets</strong>.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Stop depending on node-local memory. Keep gateways stateless, put minimal session state in a <strong>regional store</strong>, route to the <strong>nearest region</strong>, and make <strong>reconnect with resume</strong> the standard recovery path, protected by jittered backoff.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

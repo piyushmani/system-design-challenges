@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Counting at Scale: Maintaining Fast Reads Without Sacrificing Correctness — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">16 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Counters</span>
+      <span class="tag tag--green">High Scale Reads</span>
+      <span class="tag tag--amber">Consistency</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Counting at Scale: Maintaining Fast Reads Without Sacrificing Correctness</h1>
+      <p class="q-scenario"><strong>Priya</strong> is a backend engineer for a social app where every like and comment is stored as an <strong>individual event row</strong> in a central OLTP table with <strong>tens of millions of rows</strong> and <strong>thousands of writes per second</strong>. The post detail screen must show counts with <strong>sub-50 ms reads</strong>. A few seconds of staleness is fine, but counts must be <strong>auditable</strong> and <strong>reconcilable</strong> against the event table, which remains the source of truth. A handful of <strong>viral posts</strong> receive thousands of events per second each, and users can also <strong>unlike</strong> or delete comments. Running <code>COUNT(*)</code> on the main table is slow and is hurting write throughput. Which strategy should she adopt?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Execute optimized SQL COUNT(*)/COUNT(id) queries on the primary database or its read replicas, implementing appropriate indexes or partitions, and caching the results with short TTLs. Perform these queries synchronously to guarantee the most current value is always retrieved from the database.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Include a counter column in the posts table and update it synchronously as part of the same database transaction that records the user event (a single-row atomic increment). Read operations will then fetch this authoritative value directly from the table to ensure strong consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Publish write events (such as likes and comments) to a persistent event stream (using CDC or application-level events). Utilize a scalable stream consumer to aggregate these increments into a distributed key-value store (like Redis or Cassandra) or a materialized view. Serve read requests from this pre-aggregated store and schedule periodic reconciliation jobs to recount from the primary database, correcting any drift. Ensure consumers are idempotent and actively monitor consumer lag and reconciliation discrepancies.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Employ approximate counting algorithms (such as HyperLogLog) or maintain data sketches to achieve extremely fast, memory-efficient counting. Serve these approximate counts to users to bypass querying the primary database entirely, thereby minimizing write contention.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Event Stream to Pre-Aggregated Counters + Reconciliation</h3>
+        <p>The event table already is the <em>ledger</em>, and the count is a <em>derived read model</em>. Option C treats it that way: increments flow through a durable stream into a store optimized for reads, and a reconciliation job proves the derived value against the ledger. It satisfies every requirement at once: sub-50 ms reads, seconds-level staleness, auditability, and no extra load or contention on the write path. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Reads are O(1):</strong> A key lookup in Redis or Cassandra typically returns in about a millisecond, far inside the 50 ms budget and independent of how large the event table grows.</li>
+          <li><strong>No write-path contention:</strong> Events are plain appends. There is no row lock on a hot post row, so viral posts do not serialize their writers (unlike a counter column).</li>
+          <li><strong>Hot keys are absorbable:</strong> Consumers can batch increments, and one Redis shard handles on the order of 100k operations per second. An extremely hot counter can be sharded into N sub-counters and summed on read.</li>
+          <li><strong>Auditable by construction:</strong> The count is a function of the events. A reconciliation job recounts from the event table up to a watermark, measures drift, logs it, alerts on it, and corrects it.</li>
+          <li><strong>Fault-tolerant and replayable:</strong> The stream is durable. If the counter store is lost or corrupted, rebuild it by replaying events or recounting. Idempotent consumers keyed by event ID make redelivery harmless.</li>
+          <li><strong>Observable:</strong> Consumer lag and drift are explicit metrics you can graph and alert on.</li>
+        </ul>
+        <p>Make the counter a <strong>derived, rebuildable projection</strong>: a durable event log, <strong>idempotent batched consumers</strong>, <strong>watermark-based reconciliation</strong>, and alerts on <strong>consumer lag</strong> and <strong>drift</strong>. The event table remains the only source of truth.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>A — Optimized COUNT(*) with Indexes and Short-TTL Caching</h4>
+          </div>
+          <p>Even with indexes, partitions, and caching, <code>COUNT(*)</code> is <strong>O(n) in the rows that match the post</strong>. For a viral post with millions of likes, every cache miss scans millions of index entries, and the requirement for an 'always current' synchronous value conflicts with caching. Running it on replicas protects the primary but not the replicas. It cannot reliably hit 50 ms for hot posts. <strong>Caveat:</strong> for posts with a few thousand events, an indexed count with a TTL cache is perfectly fine, and it is a good fallback path for cache misses.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">➕</span>
+            <h4>B — Synchronous Counter Column in the Same Transaction</h4>
+          </div>
+          <p>A counter column updated in the same transaction is simple and <strong>exactly consistent</strong>, but every like on a post runs <code>UPDATE posts SET like_count = like_count + 1</code> against the <strong>same row</strong>. Row locks serialize those writers, so a viral post is capped by how fast one transaction at a time can commit, and lock waits spill into write latency. That is the very thing Priya is trying to protect. It also drags the hot post row into every write. <strong>Caveat:</strong> for moderate write rates per post it is a great choice: simple, transactional, and auditable. Sharded counter rows (N rows per post) extend its range.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🎯</span>
+            <h4>D — Approximate Counting (HyperLogLog / Sketches)</h4>
+          </div>
+          <p>HyperLogLog estimates the number of <em>distinct</em> elements, with roughly 1% error, and it <strong>cannot remove elements</strong>, so it cannot represent unlikes or deleted comments. A total comment count is not a distinct count at all. Approximate counts are also <strong>not auditable or reconcilable</strong>, which the requirements demand, and skipping the primary database entirely removes any way to verify correctness. <strong>Caveat:</strong> sketches are the right tool for unique-visitor and impression counts, where a small error is acceptable.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Event Stream to Pre-Aggregated Counters + Reconciliation ✓</h4>
+          </div>
+          <p>Publish write events (such as likes and comments) to a persistent event stream (using CDC or application-level events). Utilize a scalable stream consumer to aggregate these increments into a distribu</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read Latency (&lt;50 ms)</th><th>Write-Path Impact</th><th>Viral-Post Behavior</th><th>Auditability</th><th>Consistency</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — COUNT(*) + TTL Cache</td><td>❌ O(n) scans, cache misses</td><td>⚠ Competes with writes (replicas help)</td><td>❌ Worst on viral posts</td><td>✅ Counts the ledger directly</td><td>✅ Exact (⚠ if cached)</td><td>✅ Low</td></tr>
+            <tr><td class="tt-option">B — Synchronous Counter Column</td><td>✅ Single-row read</td><td>❌ Hot-row lock on every event</td><td>❌ Serialized per post</td><td>✅ Transactionally in sync</td><td>✅ Strong (same transaction)</td><td>✅ Low</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Stream + Pre-Aggregated Store ✓</td><td>✅ ~1 ms key lookup</td><td>✅ Append-only inserts</td><td>✅ Batched and shardable</td><td>✅ Reconcilable to a watermark</td><td>⚠ Eventual (seconds)</td><td>❌ High</td></tr>
+            <tr><td class="tt-option">D — Approximate Sketches</td><td>✅ Very fast</td><td>✅ None</td><td>✅ Fine</td><td>❌ Approximate, no deletes</td><td>❌ ~1% error</td><td>⚠ Medium</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — COUNT(*) + TTL Cache</h4>
+          </div>
+          <p>Small or cold datasets, admin and analytics queries, or as the cache-miss fallback path, with no extra infrastructure.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Synchronous Counter Column</h4>
+          </div>
+          <p>Moderate write rates per entity, a need for strong consistency, and a small team. Extend with sharded counter rows if specific rows heat up.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Stream + Pre-Aggregated Store</h4>
+          </div>
+          <p>High write volume, viral hot keys, strict read latency, and a requirement for auditable, rebuildable counts.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Approximate Sketches</h4>
+          </div>
+          <p>Unique visitors, impressions, and other cardinality estimates where small error is fine and removals do not matter.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Event Ledger to Pre-Aggregated Counters</h3>
+        <p>Writes only append events. Counters are derived asynchronously and served from a fast store, with the database as the fallback and the reconciler as the auditor:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    U[&quot;User likes or comments&quot;] --&gt; API[&quot;Write API&quot;]
+    API --&gt;|&quot;INSERT event, unique per user and post&quot;| DB[(&quot;OLTP Event Table: source of truth&quot;)]
+    DB --&gt;|&quot;CDC or outbox&quot;| S[(&quot;Event Stream keyed by postId&quot;)]
+    S --&gt; C[&quot;Idempotent Batch Consumers&quot;]
+    C --&gt;|&quot;increment with event-id dedupe&quot;| KV[(&quot;Counter Store: Redis or Cassandra&quot;)]
+    R[&quot;Read API: post detail&quot;] --&gt;|&quot;GET counts, about 1 ms&quot;| KV
+    KV -.-&gt;|&quot;miss: fallback count and backfill&quot;| DB
+    REC[&quot;Reconciler&quot;] -.-&gt;|&quot;recount to watermark, repair drift&quot;| KV
+    REC -.-&gt; DB
+    C -.-&gt;|&quot;lag metric&quot;| MON[&quot;Monitoring&quot;]">flowchart LR
+    U[&quot;User likes or comments&quot;] --&gt; API[&quot;Write API&quot;]
+    API --&gt;|&quot;INSERT event, unique per user and post&quot;| DB[(&quot;OLTP Event Table: source of truth&quot;)]
+    DB --&gt;|&quot;CDC or outbox&quot;| S[(&quot;Event Stream keyed by postId&quot;)]
+    S --&gt; C[&quot;Idempotent Batch Consumers&quot;]
+    C --&gt;|&quot;increment with event-id dedupe&quot;| KV[(&quot;Counter Store: Redis or Cassandra&quot;)]
+    R[&quot;Read API: post detail&quot;] --&gt;|&quot;GET counts, about 1 ms&quot;| KV
+    KV -.-&gt;|&quot;miss: fallback count and backfill&quot;| DB
+    REC[&quot;Reconciler&quot;] -.-&gt;|&quot;recount to watermark, repair drift&quot;| KV
+    REC -.-&gt; DB
+    C -.-&gt;|&quot;lag metric&quot;| MON[&quot;Monitoring&quot;]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent Aggregating Consumer + Watermark Reconciler</h3>
+        <p>Each event is applied at most once (dedupe by event ID inside one atomic script) and records the highest applied sequence, which lets the reconciler compare at an exact watermark:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Consumer: events for one post arrive in order (partition key = postId) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">consume</span>(batch):</span>
+<span class="line">    pipeline <span class="tk-op">=</span> redis.<span class="tk-fn">pipeline</span>()</span>
+<span class="line">    <span class="tk-kw">for</span> e <span class="tk-kw">in</span> batch:</span>
+<span class="line">        sign  <span class="tk-op">=</span> (e.type <span class="tk-kw">in</span> [<span class="tk-str">&quot;LIKE_ADDED&quot;</span>, <span class="tk-str">&quot;COMMENT_ADDED&quot;</span>]) ? <span class="tk-op">+</span><span class="tk-num">1</span> : <span class="tk-op">-</span><span class="tk-num">1</span>     <span class="tk-com">// unlike and delete events subtract</span></span>
+<span class="line">        field <span class="tk-op">=</span> (e.type startsWith <span class="tk-str">&quot;LIKE&quot;</span>) ? <span class="tk-str">&quot;likes&quot;</span> : <span class="tk-str">&quot;comments&quot;</span></span>
+<span class="line">        pipeline.<span class="tk-fn">eval</span>(APPLY_ONCE,</span>
+<span class="line">                      keys <span class="tk-op">=</span> [<span class="tk-str">&quot;evt:{&quot;</span> <span class="tk-op">+</span> e.postId <span class="tk-op">+</span> <span class="tk-str">&quot;}:&quot;</span> <span class="tk-op">+</span> e.id, <span class="tk-str">&quot;cnt:{&quot;</span> <span class="tk-op">+</span> e.postId <span class="tk-op">+</span> <span class="tk-str">&quot;}&quot;</span>],   <span class="tk-com">// {postId} hash tag: same slot</span></span>
+<span class="line">                      args <span class="tk-op">=</span> [field, sign, e.seq])</span>
+<span class="line">    pipeline.<span class="tk-fn">execute</span>()</span>
+<span class="line">    kafka.<span class="tk-fn">commit</span>(batch)                                    <span class="tk-com">// commit offsets only after the counters were updated</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Lua APPLY_ONCE (atomic)</span></span>
+<span class="line"><span class="tk-com">//   if SET(KEYS[1], 1, NX, EX = 86400):                   // first time we see this event id</span></span>
+<span class="line"><span class="tk-com">//       HINCRBY(KEYS[2], ARGV[1], ARGV[2])</span></span>
+<span class="line"><span class="tk-com">//       if tonumber(ARGV[3]) &gt; tonumber(HGET(KEYS[2], &quot;seq&quot;) or 0): HSET(KEYS[2], &quot;seq&quot;, ARGV[3])</span></span>
+<span class="line"><span class="tk-com">//   // the dedupe TTL must be longer than the longest possible replay window</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Read path ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getCounts</span>(postId):</span>
+<span class="line">    h <span class="tk-op">=</span> redis.<span class="tk-fn">hgetall</span>(<span class="tk-str">&quot;cnt:{&quot;</span> <span class="tk-op">+</span> postId <span class="tk-op">+</span> <span class="tk-str">&quot;}&quot;</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> h is empty:                                         <span class="tk-com">// cold start or eviction</span></span>
+<span class="line">        h <span class="tk-op">=</span> <span class="tk-fn">singleFlight</span>(<span class="tk-str">&quot;rebuild:&quot;</span> <span class="tk-op">+</span> postId, () <span class="tk-op">=&gt;</span> <span class="tk-fn">rebuildFromDb</span>(postId))   <span class="tk-com">// coalesce concurrent misses</span></span>
+<span class="line">    <span class="tk-kw">return</span> { likes: h.likes <span class="tk-kw">or</span> <span class="tk-num">0</span>, comments: h.comments <span class="tk-kw">or</span> <span class="tk-num">0</span> }</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Reconciler (periodic, for recently active posts) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reconcile</span>(postId):</span>
+<span class="line">    snap     <span class="tk-op">=</span> redis.<span class="tk-fn">hgetall</span>(<span class="tk-str">&quot;cnt:{&quot;</span> <span class="tk-op">+</span> postId <span class="tk-op">+</span> <span class="tk-str">&quot;}&quot;</span>)       <span class="tk-com">// atomic read of count and applied seq</span></span>
+<span class="line">    expected <span class="tk-op">=</span> db.<span class="tk-fn">count</span>(<span class="tk-str">&quot;likes WHERE post_id = ? AND event_seq &lt;= ? AND is_active = true&quot;</span>, postId, snap.seq)</span>
+<span class="line">    drift    <span class="tk-op">=</span> snap.likes <span class="tk-op">-</span> expected</span>
+<span class="line">    metrics.<span class="tk-fn">histogram</span>(<span class="tk-str">&quot;counter_drift&quot;</span>, <span class="tk-fn">abs</span>(drift))</span>
+<span class="line">    <span class="tk-kw">if</span> drift <span class="tk-op">==</span> <span class="tk-num">0</span>: <span class="tk-kw">return</span></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">abs</span>(drift) <span class="tk-op">&lt;=</span> TOLERANCE:</span>
+<span class="line">        redis.<span class="tk-fn">hincrby</span>(<span class="tk-str">&quot;cnt:{&quot;</span> <span class="tk-op">+</span> postId <span class="tk-op">+</span> <span class="tk-str">&quot;}&quot;</span>, <span class="tk-str">&quot;likes&quot;</span>, <span class="tk-op">-</span>drift)   <span class="tk-com">// a delta is safe even while new events arrive</span></span>
+<span class="line">        log.<span class="tk-fn">warn</span>(<span class="tk-str">&quot;counter repaired&quot;</span>, postId, drift)</span>
+<span class="line">    <span class="tk-kw">else</span>:</span>
+<span class="line">        alerts.<span class="tk-fn">page</span>(<span class="tk-str">&quot;counter drift too large&quot;</span>, postId, drift)    <span class="tk-com">// likely a consumer bug: stop auto-repair</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Non-idempotent increments:</strong> At-least-once delivery turns every redelivery into a double count. Dedupe by event ID or apply the offset atomically with the counter.</li>
+          <li><strong>Reconciling without a watermark:</strong> Comparing a live counter with a live <code>COUNT(*)</code> shows false drift from in-flight events. Compare at a recorded event sequence.</li>
+          <li><strong>Ignoring toggles and deletes:</strong> Unlike and delete events must decrement exactly once. Enforce uniqueness on <code>(user_id, post_id)</code> in the source table.</li>
+          <li><strong>Hot-key meltdown:</strong> One key for a viral post on one shard becomes the bottleneck. Batch increments, shard the counter, and add a short-TTL in-process cache.</li>
+          <li><strong>No cold-start story:</strong> An evicted or missing counter that returns 0 shows wrong numbers. Fall back to a database count, backfill, and coalesce concurrent requests.</li>
+          <li><strong>Treating the counter as the source of truth:</strong> Counters can drift. Never 'fix' one by hand-editing it without recounting from the events.</li>
+          <li><strong>Not monitoring lag and drift:</strong> Without alerts, counts go stale or wrong silently.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Large social platforms layer several techniques depending on how hot a key is:</p>
+        <ul>
+          <li><strong>Step 0 - Classify counters:</strong> Exact and auditable (likes, comments, balances) versus approximate (impressions, unique viewers).</li>
+          <li><strong>Step 1 - Cheap path first:</strong> For cold posts, a counter column or an indexed count plus cache is fine. Do not over-engineer.</li>
+          <li><strong>Step 2 - Event stream:</strong> Emit events (or use CDC) keyed by post ID into Kafka or Kinesis so each post's events stay ordered within one partition.</li>
+          <li><strong>Step 3 - Aggregating consumers:</strong> Apply increments idempotently (a Lua script that does <code>SET NX</code> on the event ID, then increments) into Redis, Cassandra counters, or a materialized view.</li>
+          <li><strong>Step 4 - Protect hot keys:</strong> Shard the counter into N sub-keys and sum on read, or add a short-TTL in-process cache for viral posts.</li>
+          <li><strong>Step 5 - Reconcile:</strong> Recount recently active posts up to a watermark on a schedule, auto-correct small drift, and alert on large drift.</li>
+        </ul>
+        <p>Counts are a read model: cheap to serve and rebuildable from the ledger.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Do not count on the read path and do not increment on the write path. Keep events as the <strong>ledger</strong>, derive counts with an <strong>idempotent stream aggregator</strong> into a fast key-value store, and prove them with <strong>watermark-based reconciliation</strong>. This gives sub-50 ms reads, seconds of staleness, auditability, and no new contention on the write path.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

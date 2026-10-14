@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eliminating NULLs from Profile Reads with a Precomputed Read Model — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">20 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Data Quality</span>
+      <span class="tag tag--green">Null Handling</span>
+      <span class="tag tag--amber">Production UX</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Eliminating NULLs from Profile Reads with a Precomputed Read Model</h1>
+      <p class="q-scenario"><strong>Maya</strong> manages the <strong>Profile Service</strong> in a heavily trafficked microservices architecture. Optional fields (<code>bio</code>, <code>location</code>, <code>avatar_url</code>, <code>display_name</code>) are updated continuously by <strong>user edits, analytical backfills, and third-party enrichment</strong>. Clients need a <strong>stable, definitive display_name</strong> (preferred name, then first/last name, then email handle) and must be able to tell whether a value was <strong>user-set or derived</strong>. Reads vastly outnumber writes, and nulls currently leak into mobile apps and public APIs. The solution must be <strong>fast, consistent across clients, observable, and scale to millions of reads per second</strong>. Which approach should she implement?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Maintain a single canonical relational database and embed COALESCE and DEFAULT logic directly into all SQL read queries (e.g., SELECT COALESCE(display_name, CONCAT(first_name, &#x27; &#x27;, last_name), email_handle) AS display_name ...). Allow the database engine to resolve null values dynamically at query time, keeping the write operations straightforward.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Build a centralized normalization layer within the API. On every request, retrieve the raw profile data from the database or cache and execute the COALESCE and fallback logic directly in the application service code. Cache the fully resolved API responses with brief Time-To-Live (TTL) settings to mitigate load.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Shift the responsibility for COALESCE logic entirely to the client applications (mobile and web) by returning raw, nullable data from the Profile Service. Thoroughly document the fallback rules and supply presence flags so clients can determine how to handle missing data locally, keeping the backend simple and stateless.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Construct a denormalized read model leveraging Change Data Capture (CDC) and stream processing. Capture all enrichment events and profile modifications, funneling them through a stream processor that computes the COALESCE logic and outputs the resolved fields alongside presence metadata into a cache or materialized view optimized for reads. Serve all read requests directly from this pre-computed store.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: CDC-Fed Denormalized Read Model with Precomputed Fallbacks</h3>
+        <p>With reads vastly outnumbering writes, the fallback rule should be <strong>computed once per change</strong>, not once per read. A CDC-driven read model applies <strong>one authoritative resolver</strong> to every change, regardless of which writer produced it, and serves the resolved result from a store built for lookups. Here's why this option stands out:</p>
+        <ul>
+          <li><strong>Pays the cost at write time:</strong> The COALESCE chain runs once per profile change in a stream processor, so the read path becomes a key lookup. That is what makes millions of reads per second feasible.</li>
+          <li><strong>Nulls cannot leak by construction:</strong> The API serves only the resolved, validated document. Clients never see raw nullable fields, so no client-side workarounds are needed.</li>
+          <li><strong>Provenance is first-class:</strong> The processor emits metadata such as <code>display_name_source = user | derived_first_last | derived_email_handle</code>, directly satisfying the requirement to distinguish explicit from derived values.</li>
+          <li><strong>All writers converge:</strong> User input, backfills, and enrichment jobs all change the source of truth; CDC observes every change, so no writer can bypass the rules or forget to apply them.</li>
+          <li><strong>Decoupled and replayable:</strong> Reads do not load the OLTP database. If the fallback rules change, replay the change log to rebuild the read model, and measure freshness lag and null-rate directly on the output.</li>
+        </ul>
+        <p>Treat the read model as a <strong>versioned, derived view</strong>: one resolver, ordered idempotent updates, provenance fields, lag and null-rate monitoring, and a documented rebuild path.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>A — COALESCE in SQL Read Queries</h4>
+          </div>
+          <p>Simple and correct at modest scale, but it makes the <strong>database the hot path</strong> for every read, recomputing the same fallback millions of times. The logic gets duplicated across queries, ORMs, and services (drift is inevitable). Provenance needs extra CASE expressions, and values enriched in other stores cannot be coalesced in a single query. Fine for a small system, not for millions of reads per second.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>B — API-Layer Normalization with Short-TTL Cache</h4>
+          </div>
+          <p>A strong <em>incremental</em> step: the logic lives in one service and caching reduces load. Weaknesses: every cache miss recomputes from raw data (stampedes at peak), the short TTL trades freshness against load, and any consumer that reads raw data directly bypasses the rules. It does not give a precomputed, replayable source of resolved values.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📱</span>
+            <h4>C — Fallback Logic in Clients</h4>
+          </div>
+          <p>This <strong>spreads the problem</strong> rather than solving it. iOS, Android, web, and third parties each implement the rules and will drift; old app versions cannot be updated, and any rule change needs a client release. It also leaves the public API returning nullable data, which is the defect being fixed.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — CDC-Fed Denormalized Read Model with Precomputed Fallbacks ✓</h4>
+          </div>
+          <p>Construct a denormalized read model leveraging Change Data Capture (CDC) and stream processing. Capture all enrichment events and profile modifications, funneling them through a stream processor that</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read Latency at Scale</th><th>Consistent Rules Across Clients</th><th>Provenance Support</th><th>Freshness After Writes</th><th>Implementation Complexity</th><th>Rule Change Agility</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — COALESCE in SQL</td><td>Low at scale ❌</td><td>Medium ⚠</td><td>Awkward ⚠</td><td>Immediate ✅</td><td>Low ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — API Normalization + TTL Cache</td><td>Good on hits ⚠</td><td>High ✅</td><td>Good ✅</td><td>TTL-bound ⚠</td><td>Medium ⚠</td><td>Good ✅</td></tr>
+            <tr><td class="tt-option">C — Client-Side Fallbacks</td><td>Good ✅</td><td>Low ❌</td><td>Weak ❌</td><td>Immediate ✅</td><td>Low ✅</td><td>Poor ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — CDC Read Model ✓</td><td>Very high ✅</td><td>High ✅</td><td>Excellent ✅</td><td>Seconds of lag ⚠</td><td>High ❌</td><td>Good (via replay) ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — COALESCE in SQL</h4>
+          </div>
+          <p>Small to medium scale, a single consumer, and simple fallback rules where DB load is not a concern.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — API Normalization + TTL Cache</h4>
+          </div>
+          <p>A quick, low-risk centralization of rules when read volume is moderate and some staleness is fine. A good first step toward Option D.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Client-Side Fallbacks</h4>
+          </div>
+          <p>Purely presentational choices (e.g., placeholder icon or localized wording), never the canonical value contract.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — CDC Read Model</h4>
+          </div>
+          <p>Read-heavy at very high scale, multiple writers, shared rules and provenance across many consumers, and a need for replayable derivation.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> CDC-Driven Resolved Profile Pipeline</h3>
+        <p>Every change from every writer flows through one resolver; reads touch only the precomputed store:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    U[User Edits] --&gt; DB[Profile DB source of truth]
+    E[Enrichment Jobs] --&gt; DB
+    B[Backfills] --&gt; DB
+    DB --&gt; CDC[CDC Connector]
+    CDC --&gt; K[Change Stream partitioned by user id]
+    K --&gt; P[Stream Processor with resolver v3]
+    P --&gt; RS[Read Store resolved fields and provenance]
+    RS --&gt; API[Profile API]
+    API --&gt; M[Mobile and Web Clients]">flowchart LR
+    U[User Edits] --&gt; DB[Profile DB source of truth]
+    E[Enrichment Jobs] --&gt; DB
+    B[Backfills] --&gt; DB
+    DB --&gt; CDC[CDC Connector]
+    CDC --&gt; K[Change Stream partitioned by user id]
+    K --&gt; P[Stream Processor with resolver v3]
+    P --&gt; RS[Read Store resolved fields and provenance]
+    RS --&gt; API[Profile API]
+    API --&gt; M[Mobile and Web Clients]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Resolver and Ordered Stream Processor</h3>
+        <p>A single pure resolver produces non-null values with provenance; the processor applies it idempotently with a version guard:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">RESOLVER_VERSION <span class="tk-op">=</span> <span class="tk-num">3</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">resolveProfile</span>(raw):</span>
+<span class="line">    name <span class="tk-op">=</span> <span class="tk-fn">clean</span>(raw.display_name)                                <span class="tk-com">// trim, NULLIF blank</span></span>
+<span class="line">    source <span class="tk-op">=</span> <span class="tk-str">&#x27;user&#x27;</span></span>
+<span class="line">    <span class="tk-kw">if</span> name <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        full <span class="tk-op">=</span> <span class="tk-fn">clean</span>(<span class="tk-fn">join</span>(<span class="tk-fn">clean</span>(raw.first_name), <span class="tk-fn">clean</span>(raw.last_name)))</span>
+<span class="line">        <span class="tk-kw">if</span> full <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">            name <span class="tk-op">=</span> full</span>
+<span class="line">            source <span class="tk-op">=</span> <span class="tk-str">&#x27;derived_first_last&#x27;</span></span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            handle <span class="tk-op">=</span> <span class="tk-fn">emailHandle</span>(raw.email)                       <span class="tk-com">// local part only, sanitized</span></span>
+<span class="line">            name <span class="tk-op">=</span> handle ?? <span class="tk-str">&#x27;User&#x27;</span></span>
+<span class="line">            source <span class="tk-op">=</span> handle <span class="tk-op">!=</span> <span class="tk-lit">null</span> ? <span class="tk-str">&#x27;derived_email_handle&#x27;</span> : <span class="tk-str">&#x27;default&#x27;</span></span>
+<span class="line">    <span class="tk-kw">return</span> {</span>
+<span class="line">        userId: raw.id,</span>
+<span class="line">        displayName: name,</span>
+<span class="line">        displayNameSource: source,</span>
+<span class="line">        bio: <span class="tk-fn">clean</span>(raw.bio) ?? <span class="tk-str">&#x27;&#x27;</span>,</span>
+<span class="line">        location: <span class="tk-fn">clean</span>(raw.location) ?? <span class="tk-str">&#x27;&#x27;</span>,</span>
+<span class="line">        avatarUrl: raw.avatar_url ?? DEFAULT_AVATAR,</span>
+<span class="line">        hasBio: <span class="tk-fn">clean</span>(raw.bio) <span class="tk-op">!=</span> <span class="tk-lit">null</span>,</span>
+<span class="line">        hasAvatar: raw.avatar_url <span class="tk-op">!=</span> <span class="tk-lit">null</span>,</span>
+<span class="line">        sourceVersion: raw.version,                               <span class="tk-com">// from CDC (LSN or row version)</span></span>
+<span class="line">        resolverVersion: RESOLVER_VERSION</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onChange</span>(event):                                         <span class="tk-com">// partitioned by userId</span></span>
+<span class="line">    current <span class="tk-op">=</span> readStore.<span class="tk-fn">get</span>(event.userId)</span>
+<span class="line">    <span class="tk-kw">if</span> current <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> current.sourceVersion <span class="tk-op">&gt;=</span> event.version</span>
+<span class="line">         <span class="tk-kw">and</span> current.resolverVersion <span class="tk-op">==</span> RESOLVER_VERSION:</span>
+<span class="line">        <span class="tk-kw">return</span>                                                    <span class="tk-com">// stale or duplicate event, ignore</span></span>
+<span class="line">    readStore.<span class="tk-fn">put</span>(event.userId, <span class="tk-fn">resolveProfile</span>(event.after))      <span class="tk-com">// idempotent upsert</span></span>
+<span class="line">    metrics.<span class="tk-fn">inc</span>(<span class="tk-str">&#x27;fallback.&#x27;</span> <span class="tk-op">+</span> source)</span>
+<span class="line">    metrics.<span class="tk-fn">observe</span>(<span class="tk-str">&#x27;cdc_lag_ms&#x27;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> event.commitTs)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">rebuildAll</span>(newResolverVersion):</span>
+<span class="line">    <span class="tk-kw">for</span> row <span class="tk-kw">in</span> <span class="tk-fn">snapshot</span>(profileTable):                            <span class="tk-com">// after a rule change</span></span>
+<span class="line">        readStore.<span class="tk-fn">put</span>(row.id, <span class="tk-fn">resolveProfile</span>(row))</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>No ordering guard:</strong> An out-of-order event can overwrite newer data. Use per-key partitioning and version comparison.</li>
+          <li><strong>Ignoring read-your-writes:</strong> Users who edit their name and still see the old one will think the system is broken. Handle user-initiated writes explicitly.</li>
+          <li><strong>Treating blank strings as present:</strong> Empty or whitespace-only values defeat COALESCE. Normalize with trimming and <code>NULLIF</code> semantics in the resolver.</li>
+          <li><strong>No fallback on read-model miss:</strong> A cold or evicted entry should compute on demand, not return nulls.</li>
+          <li><strong>Unversioned resolver logic:</strong> Without versions you cannot tell which records need rebuilding after a rule change.</li>
+          <li><strong>Exposing personal data via derived values:</strong> Email handles can reveal identity; sanitize.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams typically evolve toward the read model rather than starting there:</p>
+        <ul>
+          <li><strong>Step 0 — Define the contract:</strong> Which fields are guaranteed non-null, the fallback order, and the provenance values. Publish it as part of the API schema.</li>
+          <li><strong>Step 1 — One shared resolver:</strong> A single library or service that implements the rules, with unit tests for edge cases (blank strings, whitespace, missing names).</li>
+          <li><strong>Step 2 — Normalize at the API with caching:</strong> Quick win that removes client workarounds (Option B).</li>
+          <li><strong>Step 3 — CDC and stream processing:</strong> Move resolution to the change stream and serve from a precomputed store when read volume or latency demands it.</li>
+          <li><strong>Step 4 — Rebuild and reconcile:</strong> Backfill tooling, version tags on the resolver, and a periodic reconciliation job comparing the read model to source.</li>
+          <li><strong>Step 5 — Monitor quality:</strong> Null-rate, fallback-rate by source, and replication lag as first-class dashboards.</li>
+        </ul>
+        <p>Centralize the rule, precompute the result, and make the derivation visible.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For read-dominated data that needs consistent fallback rules and provenance, <strong>compute the resolved view once on change and serve it from a read-optimized store</strong>. Start simpler if scale allows, but keep one authoritative resolver.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

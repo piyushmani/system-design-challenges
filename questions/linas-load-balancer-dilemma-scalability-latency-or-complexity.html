@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lina&#x27;s Load Balancer Dilemma: Scalability, Latency, or Complexity? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">16 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Load Balancing</span>
+      <span class="tag tag--green">Latency</span>
+      <span class="tag tag--amber">System Complexity</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Lina&#x27;s Load Balancer Dilemma: Scalability, Latency, or Complexity?</h1>
+      <p class="q-scenario"><strong>Lina</strong> leads backend engineering for a fast-growing web platform with traffic spikes up to <strong>100k requests per second</strong>, running many microservices across <strong>multiple regions</strong>. Some endpoints are <strong>read-heavy and latency-sensitive</strong>. Others use <strong>session data</strong> (such as matchmaking state), but that state <em>can be moved to an external store</em>. She must choose a load-balancing strategy for both <strong>external ingress</strong> and <strong>service-to-service traffic</strong> that delivers <strong>low tail latency</strong>, supports <strong>autoscaling</strong>, gives <strong>strong observability</strong>, and leaves <strong>no single point of failure</strong>. The services are written in a few languages that all have mature HTTP/gRPC client libraries.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Deploy a centralized Layer 7 reverse proxy cluster (a small group of high-capacity NGINX or Envoy servers) to handle global routing, sticky session cookies, health monitoring, and TLS termination. Scale this gateway fleet horizontally behind a single DNS record.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Utilize DNS-based geolocation and latency routing (global DNS with latency or weighted records) directing traffic to regional load balancers that manage per-region session affinity. Maintain mostly stateful services behind these regional load balancers to preserve affinity and minimize cross-region network calls.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Design application services to be completely stateless by offloading session data to a distributed external store (such as a multi-AZ Redis cluster). Rely on client-side load balancing equipped with service discovery (via SDKs or sidecars) alongside local retries and health checks. Employ regional ingress load balancers for incoming external traffic, allowing clients to dynamically select optimal endpoints.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Implement a service mesh (using sidecar proxies alongside every service instance) to manage Layer 7 load balancing, mTLS, circuit breaking, retries, and observability. Preserve necessary session affinity through cookie-based hashing at the sidecar level, requiring no modifications to the underlying application code.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Stateless Services + Client-Side LB + Regional Ingress</h3>
+        <p>The decisive fact is that session state <em>can</em> be externalized. Once any instance can serve any request, load balancing becomes a pure <strong>capacity and latency</strong> problem instead of an <strong>affinity</strong> problem, and the best tools (power-of-two-choices, latency-aware routing, instant autoscaling, regional failover) all open up. Option C removes the constraints that make the other options fragile. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Stateless means autoscaling-friendly:</strong> Instances can be added, drained, or killed with no session loss, and new capacity absorbs load immediately instead of waiting for sticky sessions to expire.</li>
+          <li><strong>Better tail latency:</strong> Client-side balancing uses per-request signals (EWMA latency, in-flight count, power-of-two-choices), skips an extra proxy hop, and avoids hot instances. Combined with outlier ejection, retry budgets, and careful hedging for idempotent reads, it cuts p99.</li>
+          <li><strong>No central bottleneck:</strong> Each client holds the endpoint list from service discovery, so the east-west data plane is distributed and there is no proxy fleet to size for 100k requests per second. Managed regional ingress load balancers (multi-AZ) scale horizontally for north-south traffic.</li>
+          <li><strong>Resilient by design:</strong> Health checks run at the ingress and in the clients, regional failover is driven by health-aware DNS or Anycast, and a multi-AZ session store keeps session data available when an instance dies.</li>
+          <li><strong>Observable:</strong> Every client emits per-destination latency, error, and retry metrics, ingress produces access logs, and traces (for example OpenTelemetry) tie them together.</li>
+        </ul>
+        <p>Standardize <strong>timeouts, retry budgets, outlier ejection, and load-aware balancing</strong> in one shared client (or one xDS configuration), keep ingress simple and managed, and watch <strong>p99 per hop</strong>. If uniform policy and mTLS justify the sidecar cost, a mesh is a reasonable evolution of this same design, as long as the services stay stateless.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🚪</span>
+            <h4>A — Centralized L7 Proxy Cluster Behind One DNS Record</h4>
+          </div>
+          <p>A small cluster of L7 proxies concentrates <strong>all traffic and all failure modes</strong> in one tier: it must be sized for the global peak, a bad configuration push affects every region, and cross-region users hairpin through it. Sticky session cookies <em>defeat</em> the purpose of externalizing state, because they create hot instances, slow rebalancing after scale-out, and lose sessions when an instance dies. A single DNS record gives no health-based or latency-aware routing. <strong>Caveat:</strong> a central gateway is excellent for north-south concerns (authentication, WAF, rate limiting) when it is regional and multi-AZ rather than one global tier.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌍</span>
+            <h4>B — Geo/Latency DNS + Regional Affinity + Stateful Services</h4>
+          </div>
+          <p>DNS geo or latency routing is a good <em>first tier</em>, but this option pairs it with <strong>stateful services and affinity</strong>. DNS answers are cached by resolvers and clients, so failover takes seconds to minutes. Stateful instances cannot be freely autoscaled or drained, and affinity creates hot spots during spikes. It also says nothing about service-to-service balancing. <strong>Caveat:</strong> DNS-based geo routing remains the right outer layer for multi-region ingress. It just should not be the whole answer.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>D — Service Mesh with Cookie-Based Session Affinity</h4>
+          </div>
+          <p>A service mesh is powerful (mTLS, retries, circuit breaking, uniform telemetry) and is a legitimate alternative, but this option leans on <strong>cookie-based hashing for affinity</strong>, which keeps the stateful constraints that autoscaling and failover want to remove. Sidecars add a proxy hop on each side of every call (typically sub-millisecond to a few milliseconds, plus CPU and memory per pod) that tail-sensitive paths feel, and the mesh control plane becomes another critical component to run. <strong>Caveat:</strong> when uniform mTLS and policy across many teams matter most, a mesh over stateless services without sticky routing is a strong choice. The best combination is option C's statelessness with a mesh or xDS as the delivery mechanism.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Stateless Services + Client-Side LB + Regional Ingress ✓</h4>
+          </div>
+          <p>Design application services to be completely stateless by offloading session data to a distributed external store (such as a multi-AZ Redis cluster). Rely on client-side load balancing equipped with s</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Tail Latency</th><th>Autoscaling Friendliness</th><th>Single Points of Failure</th><th>Observability</th><th>Regional Failover Speed</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Central L7 Proxy Cluster</td><td>⚠ Extra hop, sticky hot spots</td><td>❌ Sticky cookies slow rebalancing</td><td>❌ Small global proxy tier</td><td>⚠ Central logs, limited per-hop view</td><td>❌ Single DNS record</td><td>✅ Low</td></tr>
+            <tr><td class="tt-option">B — Geo DNS + Stateful Regional LBs</td><td>⚠ Local, but affinity hot spots</td><td>❌ Stateful services resist scaling</td><td>⚠ Regional LBs are redundant</td><td>⚠ Per-region view</td><td>❌ DNS TTL caching</td><td>⚠ Medium</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Stateless + Client-Side LB ✓</td><td>✅ Direct, load-aware routing</td><td>✅ Any instance serves any request</td><td>✅ Distributed data plane</td><td>✅ Per-client and ingress metrics</td><td>✅ Health-based routing</td><td>⚠ Medium (shared client + discovery)</td></tr>
+            <tr><td class="tt-option">D — Mesh with Sticky Affinity</td><td>⚠ Sidecar hop on every call</td><td>⚠ Affinity limits scale-in</td><td>⚠ Control-plane dependency</td><td>✅ Uniform telemetry</td><td>⚠ Multi-cluster mesh setup</td><td>❌ High</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Central L7 Proxy Cluster</h4>
+          </div>
+          <p>Small to medium single-region deployments and edge concerns (authentication, WAF, rate limiting), deployed as a multi-AZ managed gateway and not as one global proxy tier.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Geo DNS + Stateful Regional LBs</h4>
+          </div>
+          <p>As the outer routing layer for multi-region ingress, or for genuinely stateful, regionally pinned workloads (such as game servers) where affinity is inherent.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Stateless + Client-Side LB</h4>
+          </div>
+          <p>Multi-region microservices that are tail-latency sensitive and autoscaled, with externalizable state and teams able to share a client library or xDS configuration.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Mesh with Sticky Affinity</h4>
+          </div>
+          <p>Many teams and languages that need uniform mTLS, policy, and telemetry without code changes, and a platform team able to run a mesh. Best without sticky routing.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Layered Load Balancing</h3>
+        <p>Geography is handled by DNS or Anycast, ingress by regional managed load balancers, and service-to-service traffic by clients that pick endpoints themselves:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TB
+    CL[&quot;Clients&quot;] --&gt; DNS[&quot;Global DNS or Anycast: latency and health based&quot;]
+    DNS --&gt; R1[&quot;Region A Ingress LB, multi-AZ&quot;]
+    DNS --&gt; R2[&quot;Region B Ingress LB, multi-AZ&quot;]
+    R1 --&gt; GW1[&quot;Stateless Edge Services&quot;]
+    GW1 --&gt;|&quot;client-side LB over discovered endpoints&quot;| SVC1[&quot;Service Instances, autoscaled&quot;]
+    SVC1 --&gt;|&quot;session read and write&quot;| SS[(&quot;Session Store: multi-AZ Redis&quot;)]
+    SVC1 -.-&gt;|&quot;endpoint list&quot;| SD[&quot;Service Discovery or xDS&quot;]
+    SVC1 -.-&gt;|&quot;metrics and traces&quot;| OBS[&quot;Observability Stack&quot;]
+    R2 --&gt; GW2[&quot;Region B Services, same layout&quot;]">flowchart TB
+    CL[&quot;Clients&quot;] --&gt; DNS[&quot;Global DNS or Anycast: latency and health based&quot;]
+    DNS --&gt; R1[&quot;Region A Ingress LB, multi-AZ&quot;]
+    DNS --&gt; R2[&quot;Region B Ingress LB, multi-AZ&quot;]
+    R1 --&gt; GW1[&quot;Stateless Edge Services&quot;]
+    GW1 --&gt;|&quot;client-side LB over discovered endpoints&quot;| SVC1[&quot;Service Instances, autoscaled&quot;]
+    SVC1 --&gt;|&quot;session read and write&quot;| SS[(&quot;Session Store: multi-AZ Redis&quot;)]
+    SVC1 -.-&gt;|&quot;endpoint list&quot;| SD[&quot;Service Discovery or xDS&quot;]
+    SVC1 -.-&gt;|&quot;metrics and traces&quot;| OBS[&quot;Observability Stack&quot;]
+    R2 --&gt; GW2[&quot;Region B Services, same layout&quot;]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Client-Side Balancer: Power of Two Choices + Retry Budget</h3>
+        <p>Picks the better of two random healthy endpoints using EWMA latency and in-flight load, ejects outliers, and retries idempotent calls only within a budget:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> ClientSideBalancer:</span>
+<span class="line">    endpoints   <span class="tk-op">=</span> discovery.<span class="tk-fn">watch</span>(service)       <span class="tk-com">// keep the last known good list if discovery fails</span></span>
+<span class="line">    stats       <span class="tk-op">=</span> <span class="tk-fn">map</span>(endpoint <span class="tk-op">-&gt;</span> { ewmaLatency, inFlight, consecutiveErrors, ejectedUntil })</span>
+<span class="line">    retryBudget <span class="tk-op">=</span> <span class="tk-fn">TokenBucket</span>()                  <span class="tk-com">// every request deposits 1 token, every retry withdraws 10 (about 10% extra load)</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">pick</span>(excluded <span class="tk-op">=</span> []):</span>
+<span class="line">        healthy <span class="tk-op">=</span> [e <span class="tk-kw">for</span> e <span class="tk-kw">in</span> endpoints <span class="tk-kw">if</span> stats[e].ejectedUntil <span class="tk-op">&lt;</span> <span class="tk-fn">now</span>() <span class="tk-kw">and</span> e <span class="tk-kw">not</span> <span class="tk-kw">in</span> excluded]</span>
+<span class="line">        <span class="tk-kw">if</span> healthy.<span class="tk-fn">isEmpty</span>(): healthy <span class="tk-op">=</span> endpoints            <span class="tk-com">// panic mode: better than failing every request</span></span>
+<span class="line">        a, b <span class="tk-op">=</span> <span class="tk-fn">randomTwo</span>(healthy, preferSameZone <span class="tk-op">=</span> <span class="tk-lit">true</span>)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">score</span>(a) <span class="tk-op">&lt;=</span> <span class="tk-fn">score</span>(b) ? a : b</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">score</span>(e):                                       <span class="tk-com">// lower is better</span></span>
+<span class="line">        <span class="tk-kw">return</span> stats[e].ewmaLatency <span class="tk-op">*</span> (stats[e].inFlight <span class="tk-op">+</span> <span class="tk-num">1</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">call</span>(req, deadline):</span>
+<span class="line">        retryBudget.<span class="tk-fn">deposit</span>(<span class="tk-num">1</span>)</span>
+<span class="line">        tried <span class="tk-op">=</span> []</span>
+<span class="line">        <span class="tk-kw">while</span> <span class="tk-fn">now</span>() <span class="tk-op">&lt;</span> deadline:</span>
+<span class="line">            target <span class="tk-op">=</span> <span class="tk-fn">pick</span>(excluded <span class="tk-op">=</span> tried)</span>
+<span class="line">            stats[target].inFlight <span class="tk-op">+</span><span class="tk-op">=</span> <span class="tk-num">1</span></span>
+<span class="line">            result <span class="tk-op">=</span> http.<span class="tk-fn">send</span>(target, req, timeout <span class="tk-op">=</span> <span class="tk-fn">min</span>(PER_TRY_TIMEOUT, deadline <span class="tk-op">-</span> <span class="tk-fn">now</span>()))</span>
+<span class="line">            stats[target].inFlight <span class="tk-op">-</span><span class="tk-op">=</span> <span class="tk-num">1</span></span>
+<span class="line">            <span class="tk-fn">update</span>(stats[target], result)                    <span class="tk-com">// update EWMA, count errors, eject after N consecutive failures</span></span>
+<span class="line"></span>
+<span class="line">            <span class="tk-kw">if</span> result.ok <span class="tk-kw">or</span> <span class="tk-kw">not</span> result.retryable:            <span class="tk-com">// success, or a 4xx that retrying will not fix</span></span>
+<span class="line">                <span class="tk-kw">return</span> result</span>
+<span class="line">            <span class="tk-kw">if</span> <span class="tk-kw">not</span> req.isIdempotent <span class="tk-kw">or</span> <span class="tk-kw">not</span> retryBudget.<span class="tk-fn">tryWithdraw</span>(<span class="tk-num">10</span>):</span>
+<span class="line">                <span class="tk-kw">return</span> result                                <span class="tk-com">// no retry for unsafe requests or when the budget is empty</span></span>
+<span class="line">            tried.<span class="tk-fn">add</span>(target)</span>
+<span class="line">            <span class="tk-fn">sleep</span>(<span class="tk-fn">jitteredBackoff</span>(<span class="tk-fn">len</span>(tried)))</span>
+<span class="line">        <span class="tk-kw">return</span> DeadlineExceeded</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Session access is independent of the chosen instance:</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">loadSession</span>(sessionId):</span>
+<span class="line">    <span class="tk-kw">return</span> sessionStore.<span class="tk-fn">get</span>(sessionId, timeout <span class="tk-op">=</span> <span class="tk-num">5ms</span>)        <span class="tk-com">// multi-AZ store, circuit breaker, defined fallback</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Round-robin only:</strong> Equal distribution ignores slow or overloaded instances. Prefer least-request or power-of-two-choices with EWMA latency.</li>
+          <li><strong>Retry storms:</strong> Unbounded retries amplify an outage. Use retry budgets, jittered backoff, and per-try timeouts shorter than the overall deadline.</li>
+          <li><strong>Hedging non-idempotent requests:</strong> Duplicate execution causes duplicate side effects. Hedge reads only.</li>
+          <li><strong>Stale or fragile discovery:</strong> Clients that hard-fail when discovery is down, or never refresh endpoints. Cache the last known good list and combine it with health signals.</li>
+          <li><strong>No outlier ejection:</strong> One bad instance keeps receiving traffic and dominates p99.</li>
+          <li><strong>Treating the session store as just another dependency:</strong> It is tier-0. Make it multi-AZ with timeouts, a circuit breaker, and a defined fallback.</li>
+          <li><strong>Ignoring locality:</strong> Cross-AZ and cross-region calls add latency and cost. Prefer zone-local endpoints with spillover.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Large platforms layer load balancing, and each layer solves a different problem:</p>
+        <ul>
+          <li><strong>Step 0 - Make services stateless:</strong> Move sessions to Redis or DynamoDB (multi-AZ) or into signed tokens, and keep only caches in process.</li>
+          <li><strong>Step 1 - Global layer:</strong> Use Anycast or latency- and health-based DNS (for example Route 53 or Cloudflare) to steer users to the nearest healthy region, with short TTLs and health checks.</li>
+          <li><strong>Step 2 - Regional ingress:</strong> Use managed L4/L7 load balancers (NLB or ALB) spread over multiple AZs for TLS termination, WAF, and coarse routing, with connection draining on scale-in.</li>
+          <li><strong>Step 3 - East-west traffic:</strong> Use client-side balancing (gRPC with xDS, Envoy, or a shared library) with service discovery (Cloud Map, Consul, Kubernetes endpoints), locality awareness, power-of-two-choices, and outlier ejection.</li>
+          <li><strong>Step 4 - Resilience:</strong> Enforce timeouts, retry budgets (for example at most about 10% extra load), circuit breakers, load shedding, and hedging only for idempotent reads.</li>
+          <li><strong>Step 5 - Observe:</strong> Track golden signals per hop (rate, errors, p50 and p99), use distributed tracing, and run synthetic probes per region.</li>
+        </ul>
+        <p>Use DNS for geography, managed load balancers for ingress, and smart clients for service-to-service calls.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Remove affinity first, then balance for latency. <strong>Stateless services with externalized session state</strong>, <strong>regional ingress load balancers</strong>, and <strong>latency-aware client-side balancing with discovery and retry budgets</strong> give the best tail latency, elastic autoscaling, and no single point of failure. Use geo-DNS for regional steering, and a proxy or mesh only where policy needs justify the extra hop.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

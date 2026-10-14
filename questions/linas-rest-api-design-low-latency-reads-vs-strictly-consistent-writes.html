@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lina’s REST API design: low-latency reads vs strictly consistent writes — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">17 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">REST API</span>
+      <span class="tag tag--green">Read Latency</span>
+      <span class="tag tag--amber">Consistency</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Lina’s REST API design: low-latency reads vs strictly consistent writes</h1>
+      <p class="q-scenario"><strong>Lina</strong>, a software engineer, is building a <strong>User Preferences</strong> service for a mobile-first product. It must serve <strong>millions of reads per minute</strong>, accept <strong>simultaneous updates from web and mobile clients</strong>, and integrate with several downstream microservices (such as email and recommendations) that depend on <strong>current user preferences</strong>. Her main goals are strong <strong>observability</strong>, <strong>prevention of lost updates</strong>, <strong>high availability</strong>, <strong>low read latency</strong>, and <strong>acceptable write latency</strong>. She must choose a propagation mechanism and a RESTful API design. Which strategy gives the best balance of operational complexity, consistency, latency, availability, and scalability?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Synchronous writes to the master paired with synchronous downstream requests: process preference modifications via a unified API that synchronously updates the main database, followed by executing HTTP requests to all downstream microservices to refresh their state and caches before responding with a 200 OK. Direct all read traffic to the primary database to guarantee maximum freshness.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Event-based eventual consistency: the REST write operation replies with a 202 Accepted upon saving the modification and broadcasting an event to a message bus (like Kafka). Downstream applications subscribe to this bus and refresh their read models asynchronously. Client applications must be built to endure brief periods of stale data and use polling if they require instant verification.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Conditional updates utilizing ETags and If-Match combined with asynchronous cache clearing: employ standard REST principles with ETags and conditional PATCH/PUT headers to identify update conflicts and ensure idempotency. Save changes to the master database, dispatch lightweight update or invalidation events to the message bus for downstream caches and services, and handle read queries using replicas or read models and caches (configured with short TTLs) to ensure low latency.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Client-initiated merging (using Last-Write-Wins or CRDTs): allow client applications to send partial updates without any conflict validation on the server side. The service combines these updates leveraging last-write-wins timestamps or CRDTs and instantly broadcasts the consolidated state to downstream consumers. Read requests are fulfilled by a highly available, eventually-consistent data store.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: ETag / If-Match Updates with Async Invalidation and Replica or Cache Reads</h3>
+        <p>The requirements pull in three directions: <strong>no lost updates</strong>, <strong>very low read latency at massive scale</strong>, and <strong>high availability</strong>. Optimistic concurrency with HTTP conditional requests (<code>ETag</code> plus <code>If-Match</code>, returning <code>412</code> on conflict) solves lost updates at the API contract level, without locks or coupling. Writes go to the authoritative store, downstream services learn about changes through lightweight events instead of synchronous calls, and reads are served from replicas, read models, and short-TTL caches so millions of reads per minute never hit the primary. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Lost-update protection by contract:</strong> The client sends the version it saw in <code>If-Match</code>. The server applies the change only if that version is still current (<code>UPDATE ... WHERE version = ?</code>); otherwise it returns <code>412 Precondition Failed</code>. Requiring the header (<code>428 Precondition Required</code> if missing) makes the protection non-optional.</li>
+          <li><strong>Low read latency at scale:</strong> Reads hit caches or replicas, and conditional GETs (<code>If-None-Match</code> returning <code>304</code>) save bandwidth and battery on mobile networks. The primary only sees writes.</li>
+          <li><strong>Availability and decoupling:</strong> Writes do not wait for email, recommendations, or any other consumer. The bus absorbs downstream outages, and the read side keeps working even when the primary is slow.</li>
+          <li><strong>Consistency where it matters:</strong> The write decision is strongly consistent (one authoritative row plus a version), while derived views are eventually consistent. Events carry the version so consumers discard stale or out-of-order updates, which is precisely where eventual consistency is safe.</li>
+          <li><strong>Observability:</strong> The 412 rate is a real measure of client conflicts, and event lag, replica lag, and cache hit ratio are direct SLIs. The version number in logs and events lets you trace one preference change end to end.</li>
+        </ul>
+        <p>The contract is: <strong>GET returns a strong ETag; PUT/PATCH require If-Match</strong> (428 if absent, 412 on mismatch); the response carries the new ETag and body; every successful write emits <strong>PreferenceChanged{userId, version}</strong> through an outbox; consumers upsert only when the version is newer. Track 412 rate, event lag, replica lag, and cache hit ratio.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>A — Synchronous Writes, Synchronous Fan-Out, Primary Reads</h4>
+          </div>
+          <p>It maximizes freshness, but write latency becomes the <strong>sum</strong> of every downstream call and availability the <strong>product</strong> of all of them. A failure after the database commit leaves some systems updated and others not, with an ambiguous response. Routing every read to the primary cannot scale to millions per minute, and two concurrent writers still overwrite each other, so lost updates are not prevented.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📣</span>
+            <h4>B — Event-Based Eventual Consistency with 202</h4>
+          </div>
+          <p>Its propagation idea is sound (and option C uses it), but the API contract fails the stated requirement: with no conflict detection, concurrent web and mobile updates still cause <strong>lost updates</strong>. Returning 202 for a small preference change makes the client unable to confirm the result without polling, and read-your-writes becomes the client's problem.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>D — Client-Initiated Merge (LWW or CRDT) Without Server Validation</h4>
+          </div>
+          <p>Last-write-wins silently discards one of two concurrent updates (it <em>causes</em> lost updates) and depends on client clocks, which skew and can be tampered with. CRDTs genuinely merge, but they add metadata and complexity that small per-user preference documents do not need. With no server-side validation, integrity and observability weaken. This suits offline-first collaborative editing, not this service.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — ETag / If-Match Updates with Async Invalidation and Replica or Cache Reads ✓</h4>
+          </div>
+          <p>Conditional updates utilizing ETags and If-Match combined with asynchronous cache clearing: employ standard REST principles with ETags and conditional PATCH/PUT headers to identify update conflicts an</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Lost-Update Protection</th><th>Read Latency</th><th>Write Latency</th><th>Availability</th><th>Downstream Freshness</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Sync Writes + Sync Fan-Out</td><td>None (last write wins) ❌</td><td>Poor (primary reads) ❌</td><td>High (sum of downstream calls) ❌</td><td>Low (coupled to every downstream) ❌</td><td>Immediate ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Eventual Consistency with 202</td><td>None ❌</td><td>Low (read models) ✅</td><td>Low ✅</td><td>High ✅</td><td>Seconds of lag ⚠</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — ETag/If-Match + Async Invalidation ✓</td><td>Strong (ETag/If-Match) ✅</td><td>Low (replicas and cache) ✅</td><td>Low ✅</td><td>High ✅</td><td>Seconds of lag ⚠</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Client Merge (LWW / CRDT)</td><td>Weak (LWW drops writes) ❌</td><td>Low ✅</td><td>Low ✅</td><td>High ✅</td><td>Eventual ⚠</td><td>Medium–High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sync Writes + Sync Fan-Out</h4>
+          </div>
+          <p>Very small systems with one or two downstream consumers, low traffic, and a requirement that every consumer be updated before the user sees success.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Eventual Consistency with 202</h4>
+          </div>
+          <p>Write-heavy, fire-and-forget updates where concurrent edits to the same record are rare or harmless, and clients can tolerate polling for results.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — ETag/If-Match + Async Invalidation</h4>
+          </div>
+          <p>Read-heavy resources that multiple clients can edit concurrently, with several downstream consumers and a need for lost-update protection, low read latency, and high availability.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Client Merge (LWW / CRDT)</h4>
+          </div>
+          <p>Offline-first or collaborative editing where clients must continue working while disconnected and merges are well defined (documents, shared lists), accepting the added complexity.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Conditional Update with Conflict Detection</h3>
+        <p>Two clients start from the same version. The second writer is rejected with 412, refreshes, and retries:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant W as Web Client
+    participant M as Mobile Client
+    participant API as Preferences API
+    participant DB as Primary DB
+    W-&gt;&gt;API: GET preferences
+    API--&gt;&gt;W: 200 with ETag version 5
+    M-&gt;&gt;API: GET preferences
+    API--&gt;&gt;M: 200 with ETag version 5
+    W-&gt;&gt;API: PATCH with If-Match version 5
+    API-&gt;&gt;DB: UPDATE where version is 5, set version 6
+    DB--&gt;&gt;API: 1 row updated
+    API--&gt;&gt;W: 200 with ETag version 6
+    M-&gt;&gt;API: PATCH with If-Match version 5
+    API-&gt;&gt;DB: UPDATE where version is 5
+    DB--&gt;&gt;API: 0 rows updated
+    API--&gt;&gt;M: 412 Precondition Failed
+    M-&gt;&gt;API: GET, re-apply change, retry with If-Match version 6">sequenceDiagram
+    participant W as Web Client
+    participant M as Mobile Client
+    participant API as Preferences API
+    participant DB as Primary DB
+    W-&gt;&gt;API: GET preferences
+    API--&gt;&gt;W: 200 with ETag version 5
+    M-&gt;&gt;API: GET preferences
+    API--&gt;&gt;M: 200 with ETag version 5
+    W-&gt;&gt;API: PATCH with If-Match version 5
+    API-&gt;&gt;DB: UPDATE where version is 5, set version 6
+    DB--&gt;&gt;API: 1 row updated
+    API--&gt;&gt;W: 200 with ETag version 6
+    M-&gt;&gt;API: PATCH with If-Match version 5
+    API-&gt;&gt;DB: UPDATE where version is 5
+    DB--&gt;&gt;API: 0 rows updated
+    API--&gt;&gt;M: 412 Precondition Failed
+    M-&gt;&gt;API: GET, re-apply change, retry with If-Match version 6</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Conditional PATCH, Cached GET, and Version-Guarded Consumer</h3>
+        <p>The write uses an atomic version check and an outbox insert in one transaction, reads are served from cache or replicas with conditional GET support, and downstream consumers apply only newer versions:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// PATCH /users/{id}/preferences  (If-Match is required)</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">patchPreferences</span>(userId, request):</span>
+<span class="line">    ifMatch <span class="tk-op">=</span> request.<span class="tk-fn">header</span>(<span class="tk-str">&#x27;If-Match&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> ifMatch <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">428</span>(<span class="tk-str">&#x27;If-Match required&#x27;</span>)                      <span class="tk-com">// clients cannot opt out of concurrency control</span></span>
+<span class="line">    expectedVersion <span class="tk-op">=</span> <span class="tk-fn">parseStrongEtag</span>(ifMatch)               <span class="tk-com">// weak ETags never match If-Match (RFC 9110)</span></span>
+<span class="line"></span>
+<span class="line">    result <span class="tk-op">=</span> <span class="tk-lit">null</span></span>
+<span class="line">    db.transaction:</span>
+<span class="line">        current <span class="tk-op">=</span> db.<span class="tk-fn">find</span>(<span class="tk-str">&#x27;preferences&#x27;</span>, userId)</span>
+<span class="line">        merged <span class="tk-op">=</span> <span class="tk-fn">jsonMergePatch</span>(current.data, request.body)  <span class="tk-com">// validate against the schema first</span></span>
+<span class="line">        rows <span class="tk-op">=</span> db.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;UPDATE preferences SET data = ?, version = version + 1&#x27;</span>,</span>
+<span class="line">                       <span class="tk-str">&#x27;WHERE user_id = ? AND version = ?&#x27;</span>, merged, userId, expectedVersion)</span>
+<span class="line">        <span class="tk-kw">if</span> rows <span class="tk-op">==</span> <span class="tk-num">0</span>:</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-num">412</span>(<span class="tk-str">&#x27;Precondition Failed&#x27;</span>, currentEtag <span class="tk-op">=</span> <span class="tk-fn">etag</span>(current.version))   <span class="tk-com">// atomic: no check-then-write race</span></span>
+<span class="line"></span>
+<span class="line">        newVersion <span class="tk-op">=</span> expectedVersion <span class="tk-op">+</span> <span class="tk-num">1</span></span>
+<span class="line">        db.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;outbox&#x27;</span>, type <span class="tk-op">=</span> <span class="tk-str">&#x27;PreferenceChanged&#x27;</span>, key <span class="tk-op">=</span> userId,</span>
+<span class="line">                  payload <span class="tk-op">=</span> { userId, version <span class="tk-op">=</span> newVersion, changedFields <span class="tk-op">=</span> <span class="tk-fn">keys</span>(request.body) })</span>
+<span class="line">        result <span class="tk-op">=</span> merged</span>
+<span class="line"></span>
+<span class="line">    cache.<span class="tk-fn">delete</span>(<span class="tk-str">&#x27;prefs:&#x27;</span> <span class="tk-op">+</span> userId)                          <span class="tk-com">// best effort; a short TTL is the backstop</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-num">200</span>(result) <span class="tk-kw">with</span> header ETag <span class="tk-op">=</span> <span class="tk-fn">etag</span>(newVersion)</span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// GET /users/{id}/preferences</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getPreferences</span>(userId, request):</span>
+<span class="line">    entry <span class="tk-op">=</span> cache.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;prefs:&#x27;</span> <span class="tk-op">+</span> userId)</span>
+<span class="line">    <span class="tk-kw">if</span> entry <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        entry <span class="tk-op">=</span> replica.<span class="tk-fn">find</span>(<span class="tk-str">&#x27;preferences&#x27;</span>, userId)           <span class="tk-com">// never the primary on the hot path</span></span>
+<span class="line">        cache.<span class="tk-fn">set</span>(<span class="tk-str">&#x27;prefs:&#x27;</span> <span class="tk-op">+</span> userId, entry, ttl <span class="tk-op">=</span> <span class="tk-num">30s</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> request.<span class="tk-fn">header</span>(<span class="tk-str">&#x27;If-None-Match&#x27;</span>) <span class="tk-op">==</span> <span class="tk-fn">etag</span>(entry.version):</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">304</span>                                           <span class="tk-com">// saves bandwidth on mobile</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-num">200</span>(entry.data) <span class="tk-kw">with</span> header ETag <span class="tk-op">=</span> <span class="tk-fn">etag</span>(entry.version)</span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Downstream consumer (email, recommendations): the version guard makes events idempotent and order-safe</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onPreferenceChanged</span>(event):</span>
+<span class="line">    local <span class="tk-op">=</span> store.<span class="tk-fn">find</span>(event.userId)</span>
+<span class="line">    <span class="tk-kw">if</span> local <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> local.version <span class="tk-op">&gt;=</span> event.version:</span>
+<span class="line">        <span class="tk-kw">return</span>                                               <span class="tk-com">// stale or duplicate event: ignore</span></span>
+<span class="line">    store.<span class="tk-fn">upsert</span>(event.userId, <span class="tk-fn">fetchLatest</span>(event.userId), version <span class="tk-op">=</span> event.version)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Using weak ETags with If-Match:</strong> If-Match requires strong comparison, so a weak validator (<code>W/</code>) never matches and every update fails or the check is skipped.</li>
+          <li><strong>ETags that do not change on every update:</strong> Deriving them from a timestamp with second precision lets two quick writes share a tag. Use a version counter or a content hash.</li>
+          <li><strong>Check-then-write in application code:</strong> Reading the version and then updating in two steps leaves a race. Put the version check into the UPDATE's WHERE clause so it is atomic.</li>
+          <li><strong>Not requiring If-Match:</strong> If clients can omit the header, some will, and lost updates return. Enforce it with 428.</li>
+          <li><strong>Publishing events outside the transaction, and consumers without version guards:</strong> Drift and out-of-order updates follow. Use an outbox and apply events only when they are newer.</li>
+          <li><strong>No read-your-writes strategy:</strong> Users who read an older replica right after saving assume the app is broken. Return the fresh body and ETag, and pin the user's reads briefly.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams model preferences as a small versioned document and let HTTP semantics carry the concurrency contract. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Model the resource:</strong> Store one versioned preferences document per user (a <code>version</code> column), and decide whether conflicts are detected per document or per field.</li>
+          <li><strong>Step 1 — Define the API contract:</strong> GET returns <code>200</code> plus a strong ETag; PUT/PATCH require <code>If-Match</code> (428 if missing, 412 on mismatch) and return the updated body and new ETag.</li>
+          <li><strong>Step 2 — Implement the write path:</strong> Use a single atomic conditional update on the authoritative store, with the outbox insert in the same transaction.</li>
+          <li><strong>Step 3 — Propagate changes:</strong> Relay the outbox to the bus, have consumers apply changes only if the version is newer, and invalidate caches by deleting the key, with a short TTL as a backstop.</li>
+          <li><strong>Step 4 — Optimize reads:</strong> Use cache-aside plus read replicas and conditional GETs, and provide read-your-writes through a post-write token or a short primary-read window.</li>
+          <li><strong>Step 5 — Observe and harden:</strong> Track the 412 ratio, cache hit rate, replica and consumer lag, and DLQ depth, and add contract tests that simulate two concurrent clients.</li>
+        </ul>
+        <p>Let the HTTP contract carry concurrency, and let events carry propagation.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Prevent lost updates with <strong>optimistic concurrency at the API</strong> (ETag plus If-Match), keep writes on one authoritative store, and propagate changes asynchronously with versioned events. Serve the heavy read load from caches and replicas. You accept brief staleness in derived views and gain safe concurrent writes, high availability, and low latency.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

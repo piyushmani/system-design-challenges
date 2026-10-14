@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Liam&#x27;s NULL Dilemma: Fix at the Source or Patch upon Read? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">18 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Data Integrity</span>
+      <span class="tag tag--green">Null Handling</span>
+      <span class="tag tag--amber">Architecture</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Liam&#x27;s NULL Dilemma: Fix at the Source or Patch upon Read?</h1>
+      <p class="q-scenario"><strong>Liam</strong>, a backend engineer, owns an event-driven <strong>Orders service</strong> consumed by many downstream microservices. Older records have accumulated <strong>NULLs</strong> in columns such as <code>promo_code</code>, <code>billing_country</code>, and <code>customer_tier</code>. Some materialized views and reports use <code>COALESCE(column, 'DEFAULT')</code>, while other consumers apply their own defaults, so <strong>the same order can mean different things to different services</strong>. The stack is a sharded PostgreSQL OLTP database, Kafka for events, and Redis caching, handling <strong>thousands of writes per second</strong>. For the fields the business treats as required (every order has a billing country and a tier), the NULLs are a data-quality defect rather than a meaningful state. He must choose a long-term strategy for NULLs and defaults that balances consistency, latency, operational overhead, observability, availability, and scalability.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep the schema and producers unchanged and mandate COALESCE in every materialized view and read query as the standard normalization.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Normalize at the API boundary: add a stream processor or gateway that converts NULLs to defaults for all downstream clients, leaving producers and the database schema unmodified.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Make defaults first-class: add NOT NULL and DEFAULT constraints where appropriate, backfill historical rows in a coordinated background job, enforce producer-side validation (contract checks and a schema registry), and use COALESCE only as a temporary compatibility measure.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Let each microservice default values locally, keep the schema nullable, and rely on service-specific logic plus asynchronous cleanup jobs to slowly backfill the data.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Fix at the Source with Constraints and Contracts</h3>
+        <p>NULLs here are a symptom of a <em>missing contract</em>. Every read-side workaround (COALESCE, gateway rewriting, per-service defaults) spreads the same decision across many places, and each copy can drift. Moving the rule into the <strong>schema, the event contract, and a one-time backfill</strong> makes it a single source of truth. Here's why it stands out:</p>
+        <ul>
+          <li><strong>One definition of 'missing':</strong> A database constraint plus a schema-registry contract means producers cannot emit NULL for required fields, so every consumer (current and future) sees the same data with no per-consumer logic.</li>
+          <li><strong>Removes read-time cost and risk:</strong> No more wrapping columns in <code>COALESCE</code> in views, which is easy to forget in a new query and can prevent index use when the wrapped column is filtered or joined on.</li>
+          <li><strong>Safe on a hot, sharded system when done in phases:</strong> Adding a <code>DEFAULT</code> is a metadata-only change, a <code>CHECK ... NOT VALID</code> constraint does not scan the table when added, <code>VALIDATE CONSTRAINT</code> does not block reads or writes, and the backfill runs in small throttled batches.</li>
+          <li><strong>Observability improves:</strong> Producer-side validation turns bad data into a counted, alertable rejection at the source instead of a silent NULL discovered in a dashboard weeks later.</li>
+          <li><strong>Backward-compatible rollout:</strong> COALESCE stays in place until the backfill is verified, so downstream consumers never break while the contract tightens (expand, migrate, contract).</li>
+        </ul>
+        <p>A well-run migration follows <strong>expand → backfill → validate → enforce → contract</strong>: add defaults, deploy validating producers, backfill in batches, add a <code>NOT VALID</code> check, validate it, set <code>NOT NULL</code>, and only then remove COALESCE. Track <strong>NULL counts per column, producer rejection rate, and replica lag</strong> throughout.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🩹</span>
+            <h4>A — COALESCE Everywhere</h4>
+          </div>
+          <p>COALESCE is cheap per query, but the <em>rule lives in every consumer</em>, so each new view, report, or ad-hoc query is a chance to forget it or pick a different default. It can also defeat index usage when it wraps a filtered or joined column, and it never fixes the data. <strong>Caveat:</strong> it is exactly the right tool as a temporary compatibility layer during the migration, which is how the best answer uses it.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🚪</span>
+            <h4>B — Normalize at the API Gateway or Stream Processor</h4>
+          </div>
+          <p>A normalization tier centralizes the rule only for <em>the clients that go through it</em>. The database and Kafka topics still contain NULLs, so CDC consumers, analytics jobs, and admin tools that read them directly bypass it. It also adds a hop, another component to scale and monitor, and a new place where the contract can drift from the schema.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>D — Per-Service Defaults + Slow Async Cleanup</h4>
+          </div>
+          <p>Each team implements its own defaulting, so services can disagree about the same order (one treats a NULL tier as 'standard', another as 'unknown'). Eventual cleanup without a central contract has no completion criterion and no enforcement, so new NULLs keep arriving. This has the highest long-term operational and debugging cost.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Fix at the Source with Constraints and Contracts ✓</h4>
+          </div>
+          <p>Make defaults first-class: add NOT NULL and DEFAULT constraints where appropriate, backfill historical rows in a coordinated background job, enforce producer-side validation (contract checks and a sch</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Consistency Across Consumers</th><th>Read Latency / Query Cost</th><th>Steady-State Operational Overhead</th><th>Migration Risk</th><th>Observability</th><th>Long-Term Scalability</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — COALESCE Everywhere</td><td>Low ❌ (rule repeated per query)</td><td>Small overhead, may block index use ⚠</td><td>Medium ⚠ (every new query must remember)</td><td>Very low ✅</td><td>Poor ❌ (NULLs stay hidden)</td><td>Poor ❌</td></tr>
+            <tr><td class="tt-option">B — Gateway / Stream Normalization</td><td>Partial ⚠ (only clients using the tier)</td><td>Extra hop ⚠</td><td>Medium–High ⚠ (new component)</td><td>Low ✅</td><td>Moderate ⚠</td><td>Moderate ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Constraints + Contracts + Backfill ✓</td><td>High ✅</td><td>Best ✅ (no wrapping)</td><td>Low ✅</td><td>Medium ⚠ (needs phased rollout)</td><td>High ✅</td><td>High ✅</td></tr>
+            <tr><td class="tt-option">D — Per-Service Defaults</td><td>Low ❌</td><td>Varies ⚠</td><td>High ❌ (N implementations)</td><td>Low ✅</td><td>Poor ❌</td><td>Poor ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — COALESCE Everywhere</h4>
+          </div>
+          <p>Short-term compatibility while a migration is in flight, or read-only reporting on data you do not own and cannot fix.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Gateway / Stream Normalization</h4>
+          </div>
+          <p>A legacy estate where you cannot change producers or the schema yet and every consumer can be routed through one tier.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Constraints + Contracts + Backfill</h4>
+          </div>
+          <p>You own the service and schema, many consumers depend on the data, and required fields should be reliable everywhere (this scenario).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Per-Service Defaults</h4>
+          </div>
+          <p>Truly service-specific interpretations (a UI-only display default) where a wrong default has no cross-service impact.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Expand, Migrate, Contract Phases</h3>
+        <p>Each phase is independently safe and reversible. Constraints are tightened only after producers and data are clean:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    A[Expand - add DEFAULT and register stricter schema] --&gt; B[Producers validate via schema registry]
+    B --&gt; C[Backfill in throttled batches per shard]
+    C --&gt; D[Add CHECK NOT VALID and sweep stragglers]
+    D --&gt; E[VALIDATE CONSTRAINT then SET NOT NULL]
+    E --&gt; F[Refresh views and caches]
+    F --&gt; G[Contract - remove COALESCE shims]">flowchart LR
+    A[Expand - add DEFAULT and register stricter schema] --&gt; B[Producers validate via schema registry]
+    B --&gt; C[Backfill in throttled batches per shard]
+    C --&gt; D[Add CHECK NOT VALID and sweep stragglers]
+    D --&gt; E[VALIDATE CONSTRAINT then SET NOT NULL]
+    E --&gt; F[Refresh views and caches]
+    F --&gt; G[Contract - remove COALESCE shims]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Safe Backfill and Constraint Rollout</h3>
+        <p>Phased SQL plus a throttled, idempotent backfill loop: a metadata-only default, keyset-paginated batches that pause on replica lag, then a non-blocking constraint rollout (run per shard):</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// --- Phase 1: expand (metadata-only, no table rewrite) ---</span></span>
+<span class="line">ALTER TABLE orders ALTER COLUMN customer_tier SET DEFAULT <span class="tk-str">&#x27;STANDARD&#x27;</span>;</span>
+<span class="line"><span class="tk-com">// Deploy producers that validate against the registry schema (required field, never explicit NULL)</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// --- Phase 2: backfill history in small, idempotent batches ---</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">backfill</span>(shard):</span>
+<span class="line">    lastId <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">    <span class="tk-kw">loop</span>:</span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-fn">replicaLag</span>(shard) <span class="tk-op">&gt;</span> <span class="tk-num">2s</span>:                       <span class="tk-com">// protect replicas and user traffic</span></span>
+<span class="line">            <span class="tk-fn">sleep</span>(<span class="tk-num">5s</span>)</span>
+<span class="line">            <span class="tk-kw">continue</span></span>
+<span class="line">        ids <span class="tk-op">=</span> shard.<span class="tk-fn">query</span>(</span>
+<span class="line">            <span class="tk-str">&quot;SELECT id FROM orders WHERE id &gt; ? AND customer_tier IS NULL ORDER BY id LIMIT 1000&quot;</span>,</span>
+<span class="line">            lastId)</span>
+<span class="line">        <span class="tk-kw">if</span> ids.<span class="tk-fn">isEmpty</span>():</span>
+<span class="line">            <span class="tk-kw">break</span></span>
+<span class="line">        shard.<span class="tk-fn">exec</span>(</span>
+<span class="line">            <span class="tk-str">&quot;UPDATE orders SET customer_tier = &#x27;STANDARD&#x27; WHERE id = ANY(?) AND customer_tier IS NULL&quot;</span>,</span>
+<span class="line">            ids)                                         <span class="tk-com">// idempotent: safe to retry</span></span>
+<span class="line">        lastId <span class="tk-op">=</span> ids.<span class="tk-fn">last</span>()</span>
+<span class="line">        metrics.<span class="tk-fn">gauge</span>(<span class="tk-str">&quot;backfill_progress&quot;</span>, lastId)</span>
+<span class="line">        <span class="tk-fn">sleep</span>(<span class="tk-num">50ms</span>)                                      <span class="tk-com">// pace the writes</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// --- Phase 3: enforce without long locks ---</span></span>
+<span class="line">ALTER TABLE orders ADD CONSTRAINT orders_tier_nn</span>
+<span class="line">    <span class="tk-fn">CHECK</span> (customer_tier IS NOT NULL) NOT VALID;         <span class="tk-com">// no scan now, checks new and updated rows</span></span>
+<span class="line"><span class="tk-fn">backfill</span>(shard)                                          <span class="tk-com">// sweep any stragglers written meanwhile</span></span>
+<span class="line">ALTER TABLE orders VALIDATE CONSTRAINT orders_tier_nn;   <span class="tk-com">// scans, but does not block reads or writes</span></span>
+<span class="line">ALTER TABLE orders ALTER COLUMN customer_tier SET NOT NULL;   <span class="tk-com">// PostgreSQL 12+ skips the scan thanks to the validated CHECK</span></span>
+<span class="line">ALTER TABLE orders DROP CONSTRAINT orders_tier_nn;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// --- Phase 4: contract ---</span></span>
+<span class="line"><span class="tk-com">// Remove COALESCE(customer_tier, &#x27;DEFAULT&#x27;) from views once the NULL count stays at zero</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Running <code>ALTER TABLE ... SET NOT NULL</code> directly on a big table:</strong> It holds a strong lock while it scans. Add a <code>CHECK ... NOT VALID</code>, validate it, then set NOT NULL (on PostgreSQL 12+ the validated check lets the scan be skipped).</li>
+          <li><strong>One giant UPDATE for the backfill:</strong> It bloats the table, spikes WAL, lags replicas, and holds locks. Use small keyset-paginated batches with pauses tied to replica lag.</li>
+          <li><strong>Tightening before producers and backfill are ready:</strong> A stricter schema fails writes in production, and a <code>NOT VALID</code> check is still enforced on updates, so touching an old row that still has a NULL fails. Deploy validating producers and backfill first, then add the constraint.</li>
+          <li><strong>Replacing meaningful NULLs with magic strings:</strong> If NULL means 'not applicable', a sentinel like <code>'N/A'</code> leaks into joins and reports. Model absence explicitly or keep the column nullable.</li>
+          <li><strong>Breaking consumers with an incompatible schema change:</strong> Use registry compatibility rules (for example backward-compatible changes with defaults) and migrate consumers before removing old fields.</li>
+          <li><strong>Forgetting derived stores:</strong> Redis caches, materialized views, and search indexes keep the old NULL-bearing shapes until refreshed. Include them in the cutover plan.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams treat this as a <strong>staged data-contract migration</strong>, not a single change. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Measure and define:</strong> Count NULLs per column and per producer, and decide with the business what each NULL means (missing, not applicable, or unknown).</li>
+          <li><strong>Step 1 — Expand:</strong> Add <code>DEFAULT</code> values (metadata-only) and register the stricter schema in the registry, with required fields and defaults in a backward-compatible form.</li>
+          <li><strong>Step 2 — Enforce at the source:</strong> Deploy producers that validate against the contract and emit metrics on rejections, so no new bad data arrives.</li>
+          <li><strong>Step 3 — Backfill:</strong> Run throttled, idempotent, keyset-paginated updates per shard, pausing when replica lag rises.</li>
+          <li><strong>Step 4 — Validate and tighten:</strong> Add the <code>CHECK ... NOT VALID</code> constraint, sweep stragglers, run <code>VALIDATE CONSTRAINT</code>, then <code>SET NOT NULL</code>. Rebuild or refresh materialized views and caches from clean data.</li>
+          <li><strong>Step 5 — Contract:</strong> Remove COALESCE shims and per-service defaulting once metrics show zero NULLs for a full retention window.</li>
+        </ul>
+        <p>Treat the <strong>data contract</strong> as the product: schema, registry, and constraints should all say the same thing.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Handle missing values <strong>once, at the source</strong>: constraints in the database, validation at producers, a throttled backfill for history, and COALESCE only as a temporary bridge. Read-side patches spread the rule everywhere and never fix the data.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

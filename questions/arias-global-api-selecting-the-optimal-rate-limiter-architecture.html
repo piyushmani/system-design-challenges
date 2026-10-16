@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aria&#x27;s global API: selecting the optimal rate-limiter architecture — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">26 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Rate Limiting</span>
+      <span class="tag tag--green">Global API</span>
+      <span class="tag tag--amber">Architecture</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Aria&#x27;s global API: selecting the optimal rate-limiter architecture</h1>
+      <p class="q-scenario"><strong>Aria</strong> is the principal infrastructure architect for a worldwide API gateway platform processing an aggregate <strong>100,000 requests per second (RPS)</strong> across distributed geographic zones (North America, Europe, APAC). The platform serves two distinct traffic classes: a high-volume <strong>free tier</strong> that requires best-effort rate limits to prevent noisy-neighbor starvation and scraping, and mission-critical <strong>paid enterprise tiers</strong> governed by rigid, contractually guaranteed quotas and pay-per-call billing. Key architectural constraints include: introducing <em>less than 10ms of overhead</em> to standard requests, maintaining gateway operations and availability even during regional database or network outages, strictly enforcing global tenant quotas across regions, guaranteeing precise and auditable billing telemetry, providing granular observability, and minimizing management complexity. Aria must select the rate-limiting architecture that best fulfills these requirements.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A) Global Centralized Rate Limiter: Direct all quota verifications to one highly consistent Redis cluster (using atomic Lua scripts to evaluate fixed-window or token bucket counters). This design strictly applies the limits from a single centralized location for every region.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">B) Completely Decentralized In-Memory Buckets: Allow each API gateway node to maintain its own token buckets and apply limits independently. These local counters are periodically flushed to a centralized database for historical metrics and billing, though a node restart will clear its current in-memory state.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">C) Hybrid Local/Global Strategy: Utilize a high-speed, local in-memory token bucket on every node to handle initial burst traffic and fast-path validations. For the rigid global quotas required by paid accounts, require nodes to periodically synchronize with a centralized Redis cluster to secure token batches and accurately cap usage, incorporating robust metrics, global counter sharding, and fail-open logic with retries.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">D) Client-Side Signed Tokens: Have the backend generate temporary, cryptographically signed tokens detailing a specific request budget or timestamp. Clients include these tokens with their API calls, allowing the edge servers to verify the signature and subtract the consumed budget locally, avoiding the need for centralized state lookups.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Hybrid Local/Global Strategy with Token Batch Leasing</h3>
+        <p>For a multi-region API gateway processing 100k RPS with a sub-10ms latency budget, a <strong>Hybrid Local/Global Rate Limiter (Option C)</strong> provides the ideal architectural balance. By decoupling per-request evaluation from cross-region coordination via <em>token batch leasing</em>, nodes make sub-millisecond local decisions while background synchronization maintains accurate global quota enforcement:</p>
+        <ul>
+          <li><strong>Sub-Millisecond Fast-Path Latency:</strong> In-memory token buckets on local gateway nodes evaluate incoming requests in microseconds (<0.5ms), easily satisfying the strict <10ms overhead constraint without incurring cross-region WAN delays.</li>
+          <li><strong>Token Batch Leasing for Global Quotas:</strong> Instead of executing a remote Redis lookup on every API call, gateway nodes proactively reserve token batches (e.g., 50–500 tokens) from a centralized, sharded Redis cluster. This reduces centralized coordination traffic by up to 99% while bounding tenant quota overages.</li>
+          <li><strong>Tiered Enforcement Strategy:</strong> Free-tier clients are constrained using purely local in-memory leaky/token buckets to absorb volumetric bursts and abuse. High-value paid tenants leverage synchronized leases to prevent distributed quota leakage across regions.</li>
+          <li><strong>Resilient Fail-Open Outage Logic:</strong> If the central Redis cluster or inter-region WAN links fail, edge gateways trip a circuit breaker and fail open (or switch to local emergency quota ceilings) for paid tenants, preserving API availability during infrastructure outages.</li>
+          <li><strong>Sharded Counters & Precise Telemetry:</strong> Redis keys are partitioned by tenant ID to prevent hot-key contention at 100k RPS. Gateway nodes stream local consumption metrics to time-series databases and flush reconciled batch tallies to Kafka for audit-grade billing.</li>
+        </ul>
+        <p>By combining <strong>local in-memory fast-paths</strong> for burst absorption and microsecond latency with <strong>asynchronous token batch leasing</strong> for global accounting, Aria achieves sub-10ms performance, robust high availability, and accurate enterprise quota enforcement.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🐢</span>
+            <h4>A — Global Centralized Rate Limiter</h4>
+          </div>
+          <p>Directing every request across global regions to a single centralized Redis cluster incurs cross-region WAN round trips (typically 80–200ms between APAC/EU and US), directly violating the <strong><10ms latency requirement</strong>. Furthermore, at 100,000 RPS, the centralized cluster becomes an extreme operational bottleneck and a single point of failure (SPOF) that halts global traffic during an outage.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌪️</span>
+            <h4>B — Completely Decentralized In-Memory Buckets</h4>
+          </div>
+          <p>Purely local in-memory buckets guarantee microsecond latency but have zero global awareness. Across hundreds of gateway nodes, a paid tenant can exceed their contractual quota by a factor equal to the number of active nodes simply by spraying requests across regions. <strong>Caveat:</strong> Ephemeral local state is lost during node restarts or auto-scaling events, severely corrupting billing data.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔓</span>
+            <h4>D — Client-Side Signed Tokens</h4>
+          </div>
+          <p>Signed client tokens (e.g., HMAC/JWT budget proofs) fail fundamentally in multi-tenant HTTP environments because clients can <strong>replay identical valid tokens</strong> concurrently across different edge nodes to bypass limits entirely. <strong>Caveat:</strong> Real-time token revocation is impossible without central state, and server-to-server enterprise APIs cannot tolerate the protocol friction of continuous budget renegotiation.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Hybrid Local/Global Strategy with Token Batch Leasing ✓</h4>
+          </div>
+          <p>C) Hybrid Local/Global Strategy: Utilize a high-speed, local in-memory token bucket on every node to handle initial burst traffic and fast-path validations. For the rigid global quotas required by pai</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Sub-10ms Latency</th><th>Strict Global Quotas</th><th>Outage Resilience</th><th>Accurate Billing Metrics</th><th>Operational Scalability</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Centralized Redis</td><td>❌ (&gt;80ms WAN)</td><td>✅ Exact</td><td>❌ SPOF Outage</td><td>✅ Exact</td><td>❌ Hot-Key Bottleneck</td></tr>
+            <tr><td class="tt-option">B — Decentralized In-Memory</td><td>✅ (&lt;0.5ms)</td><td>❌ N-Fold Leakage</td><td>✅ Autonomous</td><td>❌ Lossy / Drifting</td><td>✅ Low Overhead</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Hybrid Batch Leasing ✓</td><td>✅ (&lt;1ms fast-path)</td><td>✅ Bounded Slack</td><td>✅ Fail-Open Resilient</td><td>✅ Auditable &amp; Precise</td><td>✅ Highly Scalable</td></tr>
+            <tr><td class="tt-option">D — Client-Side Signed Tokens</td><td>✅ (&lt;2ms crypto)</td><td>❌ Replayable / Broken</td><td>✅ Edge Local</td><td>❌ Inaccurate</td><td>❌ Complex Token Churn</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Centralized Redis</h4>
+          </div>
+          <p>Single-region architectures with moderate RPS (<10k) where absolute atomic counter precision is paramount and cross-region latency is non-existent.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Decentralized In-Memory</h4>
+          </div>
+          <p>Edge DDoS mitigation, scraper protection, or coarse free-tier rate limits where request volume is massive, strict global consistency is unnecessary, and zero latency overhead is vital.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hybrid Batch Leasing</h4>
+          </div>
+          <p>High-throughput, multi-region API gateways requiring sub-10ms response times, strict multi-tenant quota guarantees, auditable billing, and resilience against dependency outages.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Client-Side Signed Tokens</h4>
+          </div>
+          <p>Pre-authorized single-use actions (such as direct-to-S3 signed upload URLs or OAuth authorization codes) where fine-grained rate-limit consumption is not being tracked.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Hybrid Rate Limiting: Fast-Path &amp; Background Batch Leasing</h3>
+        <p>API Gateway nodes validate requests locally in sub-milliseconds while an asynchronous background loop leases token batches from centralized Redis.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as API Client
+    participant G as Gateway Node (Local)
+    participant M as In-Memory Bucket
+    participant B as Async Batch Worker
+    participant R as Central Redis Cluster
+    C-&gt;&gt;G: 1. API Request (Tenant: Acme, Paid Tier)
+    G-&gt;&gt;M: 2. Check &amp; Consume Local Token
+    alt Local Tokens Available (Fast-Path)
+        M--&gt;&gt;G: Token Granted (&lt;0.5ms)
+        G--&gt;&gt;C: 200 OK + Upstream Response
+    else Watermark Below Threshold (&lt;20%)
+        M-&gt;&gt;B: Trigger Async Batch Lease
+        B-&gt;&gt;R: EVALSHA acquire_tokens.lua (batch=200)
+        R--&gt;&gt;B: Granted 200 Tokens (Deducted from Global Quota)
+        B-&gt;&gt;M: Replenish Local Token Store
+    end">sequenceDiagram
+    participant C as API Client
+    participant G as Gateway Node (Local)
+    participant M as In-Memory Bucket
+    participant B as Async Batch Worker
+    participant R as Central Redis Cluster
+    C-&gt;&gt;G: 1. API Request (Tenant: Acme, Paid Tier)
+    G-&gt;&gt;M: 2. Check &amp; Consume Local Token
+    alt Local Tokens Available (Fast-Path)
+        M--&gt;&gt;G: Token Granted (&lt;0.5ms)
+        G--&gt;&gt;C: 200 OK + Upstream Response
+    else Watermark Below Threshold (&lt;20%)
+        M-&gt;&gt;B: Trigger Async Batch Lease
+        B-&gt;&gt;R: EVALSHA acquire_tokens.lua (batch=200)
+        R--&gt;&gt;B: Granted 200 Tokens (Deducted from Global Quota)
+        B-&gt;&gt;M: Replenish Local Token Store
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Hybrid Rate Limiter with Batch Leasing and Fail-Open Circuit</h3>
+        <p>Python pseudocode illustrating in-memory fast-path token consumption, asynchronous Redis batch refills, and fail-open outage handling.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">python</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">import</span> time</span>
+<span class="line"><span class="tk-kw">import</span> threading</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">class</span> HybridRateLimiter:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, tenant_id, tier, redis_client, batch_size<span class="tk-op">=</span><span class="tk-num">200</span>):</span>
+<span class="line">        self.tenant_id <span class="tk-op">=</span> tenant_id</span>
+<span class="line">        self.tier <span class="tk-op">=</span> tier                  <span class="tk-com"># &#x27;free&#x27; or &#x27;paid&#x27;</span></span>
+<span class="line">        self.redis <span class="tk-op">=</span> redis_client</span>
+<span class="line">        self.batch_size <span class="tk-op">=</span> batch_size</span>
+<span class="line">        self.local_tokens <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">        self.max_local <span class="tk-op">=</span> batch_size <span class="tk-op">*</span> <span class="tk-num">2</span></span>
+<span class="line">        self.lock <span class="tk-op">=</span> threading.<span class="tk-fn">Lock</span>()</span>
+<span class="line">        self.is_refilling <span class="tk-op">=</span> <span class="tk-lit">False</span></span>
+<span class="line">        self.circuit_open <span class="tk-op">=</span> <span class="tk-lit">False</span></span>
+<span class="line">        self.last_failure_time <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">allow_request</span>(self, cost<span class="tk-op">=</span><span class="tk-num">1</span>) <span class="tk-op">-&gt;</span> tuple[bool, dict]:</span>
+<span class="line">        <span class="tk-com"># Free tier: purely local evaluation to protect against noisy neighbors</span></span>
+<span class="line">        <span class="tk-kw">if</span> self.tier <span class="tk-op">==</span> <span class="tk-str">&#x27;free&#x27;</span>:</span>
+<span class="line">            <span class="tk-kw">return</span> self.<span class="tk-fn">_consume_local_free_tier</span>(cost)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># Paid tier: fast-path local check with background batch replenishment</span></span>
+<span class="line">        <span class="tk-kw">with</span> self.lock:</span>
+<span class="line">            <span class="tk-kw">if</span> self.local_tokens <span class="tk-op">&gt;=</span> cost:</span>
+<span class="line">                self.local_tokens <span class="tk-op">-</span><span class="tk-op">=</span> cost</span>
+<span class="line">                <span class="tk-com"># Trigger background refill when falling below 20% low watermark</span></span>
+<span class="line">                <span class="tk-kw">if</span> self.local_tokens <span class="tk-op">&lt;</span> (self.batch_size <span class="tk-op">*</span> <span class="tk-num">0.2</span>) <span class="tk-kw">and</span> <span class="tk-kw">not</span> self.is_refilling:</span>
+<span class="line">                    self.<span class="tk-fn">_trigger_async_refill</span>()</span>
+<span class="line">                <span class="tk-kw">return</span> <span class="tk-lit">True</span>, {<span class="tk-str">&#x27;source&#x27;</span>: <span class="tk-str">&#x27;local_cache&#x27;</span>, <span class="tk-str">&#x27;remaining&#x27;</span>: self.local_tokens}</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># Local cache exhausted: check outage resilience circuit</span></span>
+<span class="line">        <span class="tk-kw">if</span> self.<span class="tk-fn">_is_circuit_open</span>():</span>
+<span class="line">            self.<span class="tk-fn">_record_telemetry</span>(<span class="tk-str">&#x27;fail_open_admitted&#x27;</span>, cost)</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-lit">True</span>, {<span class="tk-str">&#x27;source&#x27;</span>: <span class="tk-str">&#x27;fail_open_emergency&#x27;</span>, <span class="tk-str">&#x27;remaining&#x27;</span>: <span class="tk-num">0</span>}</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># Synchronous lease fallback when local bucket is empty</span></span>
+<span class="line">        granted <span class="tk-op">=</span> self.<span class="tk-fn">_lease_batch_from_redis</span>()</span>
+<span class="line">        <span class="tk-kw">with</span> self.lock:</span>
+<span class="line">            <span class="tk-kw">if</span> granted <span class="tk-op">&gt;=</span> cost:</span>
+<span class="line">                self.local_tokens <span class="tk-op">+</span><span class="tk-op">=</span> (granted <span class="tk-op">-</span> cost)</span>
+<span class="line">                <span class="tk-kw">return</span> <span class="tk-lit">True</span>, {<span class="tk-str">&#x27;source&#x27;</span>: <span class="tk-str">&#x27;redis_sync&#x27;</span>, <span class="tk-str">&#x27;remaining&#x27;</span>: self.local_tokens}</span>
+<span class="line">            <span class="tk-kw">else</span>:</span>
+<span class="line">                <span class="tk-kw">return</span> <span class="tk-lit">False</span>, {<span class="tk-str">&#x27;source&#x27;</span>: <span class="tk-str">&#x27;quota_exhausted&#x27;</span>, <span class="tk-str">&#x27;remaining&#x27;</span>: <span class="tk-num">0</span>}</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">_trigger_async_refill</span>(self):</span>
+<span class="line">        self.is_refilling <span class="tk-op">=</span> <span class="tk-lit">True</span></span>
+<span class="line">        threading.<span class="tk-fn">Thread</span>(target<span class="tk-op">=</span>self._background_refill, daemon<span class="tk-op">=</span><span class="tk-lit">True</span>).<span class="tk-fn">start</span>()</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">_background_refill</span>(self):</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            granted <span class="tk-op">=</span> self.<span class="tk-fn">_lease_batch_from_redis</span>()</span>
+<span class="line">            <span class="tk-kw">with</span> self.lock:</span>
+<span class="line">                self.local_tokens <span class="tk-op">=</span> <span class="tk-fn">min</span>(self.max_local, self.local_tokens <span class="tk-op">+</span> granted)</span>
+<span class="line">                self.circuit_open <span class="tk-op">=</span> <span class="tk-lit">False</span></span>
+<span class="line">        <span class="tk-kw">finally</span>:</span>
+<span class="line">            <span class="tk-kw">with</span> self.lock:</span>
+<span class="line">                self.is_refilling <span class="tk-op">=</span> <span class="tk-lit">False</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">_lease_batch_from_redis</span>(self) <span class="tk-op">-&gt;</span> int:</span>
+<span class="line">        <span class="tk-com"># Atomic Lua script executed on central sharded Redis cluster</span></span>
+<span class="line">        lua_script <span class="tk-op">=</span> <span class="tk-str">&#x27;&#x27;</span>&#x27;</span>
+<span class="line">        local key <span class="tk-op">=</span> KEYS[<span class="tk-num">1</span>]</span>
+<span class="line">        local requested <span class="tk-op">=</span> <span class="tk-fn">tonumber</span>(ARGV[<span class="tk-num">1</span>])</span>
+<span class="line">        local current <span class="tk-op">=</span> <span class="tk-fn">tonumber</span>(redis.<span class="tk-fn">call</span>(<span class="tk-str">&#x27;get&#x27;</span>, key) <span class="tk-kw">or</span> <span class="tk-str">&#x27;0&#x27;</span>)</span>
+<span class="line">        <span class="tk-kw">if</span> current <span class="tk-op">&lt;=</span> <span class="tk-num">0</span> <span class="tk-kw">then</span> <span class="tk-kw">return</span> <span class="tk-num">0</span> <span class="tk-kw">end</span></span>
+<span class="line">        local granted <span class="tk-op">=</span> math.<span class="tk-fn">min</span>(current, requested)</span>
+<span class="line">        redis.<span class="tk-fn">call</span>(<span class="tk-str">&#x27;decrby&#x27;</span>, key, granted)</span>
+<span class="line">        <span class="tk-kw">return</span> granted</span>
+<span class="line">        <span class="tk-str">&#x27;&#x27;</span>&#x27;</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            granted <span class="tk-op">=</span> self.redis.<span class="tk-fn">eval</span>(lua_script, keys<span class="tk-op">=</span>[f<span class="tk-str">&#x27;quota:{self.tenant_id}&#x27;</span>], args<span class="tk-op">=</span>[self.batch_size], timeout_ms<span class="tk-op">=</span><span class="tk-num">5</span>)</span>
+<span class="line">            self.<span class="tk-fn">_record_telemetry</span>(<span class="tk-str">&#x27;redis_tokens_leased&#x27;</span>, granted)</span>
+<span class="line">            <span class="tk-kw">return</span> granted</span>
+<span class="line">        <span class="tk-kw">except</span> RedisNetworkException:</span>
+<span class="line">            <span class="tk-com"># Trip circuit on network partition or Redis outage</span></span>
+<span class="line">            self.circuit_open <span class="tk-op">=</span> <span class="tk-lit">True</span></span>
+<span class="line">            self.last_failure_time <span class="tk-op">=</span> time.<span class="tk-fn">time</span>()</span>
+<span class="line">            self.<span class="tk-fn">_record_telemetry</span>(<span class="tk-str">&#x27;redis_sync_failed&#x27;</span>, <span class="tk-num">1</span>)</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-num">0</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Static Batch Sizing:</strong> Using a fixed batch size (e.g., 100 tokens) regardless of tenant traffic volume. A slow tenant locks up 100 tokens unnecessarily, while a 10k RPS tenant exhausts the batch in 10ms and thrashes Redis. Batch sizes should dynamically scale: <code>batch_size = max(min_batch, tenant_rps * sync_window)</code>.</li>
+          <li><strong>Synchronous Blocking on Cache Miss:</strong> Halting customer requests to await a remote Redis batch fetch when local tokens reach zero. Refills must trigger proactively at a low-watermark threshold (e.g., 20% capacity) before the local bucket is starved.</li>
+          <li><strong>Failing Closed on Redis Partitions:</strong> Returning <code>HTTP 429</code> or <code>HTTP 500</code> when Redis is unreachable. For high-value enterprise tiers, the gateway must fail open (or enforce a local conservative safety threshold) to protect business revenue during infrastructure hiccups.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Production platforms handling massive global scale (such as Stripe, Envoy Global Rate Limiting, and Cloudflare) implement token batch leasing using a tiered architecture:</p>
+        <ul>
+          <li><strong>Step 1 — Local Gateway Ingress:</strong> An incoming request hits the regional API gateway (e.g., Envoy or custom Go proxy), extracting the tenant identity, tier, and requested endpoint cost.</li>
+          <li><strong>Step 2 — In-Memory Bucket Fast-Path:</strong> The gateway atomically checks and decrements an in-memory token bucket. If tokens remain, the request is approved in <1ms and dispatched upstream with standard rate-limit headers.</li>
+          <li><strong>Step 3 — Low-Watermark Async Refill:</strong> When the local bucket falls below a configurable low-watermark threshold (e.g., 20% remaining), an asynchronous background worker requests a new token batch from the central Redis cluster.</li>
+          <li><strong>Step 4 — Atomic Redis Lua Reservation:</strong> The central sharded Redis cluster executes an atomic Lua script to decrement the tenant's global allowance by the batch size and return the granted lease with a short TTL.</li>
+          <li><strong>Step 5 — Circuit Breaking & Fail-Open Telemetry:</strong> If Redis is unreachable or latency exceeds 5ms, the circuit breaker opens. Paid requests fail open with degraded headers, usage is logged to a local buffer, and reconciled asynchronously via Kafka for billing.</li>
+        </ul>
+        <p>This pattern eliminates centralized bottlenecks and shields end users from infrastructure failures while maintaining strict quota governance.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>To balance sub-10ms global latency with strict multi-tenant quotas, <strong>lease distributed token batches asynchronously</strong> into high-speed local memory rather than forcing every request to execute a synchronous database round trip.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

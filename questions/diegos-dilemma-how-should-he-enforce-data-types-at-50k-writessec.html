@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diego&#x27;s dilemma: How should he enforce data types at 50k writes/sec? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">26 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Data Types</span>
+      <span class="tag tag--green">High Write Throughput</span>
+      <span class="tag tag--amber">Data Validation</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Diego&#x27;s dilemma: How should he enforce data types at 50k writes/sec?</h1>
+      <p class="q-scenario"><strong>Diego</strong> serves as the lead backend engineer for an industrial Internet of Things (IIoT) telemetry platform. His system ingests telemetry from up to <strong>100,000 concurrent sensors</strong> deployed across manufacturing plants, generating an aggregate sustained load of <strong>50,000 writes per second</strong>. Each incoming telemetry record contains a <code>timestamp</code>, numeric <code>value</code>, <code>unit</code> (such as Celsius, Fahrenheit, or PSI), <code>metric_id</code>, and <code>device_id</code>. Diego is tasked with architecting an ingestion and persistence pipeline that satisfies five critical operational criteria: (1) <strong>high availability with minimal write delay</strong> to prevent backpressure on edge gateways, (2) <strong>strict type and boundary enforcement</strong> to immediately catch malformed units and out-of-bounds sensor readings, (3) <strong>seamless schema evolution</strong> to onboard new sensor hardware without downtime, (4) <strong>rapid aggregation capabilities</strong> for real-time alerting and operational monitoring dashboards, and (5) an <strong>immutable audit trail</strong> preserving the original raw telemetry payloads for forensic and regulatory compliance. Diego must choose the architecture that best balances structural validation, write throughput, query speed, and data governance.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A) Centralized Database: Route all incoming data directly to a standalone PostgreSQL cluster configured with a rigid schema (using typed columns, foreign keys for metadata, and CHECK constraints for values). Rely on vertical scaling and time-series partitioning, letting the database handle all validations to guarantee constraint enforcement.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">B) Schema-on-read Approach: Direct devices to transmit JSON payloads directly into a horizontally partitioned NoSQL database (such as Cosmos DB or MongoDB). Embed a schema_version within every record, deferring all data validation to either the read phase or scheduled background tasks that identify and fix malformed data, thereby maximizing uptime and write scalability.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">C) Distributed Relational Store: Execute validation on the client side before writing straight into a highly consistent, distributed SQL database (like Yugabyte or CockroachDB) that features a strongly typed schema and built-in constraints. This provides robust database-level rules and global consistency alongside horizontal scalability across multiple datacenters.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">D) Stream-Centric Architecture: Feed incoming data into a resilient event streaming platform (like Kafka) paired with a schema registry (using Protobuf or Avro) to guarantee structural integrity at the entry point. Utilize stream processing to check ranges, normalize data, and validate units, routing the cleansed output to a new topic. Save the raw input to a data lake for auditing purposes, and store the processed data in a time-series database (such as InfluxDB or partitioned PostgreSQL) to support dashboards and analytics.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Stream-Centric Architecture with Schema Registry and Multi-Tier Validation</h3>
+        <p>Option D is the superior architectural choice because it cleanly decouples the <strong>high-throughput ingestion boundary</strong> from <strong>semantic validation</strong>, <strong>operational time-series queries</strong>, and <strong>cold audit archival</strong>. At 50,000 writes per second, forcing a database to synchronously enforce constraints on write creates severe lock contention, I/O bottlenecks, and connection starvation. A stream-centric architecture with an event log (Apache Kafka or Redpanda) and a Schema Registry provides the exact separation of concerns needed to satisfy all five requirements without compromise:</p>
+        <ul>
+          <li><strong>Decoupled Ingestion & Ultra-Low Write Latency (Requirement 1):</strong> By terminating incoming sensor writes at a distributed, partitioned append-only log (Kafka/Redpanda), writes achieve sub-5ms latency and horizontal scalability across broker partitions. Edge gateways receive immediate acknowledgments without waiting for complex transactional locks, indexes, or multi-table constraints.</li>
+          <li><strong>Two-Tier Validation & Strict Invariant Enforcement (Requirement 2):</strong> Structural type safety is enforced at the network boundary using binary serialization (Apache Avro or Protocol Buffers) backed by a central Schema Registry, rejecting malformed payloads immediately. Downstream stream processors (Apache Flink or Kafka Streams) evaluate dynamic semantic rules—verifying sensor range thresholds and normalizing units (e.g., Fahrenheit to Celsius)—diverting invalid readings to a Dead Letter Queue (DLQ) without dropping data.</li>
+          <li><strong>Safe, Zero-Downtime Schema Evolution (Requirement 3):</strong> The Schema Registry enforces strict compatibility modes (such as <code>BACKWARD</code> or <code>FULL</code>). When new sensor models or extended metric fields are introduced, schemas evolve safely without breaking downstream stream processing jobs or storage consumers.</li>
+          <li><strong>Workload Segregation for Analytics & Auditing (Requirements 4 & 5):</strong> Cleaned, normalized data streams into a purpose-built Time-Series Database (TSDB like TimescaleDB, ClickHouse, or InfluxDB) optimized for columnar rollups, sliding-window alerts, and dashboard queries. Concurrently, the untouched raw event stream is batched into an immutable object store/data lake (such as S3 with Apache Iceberg or Delta Lake) satisfying strict regulatory audit requirements.</li>
+        </ul>
+        <p>By decoupling the ingestion boundary from validation and operational storage, the stream-centric pattern transforms data quality enforcement from a database write bottleneck into a scalable, observable streaming pipeline that effortlessly handles 50,000 writes per second.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🐢</span>
+            <h4>A — Centralized Relational Database (PostgreSQL Cluster)</h4>
+          </div>
+          <p>Relying on a single PostgreSQL primary to enforce CHECK constraints and foreign keys across <strong>50,000 writes per second</strong> will saturate write-ahead log (WAL) I/O, trigger catastrophic lock contention, and exhaust connection pools. <strong>Caveat:</strong> Even with time-series partitioning (e.g., pg_partman), vertical scaling has a hard hardware ceiling, and evaluating constraints synchronously on every insert destroys ingestion latency. Furthermore, storing only relational rows overwrites the raw wire telemetry, violating the immutable audit requirement.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">❌</span>
+            <h4>B — Schema-on-Read NoSQL (Cosmos DB / MongoDB)</h4>
+          </div>
+          <p>Deferring validation to read time or background reconciliation completely violates the mandate for <strong>strict type and range enforcement</strong>. Corrupted, uncalibrated, or out-of-range sensor readings will enter the system undetected, polluting operational history. <strong>Caveat:</strong> Scanning 4.32 billion records daily in background repair jobs causes severe disk I/O contention with live writes. Additionally, dynamic parsing, validating, and converting inconsistent units on every dashboard query induces severe CPU latency spikes, rendering real-time alerting sluggish.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚠</span>
+            <h4>C — Distributed Relational Store with Client Validation</h4>
+          </div>
+          <p>Entrusting validation solely to client-side edge sensors is a major security and reliability anti-pattern: industrial IoT devices frequently run legacy firmware, experience bit rot, or can be compromised. <strong>Caveat:</strong> Distributed SQL engines (like CockroachDB or YugabyteDB) use distributed consensus protocols (Multi-Raft/Paxos) across datacenters for writes. Coordinating consensus for 50,000 writes per second generates significant round-trip network latency (often 30–100ms+), failing the requirement for minimal write delay.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Stream-Centric Architecture with Schema Registry and Multi-Tier Validation ✓</h4>
+          </div>
+          <p>D) Stream-Centric Architecture: Feed incoming data into a resilient event streaming platform (like Kafka) paired with a schema registry (using Protobuf or Avro) to guarantee structural integrity at th</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Latency &amp; Throughput (50k/s)</th><th>Strict Type &amp; Range Enforcement</th><th>Schema Evolution Adaptability</th><th>Raw Data Auditability</th><th>Dashboard Query Performance</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Centralized PostgreSQL</td><td>❌</td><td>✅</td><td>❌</td><td>❌</td><td>⚠</td></tr>
+            <tr><td class="tt-option">B — Schema-on-Read NoSQL</td><td>✅</td><td>❌</td><td>✅</td><td>⚠</td><td>❌</td></tr>
+            <tr><td class="tt-option">C — Distributed SQL + Client Checks</td><td>❌</td><td>⚠</td><td>⚠</td><td>❌</td><td>⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Stream-Centric + Schema Registry ✓</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Centralized PostgreSQL</h4>
+          </div>
+          <p>When write volume is modest (<5,000 writes/sec), the domain model is highly relational with complex multi-table joins, and single-node ACID transaction guarantees outweigh horizontal scalability.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Schema-on-Read NoSQL</h4>
+          </div>
+          <p>When ingesting rapidly mutating, unstructured document feeds (such as web crawls or exploratory log dumps) where write availability is paramount and downstream consumers handle schema variability.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Distributed SQL + Client Checks</h4>
+          </div>
+          <p>When building globally distributed OLTP systems (e.g., multi-region financial ledgers or inventory bookings) requiring strict serializability and cross-datacenter ACID guarantees at moderate write rates.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Stream-Centric + Schema Registry</h4>
+          </div>
+          <p>When ingesting high-velocity telemetry (50k+ writes/sec) demanding sub-second alerts, decoupled raw audit retention, strict schema evolution governance, and multi-tier range/unit validation.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> End-to-End Stream Ingestion and Multi-Tier Validation Pipeline</h3>
+        <p>IoT sensors publish through edge gateways where Schema Registry validates message structure, Kafka buffers writes, stream processors validate ranges/units, and dual sinks store raw audit logs and operational time-series data.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant S as IoT Sensors (100k)
+    participant G as Ingest Gateway
+    participant SR as Schema Registry
+    participant K_RAW as Kafka (sensor.raw)
+    participant S3 as S3 Data Lake (Raw Audit)
+    participant SP as Flink Stream Processor
+    participant K_CLEAN as Kafka (sensor.clean)
+    participant TS as Time-Series DB (Dashboards)
+    S-&gt;&gt;G: Post Telemetry (50,000 writes/sec)
+    G-&gt;&gt;SR: Verify Schema ID (Protobuf/Avro)
+    SR--&gt;&gt;G: Schema Validated
+    G-&gt;&gt;K_RAW: Append Raw Payload
+    G--&gt;&gt;S: HTTP 202 Accepted (Sub-5ms)
+    par Audit Archival
+        K_RAW-)S3: Continuous Batch Archival (Parquet)
+    and In-Flight Validation
+        K_RAW-&gt;&gt;SP: Consume Raw Event Stream
+        SP-&gt;&gt;SP: Verify Range and Convert Units
+        SP-&gt;&gt;K_CLEAN: Publish Normalized Event
+        K_CLEAN-&gt;&gt;TS: Continuous Ingestion
+        TS--&gt;&gt;TS: Update Rollups and Alert Windows
+    end">sequenceDiagram
+    participant S as IoT Sensors (100k)
+    participant G as Ingest Gateway
+    participant SR as Schema Registry
+    participant K_RAW as Kafka (sensor.raw)
+    participant S3 as S3 Data Lake (Raw Audit)
+    participant SP as Flink Stream Processor
+    participant K_CLEAN as Kafka (sensor.clean)
+    participant TS as Time-Series DB (Dashboards)
+    S-&gt;&gt;G: Post Telemetry (50,000 writes/sec)
+    G-&gt;&gt;SR: Verify Schema ID (Protobuf/Avro)
+    SR--&gt;&gt;G: Schema Validated
+    G-&gt;&gt;K_RAW: Append Raw Payload
+    G--&gt;&gt;S: HTTP 202 Accepted (Sub-5ms)
+    par Audit Archival
+        K_RAW-)S3: Continuous Batch Archival (Parquet)
+    and In-Flight Validation
+        K_RAW-&gt;&gt;SP: Consume Raw Event Stream
+        SP-&gt;&gt;SP: Verify Range and Convert Units
+        SP-&gt;&gt;K_CLEAN: Publish Normalized Event
+        K_CLEAN-&gt;&gt;TS: Continuous Ingestion
+        TS--&gt;&gt;TS: Update Rollups and Alert Windows
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Stateful Stream Validation and Unit Normalization Engine</h3>
+        <p>Demonstrates in-flight Protobuf/Avro deserialization, local state-backed range checking, unit conversion to standard SI units, and conditional branching to DLQ or clean topics.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> TelemetryStreamValidator:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, schema_registry, broadcast_state, dlq_sink, clean_sink):</span>
+<span class="line">        self.registry <span class="tk-op">=</span> schema_registry</span>
+<span class="line">        self.device_metadata <span class="tk-op">=</span> broadcast_state  <span class="tk-com">// Replicated in-memory state (RocksDB)</span></span>
+<span class="line">        self.dlq <span class="tk-op">=</span> dlq_sink</span>
+<span class="line">        self.clean_stream <span class="tk-op">=</span> clean_sink</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">process_element</span>(self, raw_bytes, schema_id):</span>
+<span class="line">        <span class="tk-com">// 1. Structural Schema Verification</span></span>
+<span class="line">        schema <span class="tk-op">=</span> self.registry.<span class="tk-fn">lookup_schema</span>(schema_id)</span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> schema:</span>
+<span class="line">            self.dlq.<span class="tk-fn">emit</span>(raw_bytes, error<span class="tk-op">=</span><span class="tk-str">&quot;UNKNOWN_SCHEMA_ID&quot;</span>)</span>
+<span class="line">            <span class="tk-kw">return</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            record <span class="tk-op">=</span> schema.<span class="tk-fn">deserialize</span>(raw_bytes)</span>
+<span class="line">        <span class="tk-kw">except</span> DeserializationException <span class="tk-kw">as</span> e:</span>
+<span class="line">            self.dlq.<span class="tk-fn">emit</span>(raw_bytes, error<span class="tk-op">=</span>f<span class="tk-str">&quot;MALFORMED_PAYLOAD: {e}&quot;</span>)</span>
+<span class="line">            <span class="tk-kw">return</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// 2. Device Metadata &amp; Operational Boundary Lookup</span></span>
+<span class="line">        meta <span class="tk-op">=</span> self.device_metadata.<span class="tk-fn">get</span>(record.device_id)</span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> meta:</span>
+<span class="line">            self.dlq.<span class="tk-fn">emit</span>(record, error<span class="tk-op">=</span><span class="tk-str">&quot;UNREGISTERED_DEVICE_ID&quot;</span>)</span>
+<span class="line">            <span class="tk-kw">return</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// 3. Sensor Range Validation (Threshold Verification)</span></span>
+<span class="line">        <span class="tk-kw">if</span> record.value <span class="tk-op">&lt;</span> meta.min_valid_range <span class="tk-kw">or</span> record.value <span class="tk-op">&gt;</span> meta.max_valid_range:</span>
+<span class="line">            self.dlq.<span class="tk-fn">emit</span>(record, error<span class="tk-op">=</span>f<span class="tk-str">&quot;OUT_OF_RANGE: {record.value} outside [{meta.min_valid_range}, {meta.max_valid_range}]&quot;</span>)</span>
+<span class="line">            <span class="tk-kw">return</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// 4. Unit Validation and Normalization to Base SI Units</span></span>
+<span class="line">        normalized_val, normalized_unit <span class="tk-op">=</span> self.<span class="tk-fn">normalize_units</span>(record.value, record.unit, meta.expected_metric)</span>
+<span class="line">        <span class="tk-kw">if</span> normalized_val is <span class="tk-lit">None</span>:</span>
+<span class="line">            self.dlq.<span class="tk-fn">emit</span>(record, error<span class="tk-op">=</span>f<span class="tk-str">&quot;INVALID_UNIT: {record.unit} for metric {meta.expected_metric}&quot;</span>)</span>
+<span class="line">            <span class="tk-kw">return</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// 5. Emit Validated, Normalized Event to Clean Topic</span></span>
+<span class="line">        clean_event <span class="tk-op">=</span> {</span>
+<span class="line">            <span class="tk-str">&quot;device_id&quot;</span>: record.device_id,</span>
+<span class="line">            <span class="tk-str">&quot;timestamp&quot;</span>: record.timestamp,</span>
+<span class="line">            <span class="tk-str">&quot;metric_id&quot;</span>: record.metric_id,</span>
+<span class="line">            <span class="tk-str">&quot;value&quot;</span>: normalized_val,</span>
+<span class="line">            <span class="tk-str">&quot;unit&quot;</span>: normalized_unit,</span>
+<span class="line">            <span class="tk-str">&quot;processed_at&quot;</span>: <span class="tk-fn">current_epoch_ms</span>()</span>
+<span class="line">        }</span>
+<span class="line">        self.clean_stream.<span class="tk-fn">emit</span>(clean_event)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">normalize_units</span>(self, val, unit, metric_type):</span>
+<span class="line">        <span class="tk-kw">if</span> metric_type <span class="tk-op">==</span> <span class="tk-str">&quot;TEMPERATURE&quot;</span>:</span>
+<span class="line">            <span class="tk-kw">if</span> unit <span class="tk-op">==</span> <span class="tk-str">&quot;FAHRENHEIT&quot;</span>:</span>
+<span class="line">                <span class="tk-kw">return</span> (val <span class="tk-op">-</span> <span class="tk-num">32.0</span>) <span class="tk-op">*</span> (<span class="tk-num">5.0</span> <span class="tk-op">/</span> <span class="tk-num">9.0</span>), <span class="tk-str">&quot;CELSIUS&quot;</span></span>
+<span class="line">            <span class="tk-kw">elif</span> unit <span class="tk-op">==</span> <span class="tk-str">&quot;CELSIUS&quot;</span>:</span>
+<span class="line">                <span class="tk-kw">return</span> val, <span class="tk-str">&quot;CELSIUS&quot;</span></span>
+<span class="line">            <span class="tk-kw">elif</span> unit <span class="tk-op">==</span> <span class="tk-str">&quot;KELVIN&quot;</span>:</span>
+<span class="line">                <span class="tk-kw">return</span> val <span class="tk-op">-</span> <span class="tk-num">273.15</span>, <span class="tk-str">&quot;CELSIUS&quot;</span></span>
+<span class="line">        <span class="tk-kw">elif</span> metric_type <span class="tk-op">==</span> <span class="tk-str">&quot;PRESSURE&quot;</span>:</span>
+<span class="line">            <span class="tk-kw">if</span> unit <span class="tk-op">==</span> <span class="tk-str">&quot;PSI&quot;</span>:</span>
+<span class="line">                <span class="tk-kw">return</span> val <span class="tk-op">*</span> <span class="tk-num">6894.76</span>, <span class="tk-str">&quot;PASCAL&quot;</span></span>
+<span class="line">            <span class="tk-kw">elif</span> unit <span class="tk-op">==</span> <span class="tk-str">&quot;BAR&quot;</span>:</span>
+<span class="line">                <span class="tk-kw">return</span> val <span class="tk-op">*</span> <span class="tk-num">100000.0</span>, <span class="tk-str">&quot;PASCAL&quot;</span></span>
+<span class="line">            <span class="tk-kw">elif</span> unit <span class="tk-op">==</span> <span class="tk-str">&quot;PASCAL&quot;</span>:</span>
+<span class="line">                <span class="tk-kw">return</span> val, <span class="tk-str">&quot;PASCAL&quot;</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-lit">None</span>, <span class="tk-lit">None</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Synchronous External Calls in Stream Operators:</strong> Querying a relational database or REST endpoint from within a stream processing function to look up sensor threshold limits. At 50,000 events/sec, network round trips induce massive backpressure and pipeline stalls. Instead, broadcast device metadata into local RocksDB state stores.</li>
+          <li><strong>Dropping Invalid Records Without a DLQ:</strong> Discarding telemetry that fails unit or range validation without routing it to a Dead Letter Queue or quarantine topic. This blinds operations to sensor hardware malfunctions, network bit flips, or uncoordinated firmware rollouts.</li>
+          <li><strong>Evolving Schemas Without Compatibility Checks:</strong> Registering new schema versions without enforcing <code>BACKWARD</code> or <code>FULL</code> compatibility in the Schema Registry, causing downstream consumers and stream processors to crash on unrecognized binary schemas.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In enterprise industrial IoT environments (e.g., smart manufacturing, utility grids, automated refineries), implementing a stream-centric validation pipeline follows a disciplined multi-stage path:</p>
+        <ul>
+          <li><strong>Step 1 — Edge Ingest & Wire Validation:</strong> Edge gateways or sensor brokers publish telemetry via MQTT or HTTPS to an API gateway. The gateway serializes payloads using Protobuf or Avro, embedding a 4-byte Schema ID retrieved from a cached Schema Registry client.</li>
+          <li><strong>Step 2 — High-Throughput Log Append:</strong> The gateway produces the binary payload to an ingestion Kafka topic (e.g., <code>sensor.telemetry.raw</code>) partitioned by <code>device_id</code>, immediately returning <code>HTTP 202 Accepted</code> in <5ms.</li>
+          <li><strong>Step 3 — Immutable Audit Streaming:</strong> A Kafka Connect sink continuously flushes the raw, unedited binary events directly to an S3/GCS data lake in Parquet or Apache Iceberg format, establishing an unalterable forensic audit trail.</li>
+          <li><strong>Step 4 — Stateful Stream Processing:</strong> A Flink or Kafka Streams job consumes <code>sensor.telemetry.raw</code>, validates physical range limits against locally broadcast sensor metadata, normalizes mixed units to standard SI units (e.g., °F to °C), and diverts rule violations to a Dead Letter Queue (DLQ).</li>
+          <li><strong>Step 5 — Time-Series Persistence & Alerting:</strong> Clean, standardized events are published to <code>sensor.telemetry.validated</code>. Continuous consumers stream these records into a TSDB (e.g., ClickHouse or TimescaleDB) to power sub-second Grafana dashboards and trigger automated anomaly alerts.</li>
+        </ul>
+        <p>This decoupled streaming topology isolates high-frequency writes from analytical queries, ensuring that a surge in sensor traffic or analytical query load never jeopardizes system availability or data integrity.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When ingesting extreme write volumes (50k+ writes/sec), <strong>never force a database to act as an ingestion queue and validation firewall simultaneously</strong>. Use an event stream with a Schema Registry for structural integrity, in-flight stream processing for domain validation, and segregated sinks for audit and analytics.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

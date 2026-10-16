@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Balancing global API rate limits with low-latency edge performance — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">24 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Rate Limiting</span>
+      <span class="tag tag--green">Edge Computing</span>
+      <span class="tag tag--amber">Low Latency</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Balancing global API rate limits with low-latency edge performance</h1>
+      <p class="q-scenario"><strong>Asha</strong>, a backend engineer, must design rate limiting for a <strong>public REST API</strong> used globally by mobile apps and external servers. The requirements pull in different directions: <strong>under 10 ms of edge overhead</strong>, <strong>high availability during regional outages</strong>, protection against both <strong>short bursts</strong> (per-second) and <strong>sustained abuse</strong> (per-day), and <strong>full metrics and audit logs</strong> for rejected requests. She needs the architecture that best balances <strong>consistency, scalability, and latency</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A single centralized strict rate-limiter: direct all requests to a lone Redis cluster leader executing rigorous token-bucket validations (via atomic Lua scripts), ensuring limits are globally consistent and strictly enforced from a central authority.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Completely decentralized eventual counters: each edge proxy maintains independent local in-memory counters and occasionally synchronizes with a central database. Limits are enforced based on local data; occasional reconciliation calculates global usage and applies subsequent throttling.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">A hierarchical hybrid rate-limiting system: perform short-window, low-latency validations at the edge using a local token-bucket/cache (rapid, slightly lenient), while enforcing long-window/global limits in a sharded Redis cluster via atomic Lua scripts. Utilize consistent hashing for key sharding, replicate data cross-region for failover support, and send metrics/events to a centralized stream for auditing and analysis.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Stateless client-side tokens: generate signed rate-limit tokens (similar to JWTs) from the authentication service, encoding limits and expiration times. Clients present these tokens, and proxies verify the signatures to make acceptance decisions without reaching out to central databases, bypassing server-side counters.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Hierarchical Hybrid Limiter</h3>
+        <p>The requirements describe <strong>two different time scales</strong>, and a single mechanism cannot serve both. Per-second burst protection must be decided in microseconds at the edge, so it cannot depend on a network call. Per-day quotas are coarse, so they tolerate small errors and batched coordination. A <strong>hierarchical hybrid</strong> gives each requirement the mechanism it needs: a local token bucket for bursts, a sharded Redis tier for long-window and global limits, and an asynchronous event stream for audit. That is why it satisfies all four requirements at once:</p>
+        <ul>
+          <li><strong>Fast path stays local:</strong> A token-bucket check in process memory costs microseconds, comfortably inside the 10 ms budget. The common request never waits on a cross-region round trip.</li>
+          <li><strong>Bounded, tunable inaccuracy:</strong> Local enforcement is 'slightly lenient', but the worst-case overshoot is bounded by roughly <em>number of edges x local burst</em>. Leasing quota slices to each edge in batches keeps that error small and explicit.</li>
+          <li><strong>Right tool for long windows:</strong> A day-level counter changes slowly relative to request rate, so atomic Lua scripts on a Redis cluster sharded by consistent hashing handle it easily, and batched updates cut Redis load by orders of magnitude.</li>
+          <li><strong>Failure isolation:</strong> If Redis is slow or a region is down, edges degrade to local limits (a policy choice) instead of failing the API. Cross-region replication or per-region budgets let other regions continue to enforce.</li>
+          <li><strong>Observability off the hot path:</strong> Reject events (and sampled accepts) go to a stream asynchronously, so audit logging and metrics add no request latency.</li>
+        </ul>
+        <p>Key limits by <strong>API key or authenticated identity</strong> (not only IP), return standard <code>429</code> responses with <code>Retry-After</code> and <code>RateLimit-*</code> headers, and publish <strong>reject events to a stream</strong> for audit. Alert on Redis latency, lease refill failures, and the gap between local and global usage.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>A — Single Centralized Limiter</h4>
+          </div>
+          <p>Perfect consistency, but every request pays a <strong>network round trip to one leader</strong>. For global clients that is tens to hundreds of milliseconds, far beyond the 10 ms budget, and the leader is a single point of failure and a hot spot. A regional outage or leader failover would either block traffic or force an unplanned fail-open. Strictness the product does not need is bought at the cost of the two requirements it does.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>B — Fully Decentralized Eventual Counters</h4>
+          </div>
+          <p>Fast and available, but with <strong>no coordination bound</strong>: with N edges each enforcing a local limit, a client spread across edges can consume up to roughly N times the intended quota before reconciliation catches up. Per-day limits become unreliable, and 'apply throttling after reconciliation' reacts too late to sustained abuse. It is the right idea for the burst tier, but incomplete as the whole design.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🎫</span>
+            <h4>D — Stateless Signed Rate-Limit Tokens</h4>
+          </div>
+          <p>A signed token can encode a <em>policy</em> (limit and expiry), but it cannot encode <em>usage</em>, which changes on every request. Enforcement therefore depends on the client honoring its own limits, which abusive clients will not. Revoking or tightening a limit mid-token requires short expiries and re-issuance. It is useful for carrying tier information to the edge, but it cannot replace server-side counters.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Hierarchical Hybrid Limiter ✓</h4>
+          </div>
+          <p>A hierarchical hybrid rate-limiting system: perform short-window, low-latency validations at the edge using a local token-bucket/cache (rapid, slightly lenient), while enforcing long-window/global lim</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Edge Latency</th><th>Limit Accuracy</th><th>Availability in Regional Outage</th><th>Burst Protection</th><th>Sustained-Abuse Protection</th><th>Auditability</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Central Strict Limiter</td><td>Poor (cross-region RTT) ❌</td><td>Exact ✅</td><td>Poor (SPOF) ❌</td><td>Good ✅</td><td>Good ✅</td><td>Good ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Decentralized Eventual</td><td>Excellent ✅</td><td>Poor (up to N x limit) ❌</td><td>Excellent ✅</td><td>Good ✅</td><td>Weak (late reconciliation) ❌</td><td>Medium ⚠</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Hierarchical Hybrid ✓</td><td>Excellent ✅</td><td>Bounded overshoot ⚠</td><td>Good (degrades gracefully) ✅</td><td>Excellent ✅</td><td>Good ✅</td><td>Excellent ✅</td><td>Medium–High ⚠</td></tr>
+            <tr><td class="tt-option">D — Signed Client Tokens</td><td>Excellent ✅</td><td>Not enforceable ❌</td><td>Excellent ✅</td><td>Weak ❌</td><td>Weak ❌</td><td>Poor ❌</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Central Strict Limiter</h4>
+          </div>
+          <p>A single-region deployment, low request rates, and a need for exact enforcement (for example expensive operations or billing-sensitive quotas), where an extra round trip is acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Decentralized Eventual</h4>
+          </div>
+          <p>Soft protection where approximate limits are fine and availability matters more than accuracy, such as basic per-instance load shedding.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hierarchical Hybrid</h4>
+          </div>
+          <p>Global public APIs that need microsecond burst protection, accurate-enough daily quotas, regional resilience, and audit trails.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Signed Client Tokens</h4>
+          </div>
+          <p>Carrying a client's tier or entitlements to the edge (for example plan limits), alongside server-side counters that do the actual enforcement.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Two-Tier Enforcement Architecture</h3>
+        <p>Short windows are decided at the edge, long windows in a sharded Redis tier, and audit events flow out asynchronously:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    C[&quot;Client&quot;] --&gt; E[&quot;Edge proxy&quot;]
+    E --&gt; T1{&quot;Local token bucket has tokens?&quot;}
+    T1 -- &quot;No&quot; --&gt; X[&quot;429 + Retry-After&quot;]
+    T1 -- &quot;Yes&quot; --&gt; T2{&quot;Local quota lease has remaining?&quot;}
+    T2 -- &quot;Yes&quot; --&gt; OK[&quot;Forward to API&quot;]
+    T2 -- &quot;No, refill lease&quot; --&gt; R[&quot;Regional Redis cluster (sharded by consistent hashing, Lua)&quot;]
+    R --&gt; T2
+    R -. &quot;async replication&quot; .-&gt; R2[&quot;Other region Redis&quot;]
+    E -. &quot;reject and sampled events&quot; .-&gt; K[&quot;Event stream (Kafka)&quot;]
+    K --&gt; M[&quot;Metrics, audit store, abuse detection&quot;]">flowchart LR
+    C[&quot;Client&quot;] --&gt; E[&quot;Edge proxy&quot;]
+    E --&gt; T1{&quot;Local token bucket has tokens?&quot;}
+    T1 -- &quot;No&quot; --&gt; X[&quot;429 + Retry-After&quot;]
+    T1 -- &quot;Yes&quot; --&gt; T2{&quot;Local quota lease has remaining?&quot;}
+    T2 -- &quot;Yes&quot; --&gt; OK[&quot;Forward to API&quot;]
+    T2 -- &quot;No, refill lease&quot; --&gt; R[&quot;Regional Redis cluster (sharded by consistent hashing, Lua)&quot;]
+    R --&gt; T2
+    R -. &quot;async replication&quot; .-&gt; R2[&quot;Other region Redis&quot;]
+    E -. &quot;reject and sampled events&quot; .-&gt; K[&quot;Event stream (Kafka)&quot;]
+    K --&gt; M[&quot;Metrics, audit store, abuse detection&quot;]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Edge Token Bucket with Leased Daily Quota</h3>
+        <p>The hot path is local; Redis is consulted once per batch through an atomic Lua script, with an explicit failure policy and non-blocking audit events:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Edge proxy: hot path, no network call in the common case ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">allow</span>(apiKey, cost <span class="tk-op">=</span> <span class="tk-num">1</span>):</span>
+<span class="line">    <span class="tk-com">// Tier 1: per-second burst protection, fully local</span></span>
+<span class="line">    bucket <span class="tk-op">=</span> localBuckets.<span class="tk-fn">getOrCreate</span>(apiKey, ratePerSec <span class="tk-op">=</span> <span class="tk-num">50</span>, burst <span class="tk-op">=</span> <span class="tk-num">100</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> bucket.<span class="tk-fn">tryTake</span>(cost):</span>
+<span class="line">        <span class="tk-fn">emit</span>(<span class="tk-fn">RejectEvent</span>(apiKey, reason <span class="tk-op">=</span> <span class="tk-str">&#x27;burst&#x27;</span>, region <span class="tk-op">=</span> REGION))     <span class="tk-com">// async, non-blocking</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">REJECT</span>(<span class="tk-num">429</span>, retryAfter <span class="tk-op">=</span> bucket.<span class="tk-fn">secondsToNextToken</span>())</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Tier 2: per-day quota, leased from regional Redis in batches</span></span>
+<span class="line">    lease <span class="tk-op">=</span> localLeases.<span class="tk-fn">get</span>(apiKey)</span>
+<span class="line">    <span class="tk-kw">if</span> lease <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> lease.remaining <span class="tk-op">&lt;</span> cost:</span>
+<span class="line">        result <span class="tk-op">=</span> <span class="tk-fn">refillLease</span>(apiKey)</span>
+<span class="line">        <span class="tk-kw">if</span> result <span class="tk-op">==</span> DEGRADED:                       <span class="tk-com">// Redis slow or unreachable</span></span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">failPolicy</span>(apiKey)                <span class="tk-com">// fail-open with local cap, or fail-closed on sensitive routes</span></span>
+<span class="line">        <span class="tk-kw">if</span> result <span class="tk-op">==</span> <span class="tk-num">0</span>:                              <span class="tk-com">// daily quota exhausted</span></span>
+<span class="line">            <span class="tk-fn">emit</span>(<span class="tk-fn">RejectEvent</span>(apiKey, reason <span class="tk-op">=</span> <span class="tk-str">&#x27;daily&#x27;</span>, region <span class="tk-op">=</span> REGION))</span>
+<span class="line">            rejectCache.<span class="tk-fn">put</span>(apiKey, ttl <span class="tk-op">=</span> <span class="tk-fn">secondsUntilUtcMidnight</span>())     <span class="tk-com">// shield Redis from abusers</span></span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">REJECT</span>(<span class="tk-num">429</span>, retryAfter <span class="tk-op">=</span> <span class="tk-fn">secondsUntilUtcMidnight</span>())</span>
+<span class="line">        lease <span class="tk-op">=</span> localLeases.<span class="tk-fn">put</span>(apiKey, <span class="tk-fn">Lease</span>(remaining <span class="tk-op">=</span> result))</span>
+<span class="line"></span>
+<span class="line">    lease.remaining <span class="tk-op">-</span><span class="tk-op">=</span> cost</span>
+<span class="line">    <span class="tk-kw">return</span> ALLOW</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">refillLease</span>(apiKey):</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        <span class="tk-kw">with</span> <span class="tk-fn">timeout</span>(<span class="tk-num">3</span> ms):</span>
+<span class="line">            <span class="tk-kw">return</span> redis.<span class="tk-fn">evalsha</span>(LEASE_SCRIPT,</span>
+<span class="line">                                 keys <span class="tk-op">=</span> [<span class="tk-str">&#x27;rl:{&#x27;</span> <span class="tk-op">+</span> apiKey <span class="tk-op">+</span> <span class="tk-str">&#x27;}:day:&#x27;</span> <span class="tk-op">+</span> <span class="tk-fn">utcDate</span>()],   <span class="tk-com">// hash tag keeps keys in one slot</span></span>
+<span class="line">                                 args <span class="tk-op">=</span> [DAILY_LIMIT, BATCH_SIZE <span class="tk-op">=</span> <span class="tk-num">100</span>])</span>
+<span class="line">    <span class="tk-kw">catch</span> Timeout, ConnectionError:</span>
+<span class="line">        <span class="tk-kw">return</span> DEGRADED</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- LEASE_SCRIPT: runs atomically inside Redis (Lua) ----</span></span>
+<span class="line"><span class="tk-com">// local used  = tonumber(redis.call(&#x27;GET&#x27;, KEYS[1]) or &#x27;0&#x27;)</span></span>
+<span class="line"><span class="tk-com">// local limit = tonumber(ARGV[1])</span></span>
+<span class="line"><span class="tk-com">// local batch = tonumber(ARGV[2])</span></span>
+<span class="line"><span class="tk-com">// local grant = math.min(batch, limit - used)</span></span>
+<span class="line"><span class="tk-com">// if grant &lt;= 0 then return 0 end</span></span>
+<span class="line"><span class="tk-com">// redis.call(&#x27;INCRBY&#x27;, KEYS[1], grant)</span></span>
+<span class="line"><span class="tk-com">// if used == 0 then redis.call(&#x27;EXPIRE&#x27;, KEYS[1], 172800) end</span></span>
+<span class="line"><span class="tk-com">// return grant            // unused lease is lost: a conservative, bounded error</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Audit pipeline (off the request path) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">emit</span>(event):</span>
+<span class="line">    eventBuffer.<span class="tk-fn">offer</span>(event)                         <span class="tk-com">// bounded in-memory queue, drop oldest if full</span></span>
+<span class="line"><span class="tk-com">// background thread: batch eventBuffer to the event stream every 100 ms</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Not bounding the overshoot:</strong> 'Slightly lenient' becomes N times the limit when edges and bursts grow. Compute <em>edges x burst</em> and set lease sizes accordingly.</li>
+          <li><strong>Calling Redis on every request:</strong> That recreates the central bottleneck. Lease quota in batches and keep the hot path local.</li>
+          <li><strong>Wrong failure policy:</strong> Failing closed for the whole API when Redis blips turns a limiter incident into a full outage, while failing open everywhere removes protection for sensitive routes.</li>
+          <li><strong>Non-atomic counter logic:</strong> Doing GET, compare, then SET from the app creates races. Use a single Lua script (or <code>INCRBY</code> with expiry) so check and update are atomic.</li>
+          <li><strong>Keys that spread across Redis Cluster slots:</strong> A Lua script touching multiple keys must use keys in the same hash slot (hash tags), or it will fail.</li>
+          <li><strong>Synchronous audit logging:</strong> Writing reject logs inline adds latency exactly when the system is under attack. Emit events asynchronously and sample accepted requests.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Production systems (for example Envoy's local plus global rate limit filters, or the edge limiters of large API gateways) tend to converge on this layered shape:</p>
+        <ul>
+          <li><strong>Step 0 — Define the policy:</strong> List limits by identity and route, time windows, and the allowed overshoot. Decide fail-open vs fail-closed for each route class.</li>
+          <li><strong>Step 1 — Local token bucket at the edge:</strong> Per-key bucket in memory for the per-second burst limit, with a short rejection cache for keys that are already over limit.</li>
+          <li><strong>Step 2 — Leased global quota:</strong> Edges request batches of quota from a regional Redis cluster through an atomic Lua script, so Redis sees one call per batch instead of per request.</li>
+          <li><strong>Step 3 — Shard and replicate:</strong> Use consistent hashing (or Redis Cluster slots) for keys, with replicas per region for failover.</li>
+          <li><strong>Step 4 — Stream audit and metrics:</strong> Emit reject events and sampled accept events to Kafka or a managed stream, then build dashboards and abuse detection downstream.</li>
+          <li><strong>Step 5 — Test failure modes:</strong> Run game days for Redis latency, region loss, and clock skew, and verify the chosen fail-open or fail-closed behavior.</li>
+        </ul>
+        <p>Treat rate limiting as a <strong>degradable control plane</strong>: it must never become the reason the API is down.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Split the problem by time scale: <strong>enforce short windows locally</strong> for microsecond latency, <strong>enforce long windows centrally</strong> where small coordination cost is acceptable, and <strong>stream audit data asynchronously</strong>. Accept a bounded, documented overshoot instead of paying global-consensus latency on every request.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

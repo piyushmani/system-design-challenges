@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ethan&#x27;s Choice of a Service-Discovery Strategy for a Multi-Region Microservice Fleet — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">28 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Service Discovery</span>
+      <span class="tag tag--green">Multi-Region</span>
+      <span class="tag tag--amber">Fleet Management</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Ethan&#x27;s Choice of a Service-Discovery Strategy for a Multi-Region Microservice Fleet</h1>
+      <p class="q-scenario"><strong>Ethan</strong> leads the backend platform infrastructure team at an enterprise operating thousands of microservice instances distributed across <strong>three public cloud regions</strong>. The platform experiences extreme workload volatility, triggering high-frequency horizontal autoscaling where microservice instances are continuously spawned and decommissioned. The platform mandates that cross-service RPCs maintain ultra-low latency, and the infrastructure must maintain high availability even during inter-region network partitions without any single point of failure. Furthermore, platform SREs require granular per-instance health telemetry and zero cross-region dependencies on the request critical path. Ethan must select an architectural service-discovery strategy that optimally balances latency, partition tolerance, autoscaling churn resilience, consistency, and operational safety.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A single centrally-managed registry cluster (like a solitary Consul or Eureka setup in the primary region). All clients make synchronous queries to this central registry for the latest list of instances on every single request.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Deploy local discovery agents in each region that hold a local cache and conduct active health checks (e.g., a Consul agent or a local DNS/HTTP cache). Clients request instance lists from the local agent and, if no healthy local instances are found, fall back to a global DNS or load balancer.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Strictly server-side discovery: Place a global load balancer or API gateway in front of every service to handle all routing and health checks. Clients interact solely with the logical service VIP provided by the load balancer.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Kubernetes-native DNS (like kube-dns or coreDNS with headless services) combined with client-side caching and a service mesh sidecar (like Envoy) where the control plane is hosted in a single region. The mesh is responsible for routing and health checks.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Regional Local Discovery Agents with Local Caching and Active Health Checks</h3>
+        <p>With thousands of instances churning rapidly under autoscaling across three cloud regions, isolating discovery into autonomous regional agents (e.g., Consul agents or node-local daemons) completely decouples the data plane from WAN latency and cross-region partitions. Clients query the agent on <code>localhost</code> over loopback IPC in sub-millisecond time, avoiding WAN network hops. Health checks are executed locally, avoiding WAN-spanning heartbeat storms. In the event of a regional WAN partition, each region continues to discover and route intra-region traffic independently, falling back to cross-region routing only when local healthy endpoints are exhausted.</p>
+        <ul>
+          <li><strong>Loopback Latency and WAN Elimination:</strong> Querying a local agent on <code>localhost:8500</code> takes &lt; 1 ms via loopback IPC. No WAN round-trips are incurred on the RPC resolution path, keeping request latency strictly intra-regional.</li>
+          <li><strong>Partition Autonomy and CAP Availability:</strong> By deploying independent regional discovery clusters synchronized via gossip (WAN Serf), a total network partition between Region A and Region B does not degrade local service discovery. Local services continue registering, checking health, and routing normally.</li>
+          <li><strong>Resilience to Rapid Autoscaling Churn:</strong> Node-local agents aggregate registrations and run active health checks locally, batching delta updates to regional servers and insulating the global network from high-frequency pod churn.</li>
+          <li><strong>Hierarchical Graceful Failover:</strong> Clients prioritize healthy local instances returned by the local agent cache. If an entire regional service pool is exhausted or degraded, requests seamlessly fail over to a global load balancer or cross-region VIP.</li>
+          <li><strong>Elimination of Central Single Points of Failure:</strong> Unlike architectures with a centralized primary registry, the failure of any single region has zero blast radius on the health and discovery mechanisms of the remaining two regions.</li>
+        </ul>
+        <p>Ethan achieves rock-solid availability and sub-millisecond discovery latency by pushing discovery caches and health checking directly to the local node level, eliminating WAN dependencies from the critical path.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏛️</span>
+            <h4>A — Centralized Primary Registry with Synchronous Queries</h4>
+          </div>
+          <p>Synchronously querying a central registry in a single region on every RPC adds catastrophic <strong>WAN round-trip latency (50–150 ms)</strong> to every internal call. Furthermore, thousands of autoscaling instances performing continuous lookups will saturate the central registry with tens of thousands of queries per second, and an outage or partition in the primary region immediately causes a catastrophic total system blackout.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>C — Strictly Server-Side Global Load Balancers</h4>
+          </div>
+          <p>Placing a global load balancer or API Gateway in front of every internal microservice introduces an <strong>extra network hop, serialization overhead, and prohibitive bandwidth costs</strong> for east-west traffic. Global load balancers can route requests across regions unnecessarily, violating intra-region latency targets, while centralized VIPs become costly operational bottlenecks.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚠️</span>
+            <h4>D — K8s-Native DNS with Single-Region Service Mesh Control Plane</h4>
+          </div>
+          <p>Hosting the service mesh control plane (e.g., Istiod) in a single primary region introduces a <strong>critical cross-region single point of failure</strong>. If an inter-region WAN partition occurs, proxies in remote regions cannot receive endpoint updates for rapidly autoscaling pods, causing routing tables to go stale, new pods to remain undiscovered, and terminated pods to receive black-holed traffic.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Regional Local Discovery Agents with Local Caching and Active Health Checks ✓</h4>
+          </div>
+          <p>Deploy local discovery agents in each region that hold a local cache and conduct active health checks (e.g., a Consul agent or a local DNS/HTTP cache). Clients request instance lists from the local ag</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Intra-Region Query Latency</th><th>Autoscaling Churn Handling</th><th>Partition Resilience (No WAN SPOF)</th><th>Health Check Freshness &amp; Overhead</th><th>Local Failover Determinism</th><th>Node-Level Operational Overhead</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Central Registry (Single Region)</td><td>Severe (&gt;50ms WAN) ❌</td><td>Poor (registry bottleneck) ❌</td><td>Total Failure ❌</td><td>High WAN Overhead ❌</td><td>Poor ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Local Agents with Regional Cache</td><td>Sub-millisecond (&lt;1ms) ✅</td><td>High (local aggregation) ✅</td><td>Autonomous &amp; High ✅</td><td>Fresh &amp; Localized ✅</td><td>Deterministic &amp; Fast ✅</td><td>Moderate (daemon per node) ⚠</td></tr>
+            <tr><td class="tt-option">C — Global Server-Side Load Balancers</td><td>High (extra VIP hop) ❌</td><td>Moderate ⚠</td><td>Moderate ⚠</td><td>Coarse-grained ⚠</td><td>DNS/BGP dependent ⚠</td><td>High (cloud LB costs) ❌</td></tr>
+            <tr><td class="tt-option">D — K8s DNS + Single-Region Mesh CP</td><td>Fast (local proxy) ✅</td><td>Poor during partition ❌</td><td>Severe (single CP region) ❌</td><td>Stale during partition ❌</td><td>Moderate ⚠</td><td>High (mesh + single CP) ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Central Registry (Single Region)</h4>
+          </div>
+          <p>Small, single-region deployments with fewer than 50 static instances where multi-region high availability and sub-millisecond latency are not operational requirements.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Local Agents with Regional Cache</h4>
+          </div>
+          <p>Multi-region fleets with thousands of rapidly autoscaling instances, strict low-latency requirements, and a mandate for zero single points of failure under WAN network partitions.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Global Server-Side Load Balancers</h4>
+          </div>
+          <p>Public internet edge routing and ingress from external mobile/web clients where global Anycast VIPs and DDoS mitigation are necessary.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — K8s DNS + Single-Region Mesh CP</h4>
+          </div>
+          <p>Single-region Kubernetes clusters with multiple namespaces where a single control plane is acceptable and cross-region partition tolerance is irrelevant.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Local Agent Service Discovery and Regional Partition Isolation</h3>
+        <p>Local agent handles discovery and health checks on localhost loopback; cross-region gossip synchronizes metadata while keeping intra-region traffic completely autonomous during WAN partitions.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    autonumber
+    participant Client as Service A (App Pod)
+    participant Agent as Node-Local Agent (127.0.0.1:8500)
+    participant RegServer as Regional Server Cluster (Region 1)
+    participant SvcB as Service B Pod (Region 1)
+    participant RemoteLB as Global Load Balancer / Region 2
+    Note over Client,Agent: Intra-region call: queries local loopback
+    Client-&gt;&gt;Agent: GET /v1/health/service/service-b (passing tags)
+    Agent--&gt;&gt;Client: Returns cached healthy endpoints in Region 1 (0.2ms)
+    Client-&gt;&gt;SvcB: Direct RPC to Service B Pod IP
+    SvcB--&gt;&gt;Client: 200 OK (0.8ms)
+    Note over RegServer,RemoteLB: WAN Partition between Region 1 and Region 2
+    Note over Client,Agent: Intra-region traffic continues uninterrupted
+    Client-&gt;&gt;Agent: GET /v1/health/service/service-b
+    Agent--&gt;&gt;Client: Healthy local endpoints (Partition isolated)
+    Note over SvcB: All local instances in Region 1 fail/crash
+    Client-&gt;&gt;Agent: GET /v1/health/service/service-b
+    Agent--&gt;&gt;Client: Empty list (No healthy local instances)
+    Client-&gt;&gt;RemoteLB: Fallback to Global LB / Region 2 VIP
+    RemoteLB--&gt;&gt;Client: 200 OK (Cross-region failover)">sequenceDiagram
+    autonumber
+    participant Client as Service A (App Pod)
+    participant Agent as Node-Local Agent (127.0.0.1:8500)
+    participant RegServer as Regional Server Cluster (Region 1)
+    participant SvcB as Service B Pod (Region 1)
+    participant RemoteLB as Global Load Balancer / Region 2
+    Note over Client,Agent: Intra-region call: queries local loopback
+    Client-&gt;&gt;Agent: GET /v1/health/service/service-b (passing tags)
+    Agent--&gt;&gt;Client: Returns cached healthy endpoints in Region 1 (0.2ms)
+    Client-&gt;&gt;SvcB: Direct RPC to Service B Pod IP
+    SvcB--&gt;&gt;Client: 200 OK (0.8ms)
+    Note over RegServer,RemoteLB: WAN Partition between Region 1 and Region 2
+    Note over Client,Agent: Intra-region traffic continues uninterrupted
+    Client-&gt;&gt;Agent: GET /v1/health/service/service-b
+    Agent--&gt;&gt;Client: Healthy local endpoints (Partition isolated)
+    Note over SvcB: All local instances in Region 1 fail/crash
+    Client-&gt;&gt;Agent: GET /v1/health/service/service-b
+    Agent--&gt;&gt;Client: Empty list (No healthy local instances)
+    Client-&gt;&gt;RemoteLB: Fallback to Global LB / Region 2 VIP
+    RemoteLB--&gt;&gt;Client: 200 OK (Cross-region failover)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Local Agent Discovery Client with Cache and Cross-Region Fallback</h3>
+        <p>Resilient client-side service resolver querying node-local discovery daemon with local caching, active health refresh, and fallback.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> ResilientDiscoveryClient:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, service_name, local_agent_url<span class="tk-op">=</span><span class="tk-str">&#x27;http://127.0.0.1:8500&#x27;</span>, global_fallback_vip<span class="tk-op">=</span><span class="tk-str">&#x27;https://global.internal.net&#x27;</span>):</span>
+<span class="line">        self.service_name <span class="tk-op">=</span> service_name</span>
+<span class="line">        self.local_agent_url <span class="tk-op">=</span> local_agent_url</span>
+<span class="line">        self.global_fallback_vip <span class="tk-op">=</span> global_fallback_vip</span>
+<span class="line">        self.local_cache <span class="tk-op">=</span> []</span>
+<span class="line">        self.last_sync_time <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">        self.cache_ttl_seconds <span class="tk-op">=</span> <span class="tk-num">2</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">get_healthy_endpoint</span>(self):</span>
+<span class="line">        now <span class="tk-op">=</span> <span class="tk-fn">get_current_timestamp</span>()</span>
+<span class="line">        <span class="tk-kw">if</span> now <span class="tk-op">-</span> self.last_sync_time <span class="tk-op">&gt;</span> self.cache_ttl_seconds:</span>
+<span class="line">            self.<span class="tk-fn">refresh_cache_from_local_agent</span>()</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-fn">len</span>(self.local_cache) <span class="tk-op">&gt;</span> <span class="tk-num">0</span>:</span>
+<span class="line">            <span class="tk-com"># Select healthy instance using round-robin or least-connections</span></span>
+<span class="line">            <span class="tk-kw">return</span> self.<span class="tk-fn">select_from_pool</span>(self.local_cache)</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            <span class="tk-com"># Local pool exhausted or degraded: route to global fallback</span></span>
+<span class="line">            <span class="tk-fn">log_warning</span>(f<span class="tk-str">&#x27;No local healthy instances for {self.service_name}; using global fallback&#x27;</span>)</span>
+<span class="line">            <span class="tk-kw">return</span> f<span class="tk-str">&#x27;{self.global_fallback_vip}/{self.service_name}&#x27;</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">refresh_cache_from_local_agent</span>(self):</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            <span class="tk-com"># Query local daemon over loopback with short 200ms timeout</span></span>
+<span class="line">            response <span class="tk-op">=</span> <span class="tk-fn">http_get</span>(f<span class="tk-str">&#x27;{self.local_agent_url}/v1/health/service/{self.service_name}?passing=true&#x27;</span>, timeout_ms<span class="tk-op">=</span><span class="tk-num">200</span>)</span>
+<span class="line">            <span class="tk-kw">if</span> response.status_code <span class="tk-op">==</span> <span class="tk-num">200</span>:</span>
+<span class="line">                endpoints <span class="tk-op">=</span> [item[<span class="tk-str">&#x27;Service&#x27;</span>][<span class="tk-str">&#x27;Address&#x27;</span>] <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> <span class="tk-fn">str</span>(item[<span class="tk-str">&#x27;Service&#x27;</span>][<span class="tk-str">&#x27;Port&#x27;</span>]) <span class="tk-kw">for</span> item <span class="tk-kw">in</span> response.<span class="tk-fn">json</span>()]</span>
+<span class="line">                self.local_cache <span class="tk-op">=</span> endpoints</span>
+<span class="line">                self.last_sync_time <span class="tk-op">=</span> <span class="tk-fn">get_current_timestamp</span>()</span>
+<span class="line">        <span class="tk-kw">except</span> Exception <span class="tk-kw">as</span> e:</span>
+<span class="line">            <span class="tk-fn">log_error</span>(f<span class="tk-str">&#x27;Failed to refresh from local discovery agent: {e}&#x27;</span>)</span>
+<span class="line">            <span class="tk-com"># Retain stale cache temporarily rather than immediately failing hard</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Omitting graceful connection draining on deregistration:</strong> When instances terminate during autoscaling, failing to drain inflight requests before deregistering causes dropped connections and 502 Bad Gateway spikes.</li>
+          <li><strong>Unbounded agent cache TTLs during node isolation:</strong> Allowing agents to serve stale records indefinitely when disconnected from the regional cluster can cause traffic to be routed to zombie instances.</li>
+          <li><strong>Neglecting local agent resource limits:</strong> Failing to apply cgroup limits to the local discovery daemon can cause it to consume unbounded CPU during bursty autoscaling events.</li>
+          <li><strong>Hard-coding agent loopback ports without fallback:</strong> Relying exclusively on a local daemon without an emergency in-app fallback to regional servers causes hard outages if the local agent crashes.</li>
+          <li><strong>Flooding the WAN gossip pool:</strong> Misconfiguring the cross-region gossip ping interval to sub-second frequencies causes WAN link saturation and high inter-region data transfer fees.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Managing service discovery across thousands of ephemeral instances in multi-region deployments requires treating <strong>network partitions as guaranteed occurrences</strong>, not rare anomalies.</p>
+        <ul>
+          <li><strong>Step 0 — Keep the Data Path Node-Local:</strong> Never allow discovery resolution to leave the local node. Local agents communicating over loopback ensure sub-millisecond lookups regardless of cloud-wide network congestion.</li>
+          <li><strong>Step 1 — Local Health Checking:</strong> Configure discovery agents to conduct active TCP/HTTP health checks on localhost. This localizes health telemetry and prevents thousands of pods from flooding regional registries with raw heartbeats.</li>
+          <li><strong>Step 2 — Implement Graceful Draining:</strong> In autoscaling environments, hook container termination (<code>preStop</code> hooks) to deregister from the local agent and sleep for 10–15 seconds to allow inflight requests to drain before pod teardown.</li>
+          <li><strong>Step 3 — Gossip Federation for Cross-Region Sync:</strong> Use decentralized gossip protocols (e.g., HashiCorp Serf/Consul WAN federation) to replicate regional cluster health metadata without sharing a synchronous distributed database.</li>
+          <li><strong>Step 4 — Automated Regional Spillover:</strong> Configure client SDKs or local proxies with a primary-local, fallback-remote policy. Remote failover should trigger only when healthy local instances drop below a critical threshold (e.g., &lt; 20%).</li>
+        </ul>
+        <p>Decoupling discovery into local autonomous agents guarantees that regional network fractures remain isolated, keeping latency ultra-low and the system available under high autoscaling churn.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>To survive high autoscaling churn and network partitions in a multi-region fleet, <strong>localize discovery and health checking to node-level agents</strong> with regional caching and seamless cross-region failover.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

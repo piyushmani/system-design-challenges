@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya&#x27;s cross-region inventory dilemma: prevent overselling or maintain high availability? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">29 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Cross-Region Inventory</span>
+      <span class="tag tag--green">Availability</span>
+      <span class="tag tag--amber">Consistency</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya&#x27;s cross-region inventory dilemma: prevent overselling or maintain high availability?</h1>
+      <p class="q-scenario"><strong>Maya</strong> is architecting an enterprise inventory and order management system for a global e-commerce retail platform. The platform serves millions of active customers across European (<code>EU</code>) and North American (<code>US</code>) cloud regions. The business enforces two stringent operational mandates: first, checkout transactions must deliver swift, sub-second purchasing latencies to local users; second, the system must <em>strictly prevent overselling</em> of scarce, low-stock merchandise under all circumstances. Compounding this challenge, transatlantic inter-region wide-area network (WAN) links experience periodic packet degradation, latency jitter, and intermittent network partitions. Maya must design a multi-region data architecture that balances regional availability with absolute inventory correctness.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Synchronous cross-region commits: Maintain a unified logical inventory and demand a synchronous commit across regions (such as a distributed transaction or 2PC) for every sale.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Active-active asynchronous replication: Permit both geographic regions to process writes independently in a multi-master setup. Replicate data asynchronously and handle conflicts retroactively.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Partitioned single-writer ownership: Allocate an owning region to each specific SKU or data shard. Direct all write operations for a SKU to its designated owner, preventing simultaneous cross-region writes. Reads can be served locally from any region, and in the event of an owner failure, ownership is transferred via a managed promotion sequence.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Global inter-region consensus: Establish a distributed consensus cluster (using Paxos or Raft) spanning both regions, necessitating a majority quorum to finalize writes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Partitioned Single-Writer SKU Ownership with Local Low-Latency Writes</h3>
+        <p>Under the CAP theorem and PACELC framework, a distributed system spanning geographic regions facing network partitions cannot provide simultaneous active-active availability and strict linearizable consistency without cross-region WAN coordination. <strong>Partitioned single-writer ownership</strong> (also known as <em>SKU home-region pinning</em> or <em>partition-level authority</em>) cleanly circumvents this trade-off by partitioning write authority by SKU or physical fulfillment location. Each SKU is assigned an authoritative owning region (e.g., US-East for North American stock, EU-West for European stock). For a customer purchasing an item homed in their local region, write operations commit locally to the authoritative shard leader within single-digit milliseconds without transatlantic WAN round-trips. For cross-region purchases, writes are proxied over dedicated cloud backbones directly to the SKU's authoritative owner region. If a transatlantic network partition occurs, the owning region continues accepting local purchases at 100% availability with <strong>zero risk of overselling</strong>, while the remote region fails fast or enters read-only catalog browsing. System-wide catastrophic outages and split-brain dual-writes are completely avoided.</p>
+        <ul>
+          <li><strong>Sub-second local checkout latency:</strong> Local customers purchasing regionally homed inventory execute writes against the local partition leader, bypassing 100-150ms transatlantic network hops.</li>
+          <li><strong>Zero overselling guarantee:</strong> Because all reservation writes for a given SKU funnel into a single authoritative master region, concurrent writes from different regions never race against each other.</li>
+          <li><strong>Fault domain containment during WAN cuts:</strong> When transatlantic fiber links sever, the home region remains fully operational with zero downtime; outages are strictly isolated to cross-region remote purchases.</li>
+          <li><strong>Optimized local read caching:</strong> Non-owning regions serve catalog browsing and stock estimation reads locally via asynchronous replication, ensuring instant page load performance.</li>
+          <li><strong>Deterministic managed failover:</strong> If a primary cloud region suffers a total catastrophe, ownership can be formally migrated to the secondary region using consensus-backed fencing tokens to ensure no concurrent writes occur during handover.</li>
+        </ul>
+        <p>By partitioning write authority at the SKU level, Maya avoids the latency penalties of distributed synchronous consensus and the data corruption of active-active replication. Local purchases remain lightning-fast and inventory bounds remain unbreakable.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>A — Synchronous Cross-Region Commits (2PC / WAN Transactions)</h4>
+          </div>
+          <p>Requiring a synchronous cross-region commit or Two-Phase Commit across the Atlantic forces every single checkout transaction to endure at least 100-180ms of raw speed-of-light network latency. More critically, whenever the transatlantic link experiences transient degradation or partitioning, the prepare phase fails, causing 100% of checkouts worldwide to freeze or abort.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚠️</span>
+            <h4>B — Active-Active Asynchronous Multi-Master Replication</h4>
+          </div>
+          <p>Allowing both EU and US regions to accept writes independently for the same SKU with asynchronous replication directly causes catastrophic overselling. If an item has 1 remaining unit, a user in Frankfurt and a user in New York can purchase the item simultaneously in the same millisecond; asynchronous reconciliation retroactively detects the conflict, forcing order cancellations, refunds, and reputational damage.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>D — Global Inter-Region Consensus (Two-Region Paxos / Raft)</h4>
+          </div>
+          <p>A distributed consensus cluster spanning only two regions suffers from fundamental quorum paralysis. A Raft or Paxos cluster requires a strict majority $(N/2 + 1)$. In a 2-region topology, if each region hosts 2 nodes (4 total), a network partition prevents either region from obtaining the 3-node majority, halting all writes worldwide. Furthermore, every quorum write must wait for cross-region consensus acknowledgment, destroying sub-second response goals.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Partitioned Single-Writer SKU Ownership with Local Low-Latency Writes ✓</h4>
+          </div>
+          <p>Partitioned single-writer ownership: Allocate an owning region to each specific SKU or data shard. Direct all write operations for a SKU to its designated owner, preventing simultaneous cross-region w</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Local Write Latency</th><th>Overselling Prevention</th><th>Resilience to WAN Partitions</th><th>Cross-Region WAN Dependency</th><th>Availability During Disruption</th><th>Operational Simplicity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Synchronous Cross-Region Commits</td><td>High Latency (&gt;150ms) ❌</td><td>Guaranteed ✅</td><td>Zero Partition Tolerance ❌</td><td>Mandatory on Every Write ❌</td><td>Total Outage ❌</td><td>High Complexity ❌</td></tr>
+            <tr><td class="tt-option">B — Active-Active Asynchronous Multi-Master</td><td>Sub-millisecond ✅</td><td>Severe Overselling Risk ❌</td><td>Writes Accepted Blindly ⚠</td><td>None (Async) ✅</td><td>High Availability ⚠</td><td>Severe Conflict Resolution ❌</td></tr>
+            <tr><td class="tt-option">C — Partitioned Single-Writer SKU Ownership</td><td>Sub-millisecond Local (&lt;10ms) ✅</td><td>Guaranteed Absolute ✅</td><td>Owner Region Stays 100% Up ✅</td><td>Only for Cross-Region Buys ⚠</td><td>High Regional Availability ✅</td><td>Moderate Simplicity ⚠</td></tr>
+            <tr><td class="tt-option">D — Global Two-Region Consensus (Raft)</td><td>High Latency (&gt;120ms) ❌</td><td>Guaranteed ✅</td><td>Quorum Failure During Cut ❌</td><td>Mandatory on Every Write ❌</td><td>Total Outage ❌</td><td>Very Complex ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous Cross-Region Commits</h4>
+          </div>
+          <p>Regulatory-mandated inter-bank settlements or real-time currency conversions where any divergence is illegal and latency is secondary.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Active-Active Asynchronous Multi-Master</h4>
+          </div>
+          <p>Social media comments, user profile settings, or bookmarking systems where concurrent updates can be merged via CRDTs and over-allocation is non-existent.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Partitioned Single-Writer SKU Ownership</h4>
+          </div>
+          <p>Global e-commerce platforms selling finite physical inventory across continents requiring sub-second checkout speeds and zero overselling.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Global Inter-Region Consensus (Raft)</h4>
+          </div>
+          <p>Global distributed metadata coordination (like Google Spanner or CockroachDB clusters) spanning at least 3 distinct regions with dedicated fiber interconnects.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Partitioned Single-Writer SKU Ownership Routing Architecture</h3>
+        <p>Each SKU is homed in an authoritative primary cloud region. Local purchases commit in single-digit milliseconds. Remote purchases route over cloud backbone to the authoritative owner. In an inter-region WAN cut, home region checkouts continue unabated.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    autonumber
+    participant EUClient as EU Customer
+    participant EUGate as EU Edge Gateway
+    participant EUOwner as EU Inventory Shard (EU-Homed)
+    participant Backbone as Inter-Region Cloud Backbone
+    participant USOwner as US Inventory Shard (US-Homed)
+    participant USClient as US Customer
+    Note over EUClient,EUOwner: Case 1: Local Purchase (EU Customer buys EU-Homed SKU-101)
+    EUClient-&gt;&gt;EUGate: POST /checkout (SKU-101, Qty: 1)
+    EUGate-&gt;&gt;EUOwner: Atomic Local Decrement (Available: 10 -&gt; 9)
+    EUOwner--&gt;&gt;EUGate: Success (Latency: 8ms)
+    EUGate--&gt;&gt;EUClient: 200 OK Order Confirmed
+    Note over USClient,USOwner: Case 2: Local Purchase (US Customer buys US-Homed SKU-202)
+    USClient-&gt;&gt;USOwner: Atomic Local Decrement (Available: 5 -&gt; 4)
+    USOwner--&gt;&gt;USClient: 200 OK (Latency: 6ms)
+    Note over EUClient,USOwner: Case 3: Cross-Region Purchase (EU Customer buys US-Homed SKU-202)
+    EUClient-&gt;&gt;EUGate: POST /checkout (SKU-202, Qty: 1)
+    EUGate-&gt;&gt;Backbone: Forward write to authoritative US owner
+    Backbone-&gt;&gt;USOwner: Atomic Decrement on US Primary (4 -&gt; 3)
+    USOwner--&gt;&gt;Backbone: Decrement Success
+    Backbone--&gt;&gt;EUGate: Acknowledged (Latency: 110ms WAN)
+    EUGate--&gt;&gt;EUClient: 200 OK Order Confirmed">sequenceDiagram
+    autonumber
+    participant EUClient as EU Customer
+    participant EUGate as EU Edge Gateway
+    participant EUOwner as EU Inventory Shard (EU-Homed)
+    participant Backbone as Inter-Region Cloud Backbone
+    participant USOwner as US Inventory Shard (US-Homed)
+    participant USClient as US Customer
+    Note over EUClient,EUOwner: Case 1: Local Purchase (EU Customer buys EU-Homed SKU-101)
+    EUClient-&gt;&gt;EUGate: POST /checkout (SKU-101, Qty: 1)
+    EUGate-&gt;&gt;EUOwner: Atomic Local Decrement (Available: 10 -&gt; 9)
+    EUOwner--&gt;&gt;EUGate: Success (Latency: 8ms)
+    EUGate--&gt;&gt;EUClient: 200 OK Order Confirmed
+    Note over USClient,USOwner: Case 2: Local Purchase (US Customer buys US-Homed SKU-202)
+    USClient-&gt;&gt;USOwner: Atomic Local Decrement (Available: 5 -&gt; 4)
+    USOwner--&gt;&gt;USClient: 200 OK (Latency: 6ms)
+    Note over EUClient,USOwner: Case 3: Cross-Region Purchase (EU Customer buys US-Homed SKU-202)
+    EUClient-&gt;&gt;EUGate: POST /checkout (SKU-202, Qty: 1)
+    EUGate-&gt;&gt;Backbone: Forward write to authoritative US owner
+    Backbone-&gt;&gt;USOwner: Atomic Decrement on US Primary (4 -&gt; 3)
+    USOwner--&gt;&gt;Backbone: Decrement Success
+    Backbone--&gt;&gt;EUGate: Acknowledged (Latency: 110ms WAN)
+    EUGate--&gt;&gt;EUClient: 200 OK Order Confirmed</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Partitioned SKU Write Router with Home-Region Execution</h3>
+        <p>Edge routing layer directing reservation requests locally or proxying to authoritative regional masters based on SKU partition mapping.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> RegionalInventoryRouter:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, local_region_id, shard_directory, remote_gateway_client, local_db):</span>
+<span class="line">        self.local_region <span class="tk-op">=</span> local_region_id</span>
+<span class="line">        self.directory <span class="tk-op">=</span> shard_directory  <span class="tk-com"># Fast in-memory map of SKU -&gt; Owning Region</span></span>
+<span class="line">        self.remote_client <span class="tk-op">=</span> remote_gateway_client</span>
+<span class="line">        self.local_db <span class="tk-op">=</span> local_db</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">execute_reservation</span>(self, checkout_request):</span>
+<span class="line">        sku_id <span class="tk-op">=</span> checkout_request.sku_id</span>
+<span class="line">        qty <span class="tk-op">=</span> checkout_request.quantity</span>
+<span class="line">        owning_region <span class="tk-op">=</span> self.directory.<span class="tk-fn">get_owner_region</span>(sku_id)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">if</span> owning_region <span class="tk-op">==</span> self.local_region:</span>
+<span class="line">            <span class="tk-com"># Execute immediate local reservation (single-digit ms latency)</span></span>
+<span class="line">            <span class="tk-kw">return</span> self.<span class="tk-fn">execute_local_decrement</span>(sku_id, qty, checkout_request.reservation_id)</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            <span class="tk-com"># Remote SKU: Proxy to authoritative owning region</span></span>
+<span class="line">            <span class="tk-kw">try</span>:</span>
+<span class="line">                response <span class="tk-op">=</span> self.remote_client.<span class="tk-fn">forward_reservation</span>(</span>
+<span class="line">                    target_region<span class="tk-op">=</span>owning_region,</span>
+<span class="line">                    payload<span class="tk-op">=</span>checkout_request,</span>
+<span class="line">                    timeout_ms<span class="tk-op">=</span><span class="tk-num">500</span></span>
+<span class="line">                )</span>
+<span class="line">                <span class="tk-kw">return</span> response</span>
+<span class="line">            <span class="tk-kw">except</span> NetworkPartitionException:</span>
+<span class="line">                <span class="tk-com"># Graceful degradation during cross-region WAN partition</span></span>
+<span class="line">                <span class="tk-kw">return</span> <span class="tk-fn">ReservationResult</span>(</span>
+<span class="line">                    status<span class="tk-op">=</span>CROSS_REGION_UNAVAILABLE,</span>
+<span class="line">                    message<span class="tk-op">=</span><span class="tk-str">&#x27;Item currently unavailable for cross-region fulfillment due to network degradation&#x27;</span></span>
+<span class="line">                )</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">execute_local_decrement</span>(self, sku_id, qty, res_id):</span>
+<span class="line">        <span class="tk-com"># Local atomic CAS decrement guarantees no overselling</span></span>
+<span class="line">        success <span class="tk-op">=</span> self.local_db.<span class="tk-fn">atomic_decrement_stock</span>(</span>
+<span class="line">            sku<span class="tk-op">=</span>sku_id,</span>
+<span class="line">            qty<span class="tk-op">=</span>qty,</span>
+<span class="line">            reservation_id<span class="tk-op">=</span>res_id</span>
+<span class="line">        )</span>
+<span class="line">        <span class="tk-kw">if</span> success:</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">ReservationResult</span>(status<span class="tk-op">=</span>SUCCESS, reservation_id<span class="tk-op">=</span>res_id)</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">ReservationResult</span>(status<span class="tk-op">=</span>OUT_OF_STOCK)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Neglecting cross-region proxy routing:</strong> Forcing remote customers to execute multiple disparate API calls instead of having the edge gateway transparently forward the write to the owning region.</li>
+          <li><strong>Two-region automated failover without a witness:</strong> Promoting the secondary region to master during a network partition while the primary region is still running, resulting in catastrophic dual-mastering and overselling.</li>
+          <li><strong>Static quota starvation:</strong> Partitioning inventory into regional silos without automated background quota rebalancing, causing one region to sell out while another sits on unsold stock.</li>
+          <li><strong>Serving stale out-of-stock data to shoppers:</strong> Permitting asynchronous catalog read replication lag to display 'In Stock' to customers when the authoritative owner region has already depleted the SKU.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Global retail architectures (such as Amazon Global Selling and Apple Online Store) handle multi-region inventory using partitioned ownership. Inventory is fundamentally physical: a physical warehouse exists in either Frankfurt or Columbus, Ohio, making regional partitioning both logically sound and operationally natural.</p>
+        <ul>
+          <li><strong>Physical warehouse alignment:</strong> Align SKU ownership directly with the physical warehouse location where units reside. US stock is homed in US-East; European stock is homed in EU-Central.</li>
+          <li><strong>Virtual stock partitioning (Quota allocation):</strong> If an item is sold globally from shared inventory, divide the stock into regional pools (e.g., allocate 600 units to US, 400 units to EU). Each region decrements its local quota independently with zero WAN communication.</li>
+          <li><strong>Dynamic quota borrowing:</strong> When the EU pool drops below 10%, an asynchronous background worker requests a chunk of 50 units from the US pool via an atomic inter-region transfer protocol.</li>
+          <li><strong>Third-party witness region for failover:</strong> To prevent split-brain during regional failover, place a third consensus witness node in an independent third region (e.g., South America or Asia) to arbitrate automated master promotion.</li>
+          <li><strong>Edge geo-routing:</strong> Utilize Route 53 latency routing or Cloudflare workers to inspect SKU metadata and route checkout payloads directly to the authoritative owning region.</li>
+        </ul>
+        <p>Physical assets belong to physical locations. Partitioning inventory write ownership by SKU or warehouse eliminates distributed consensus across oceans and guarantees absolute protection against overselling.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Never use active-active multi-master for scarce physical inventory; <strong>partition write ownership by SKU or region</strong> to achieve local speed and absolute stock integrity.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

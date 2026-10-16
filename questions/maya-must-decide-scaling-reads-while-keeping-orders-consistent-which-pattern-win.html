@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya must decide: scaling reads while keeping orders consistent; which pattern wins? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">25 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Read Scaling</span>
+      <span class="tag tag--green">Order Consistency</span>
+      <span class="tag tag--amber">Architecture Patterns</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya must decide: scaling reads while keeping orders consistent; which pattern wins?</h1>
+      <p class="q-scenario"><strong>Maya</strong>, a software engineer, is building the Orders service for an e-commerce platform. During <strong>flash sales</strong> the system sees heavy write load and massive read traffic on <strong>order-history and analytics</strong> queries with tight latency limits. Business rules require <strong>strict consistency for payments and inventory</strong> on each order, while order-history screens can tolerate <strong>a couple of seconds of staleness</strong>. The solution must scale reads and writes, stay <strong>highly available</strong> during spikes, <strong>never lose events or double-charge</strong>, and remain manageable for a <strong>small backend team</strong>. She must choose the pattern that best balances reliability and complexity.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep a single primary SQL database for all reads and writes, scale reads with replicas and synchronous commits, and enforce all business rules inside service transactions.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Keep one authoritative database but add a caching tier (cache-aside with TTLs and selective write-through) for hot endpoints, scale application servers horizontally, and tune query plans and indexes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Apply CQRS: handle commands synchronously on a primary write database, emit events through a transactional outbox (or CDC), and build eventually consistent read models asynchronously, with idempotent consumers and compensating workflows protecting invariants.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Adopt full event sourcing: store every state change as an immutable event, derive current state by projection or replay, and make the event store the single source of truth for reads and writes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: CQRS with Transactional Outbox</h3>
+        <p>The requirements pull in two directions: <strong>payments and inventory need strong consistency</strong>, while <strong>reads need scale and can tolerate seconds of staleness</strong>. CQRS resolves this by splitting the two paths. Commands run against an authoritative write store with ACID guarantees, and queries are served from purpose-built read models fed through a reliable outbox. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Right consistency in the right place:</strong> Payment and inventory checks execute inside a single local transaction on the write database, so invariants are never relaxed. Only order-history and analytics views, which can tolerate seconds of lag, are eventually consistent.</li>
+          <li><strong>Independent read scaling:</strong> Read models (materialized views, a denormalized document store, or a search/analytics store) are shaped for their queries, can scale horizontally, and keep heavy analytics off the write database during flash sales.</li>
+          <li><strong>No lost events, high availability:</strong> The transactional outbox (or CDC) commits the event together with the state change, so a crash between save and publish cannot drop an event. If the broker or a projector is down, orders are still accepted and the read models catch up later.</li>
+          <li><strong>No double-charges:</strong> Idempotency keys on commands and payment calls, plus idempotent consumers that deduplicate by event ID, make retries and redeliveries safe. Compensating workflows (refund, release inventory) handle multi-step failures.</li>
+          <li><strong>Manageable complexity:</strong> CQRS with an outbox does not require re-modeling the domain as events. The write model stays a normal relational schema the team already knows, and projections are rebuildable from source tables if they ever go wrong.</li>
+        </ul>
+        <p>A solid implementation includes <strong>idempotency keys</strong>, <strong>an outbox with a relay</strong>, <strong>deduplicating consumers</strong>, <strong>rebuildable projections</strong>, and <strong>freshness SLOs</strong>. Compare p95 read latency, write-database CPU, and projection lag before and after rollout.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>A — Single Primary + Replicas</h4>
+          </div>
+          <p>Replicas scale reads, but they use the same engine and schema, so heavy order-history and analytics queries still compete for resources, and replication lag appears unpredictably. <strong>Write throughput does not scale at all</strong>, and flash-sale spikes on one primary are exactly the risk. It also does nothing for reliable event publication, which still needs an outbox. <strong>Caveat:</strong> for moderate traffic this is the simplest option and often enough.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Caching Tier</h4>
+          </div>
+          <p>Caching handles repeated point reads well, but order history is a <em>per-user list with filters</em>, so hit rates are modest and invalidation on every new order is awkward. Analytics queries are expensive aggregations that a cache does not solve, it does nothing for write scaling, and it offers no protection against lost events. It is a useful complementary layer on top of read models, not the core pattern.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📜</span>
+            <h4>D — Full Event Sourcing</h4>
+          </div>
+          <p>Event sourcing gives a complete audit trail and flexible projections, but it is a <strong>fundamental change in how the whole domain is modeled</strong>: event schema evolution, snapshots, replay time, and a steep learning curve for a small team. The scenario needs read scaling with outbox-based reliability, not an immutable log as the system of record. CQRS does not require event sourcing.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — CQRS with Transactional Outbox ✓</h4>
+          </div>
+          <p>Apply CQRS: handle commands synchronously on a primary write database, emit events through a transactional outbox (or CDC), and build eventually consistent read models asynchronously, with idempotent</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read Scalability</th><th>Write Scalability</th><th>Consistency for Payments and Inventory</th><th>Event Reliability</th><th>Implementation Complexity</th><th>Fit for a Small Team</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Single Primary + Replicas</td><td>Moderate ⚠</td><td>Low ❌</td><td>Strong ✅</td><td>Weak (needs outbox) ❌</td><td>Low ✅</td><td>High ✅</td></tr>
+            <tr><td class="tt-option">B — Caching Tier</td><td>High for hot keys ⚠</td><td>None ❌</td><td>Strong on the database ✅</td><td>Weak ❌</td><td>Medium ⚠</td><td>High ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — CQRS + Outbox ✓</td><td>High ✅</td><td>Moderate ⚠</td><td>Strong ✅</td><td>Strong ✅</td><td>Medium–High ⚠</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Full Event Sourcing</td><td>High ✅</td><td>High ✅</td><td>Strong per aggregate ✅</td><td>Strong ✅</td><td>Very high ❌</td><td>Low ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Primary + Replicas</h4>
+          </div>
+          <p>Moderate traffic, simple queries, tolerance for some replica lag, and a preference for the fewest moving parts.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">✅</span>
+            <h4>B — Caching Tier</h4>
+          </div>
+          <p>Read traffic is dominated by repeated point lookups of the same entities (product pages, configuration, profiles) rather than per-user lists or aggregations.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — CQRS + Outbox</h4>
+          </div>
+          <p>Reads and writes have different consistency and scaling needs, list and analytics queries are heavy, and events must be published reliably.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Full Event Sourcing</h4>
+          </div>
+          <p>Audit history, temporal queries, or replay are core to the domain, and the team already has event-sourcing experience.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> CQRS Query Path</h3>
+        <p>Reads are served from a projection shaped for the query. The client already has its new order from the command response, with an optional fallback to the write store:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant Q as Query API
+    participant V as Read Model Store
+    participant W as Write DB
+    C-&gt;&gt;Q: GET order history
+    Q-&gt;&gt;V: Query projection by customer
+    V--&gt;&gt;Q: Rows (a few seconds behind at most)
+    Q--&gt;&gt;C: Order history
+    opt Latest order missing from the projection
+        Q-&gt;&gt;W: Read the most recent orders by customer
+        W--&gt;&gt;Q: Authoritative rows
+    end">sequenceDiagram
+    participant C as Client
+    participant Q as Query API
+    participant V as Read Model Store
+    participant W as Write DB
+    C-&gt;&gt;Q: GET order history
+    Q-&gt;&gt;V: Query projection by customer
+    V--&gt;&gt;Q: Rows (a few seconds behind at most)
+    Q--&gt;&gt;C: Order history
+    opt Latest order missing from the projection
+        Q-&gt;&gt;W: Read the most recent orders by customer
+        W--&gt;&gt;Q: Authoritative rows
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Command with Outbox, Idempotent Projector, and Compensation</h3>
+        <p>Invariants are enforced in the write transaction, events are recorded with the state change, the projector deduplicates, and failures trigger a compensating step:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">placeOrder</span>(cmd, idempotencyKey):</span>
+<span class="line">    prior <span class="tk-op">=</span> db.<span class="tk-fn">find</span>(<span class="tk-str">&#x27;idempotency&#x27;</span>, idempotencyKey)</span>
+<span class="line">    <span class="tk-kw">if</span> prior <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> prior.response                              <span class="tk-com">// retry-safe: no duplicate order, no second charge</span></span>
+<span class="line"></span>
+<span class="line">    tx <span class="tk-op">=</span> db.<span class="tk-kw">begin</span>()</span>
+<span class="line">    updated <span class="tk-op">=</span> tx.<span class="tk-fn">execute</span>(</span>
+<span class="line">        <span class="tk-str">&#x27;UPDATE inventory SET available = available - :qty WHERE sku = :sku AND available &gt;= :qty&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">if</span> updated <span class="tk-op">==</span> <span class="tk-num">0</span>:</span>
+<span class="line">        tx.<span class="tk-fn">rollback</span>()</span>
+<span class="line">        <span class="tk-kw">throw</span> OutOfStock</span>
+<span class="line"></span>
+<span class="line">    order <span class="tk-op">=</span> tx.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;orders&#x27;</span>, {customerId: cmd.customerId, total: cmd.total, status: <span class="tk-str">&#x27;PENDING_PAYMENT&#x27;</span>})</span>
+<span class="line">    tx.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;outbox&#x27;</span>, {eventId: <span class="tk-fn">uuid</span>(), type: <span class="tk-str">&#x27;OrderPlaced&#x27;</span>, aggregateId: order.id, version: <span class="tk-num">1</span>, payload: order})</span>
+<span class="line">    tx.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;idempotency&#x27;</span>, {key: idempotencyKey, response: order})    <span class="tk-com">// unique constraint on key</span></span>
+<span class="line">    tx.<span class="tk-fn">commit</span>()                                            <span class="tk-com">// state change and event commit together</span></span>
+<span class="line">    <span class="tk-kw">return</span> order</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Payment step: the provider deduplicates by key, so retries cannot double-charge</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">chargeOrder</span>(order):</span>
+<span class="line">    result <span class="tk-op">=</span> payments.<span class="tk-fn">charge</span>(amount <span class="tk-op">=</span> order.total, idempotencyKey <span class="tk-op">=</span> <span class="tk-str">&#x27;order-&#x27;</span> <span class="tk-op">+</span> order.id)</span>
+<span class="line">    <span class="tk-kw">if</span> result.failed:</span>
+<span class="line">        <span class="tk-fn">publish</span>(<span class="tk-fn">PaymentFailed</span>(order.id))                   <span class="tk-com">// triggers the compensating workflow</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Compensation: undo earlier steps when a later step fails</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onPaymentFailed</span>(event):</span>
+<span class="line">    inventory.<span class="tk-fn">release</span>(event.orderId)                       <span class="tk-com">// idempotent</span></span>
+<span class="line">    orders.<span class="tk-fn">markCancelled</span>(event.orderId)                    <span class="tk-com">// idempotent</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Projector: builds the read model, safe under redelivery and reordering</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onOrderEvent</span>(event):</span>
+<span class="line">    <span class="tk-kw">if</span> processedEvents.<span class="tk-fn">exists</span>(event.eventId):</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">ack</span>(event)</span>
+<span class="line">    tx <span class="tk-op">=</span> readDb.<span class="tk-kw">begin</span>()</span>
+<span class="line">    tx.<span class="tk-fn">upsert</span>(<span class="tk-str">&#x27;order_history&#x27;</span>,</span>
+<span class="line">        {orderId: event.aggregateId, customerId: event.payload.customerId, status: event.payload.status, total: event.payload.total},</span>
+<span class="line">        onlyIf <span class="tk-op">=</span> existing.version <span class="tk-op">&lt;</span> event.version)         <span class="tk-com">// ignore stale versions</span></span>
+<span class="line">    tx.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;processed_events&#x27;</span>, event.eventId)</span>
+<span class="line">    tx.<span class="tk-fn">commit</span>()</span>
+<span class="line">    metrics.<span class="tk-fn">observe</span>(<span class="tk-str">&#x27;projection_lag_seconds&#x27;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> event.committedAt)</span>
+<span class="line">    <span class="tk-fn">ack</span>(event)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Applying CQRS everywhere:</strong> Most of a system is simple CRUD. Use CQRS only where read and write needs truly diverge.</li>
+          <li><strong>Publishing events outside the transaction:</strong> Saving and then publishing as two steps loses events on crashes. Write the event to the outbox in the same transaction.</li>
+          <li><strong>Non-idempotent commands and consumers:</strong> Retries and redeliveries cause duplicate orders and double-charges. Use idempotency keys with a unique constraint and a processed-events table.</li>
+          <li><strong>Making decisions from the read model:</strong> Checking stock or payment state against an eventually consistent projection creates races. Validate invariants against the write store.</li>
+          <li><strong>Ignoring projection lag:</strong> Without lag metrics and a freshness SLO, stale views go unnoticed until customers complain.</li>
+          <li><strong>No rebuild strategy:</strong> Projections will have bugs. Version them and keep replay or backfill tooling so they can be rebuilt safely.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams adopt this <strong>incrementally</strong> and keep the write model simple. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Measure:</strong> Separate read and write load, find the heavy endpoints (order history, dashboards), and check lock contention under flash-sale conditions.</li>
+          <li><strong>Step 1 — Quick wins:</strong> Fix indexes and query plans, add a short-TTL cache for hot point reads, and send non-critical reads to a replica.</li>
+          <li><strong>Step 2 — Harden the write path:</strong> Add idempotency keys, unique constraints, a transactional outbox, and compensating steps for payment and inventory failures.</li>
+          <li><strong>Step 3 — Build the first read model:</strong> An order-history projection fed by outbox events, shadow-compared against the source tables before cutover.</li>
+          <li><strong>Step 4 — Move analytics:</strong> Feed a dedicated analytics store or warehouse from the same event stream so reports never touch the write database.</li>
+          <li><strong>Step 5 — Scale writes only if needed:</strong> Partition by customer or order ID, or queue commands during peaks.</li>
+        </ul>
+        <p>Add moving parts only when measurements show the simpler version has run out of headroom.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When <strong>invariants need strong consistency but reads can be stale</strong>, split the paths: strongly consistent commands on an authoritative store, and eventually consistent read models fed by a transactional outbox. Make every consumer idempotent, use compensations for multi-step failures, and monitor projection lag. Event sourcing is a powerful option, but not a prerequisite for this problem.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

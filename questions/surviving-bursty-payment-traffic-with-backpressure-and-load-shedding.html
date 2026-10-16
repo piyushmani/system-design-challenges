@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Surviving Bursty Payment Traffic with Backpressure and Load Shedding — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">21 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Backpressure</span>
+      <span class="tag tag--green">Traffic Bursts</span>
+      <span class="tag tag--amber">System Stability</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Surviving Bursty Payment Traffic with Backpressure and Load Shedding</h1>
+      <p class="q-scenario"><strong>Luca</strong> owns a payment microservice that normally sees <strong>about 2k requests per second</strong> but jumps to <strong>50k rps</strong> within seconds when a marketing campaign fires. Each request needs <strong>5-20 ms of CPU-bound validation</strong> and is handed to a <strong>fixed worker pool</strong>. During spikes the service either <strong>runs out of memory</strong> or its <strong>tail latency collapses</strong>. At 10 ms per request one core handles roughly 100 rps, so 50k rps would need on the order of <strong>500 cores</strong>, far more than autoscaling can add in the first minutes of a spike. Mobile clients retry safely and can handle an <strong>instant rejection</strong>, but they need an explicit overload signal. Luca must protect the <strong>p99 latency SLO of the requests that are processed</strong> while keeping the service available, stable, and observable. Which strategy should he choose?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Maintain synchronous request processing while increasing the number of threads and containers (scaling up and out). Allow incoming requests to block when workers are fully occupied; depend on aggressive autoscaling and increased CPU/memory resources to absorb traffic spikes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Implement a global, infinite in-memory queue separating the HTTP layer from the workers. Rapidly accept all incoming requests, allowing consumers to process them at their own pace. Track the queue&#x27;s length, but avoid applying backpressure or rejecting requests from upstream clients.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Implement bounded in-memory queues featuring per-instance limits to apply backpressure to callers. When queues reach capacity, issue a clear overload signal (such as an HTTP 429 with a Retry-After header or a gRPC flow-control message). Integrate this with asynchronous workers, recommended client retry strategies, circuit breakers, traffic prioritization, and comprehensive metrics (e.g., queue size, drop rate, processing latency). A durable broker can be utilized as a measured fallback for sustained spikes.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Delegate all incoming events to a centralized, durable message broker (like Kafka), establishing it as the single source of truth. Immediately write all requests to the broker, permitting downstream consumers to handle them at their own speed. Rely entirely on the broker to absorb traffic spikes, thereby relieving the service of any backpressure management responsibilities.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Bounded Queues with Explicit Backpressure</h3>
+        <p>When demand exceeds capacity, something has to give: <strong>latency</strong> (queues grow), <strong>memory</strong> (they overflow), or <strong>requests</strong> (some are refused). Only the third choice protects the SLO. Option C makes that choice deliberately: it bounds the work in flight, rejects the excess <em>fast</em> with a machine-readable signal, and lets the requests that are admitted finish within the latency budget. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Latency is bounded by construction:</strong> By Little's Law, time in queue is roughly queue depth divided by service rate. Size the queue to the wait you can afford: for example, 8 workers at 10 ms each serve about 800 rps, so a 200 ms wait budget allows a queue of roughly 160 items per instance.</li>
+          <li><strong>Memory is bounded:</strong> A fixed-size queue cannot grow without limit, so a 25x spike degrades into rejections instead of an out-of-memory crash that takes down the instance and every request it was serving.</li>
+          <li><strong>Explicit signal, cheap rejection:</strong> HTTP 429 or 503 with a <code>Retry-After</code> header (or gRPC RESOURCE_EXHAUSTED) costs microseconds compared with 5-20 ms of validation, and tells well-behaved clients to back off with jitter instead of hammering the service.</li>
+          <li><strong>Observable:</strong> Queue depth, queue wait time, rejection rate, and in-flight count are direct saturation signals, useful both for alerting and as autoscaling inputs.</li>
+          <li><strong>Composable with other defenses:</strong> Priority lanes, deadline checks (drop requests whose client already timed out), circuit breakers for downstream calls, and a durable broker for delay-tolerant work all layer on top of the same admission point.</li>
+        </ul>
+        <p>A robust setup combines <strong>admission control at the edge</strong>, a <strong>bounded queue with a time-based deadline</strong>, <strong>429 or 503 with Retry-After</strong>, <strong>idempotent payment handling</strong>, and <strong>autoscaling on queue wait and CPU</strong> as the slower-moving complement. Track p99 of admitted requests, rejection rate, and queue wait during every campaign. If admitted p99 still violates the SLO, shorten the queue rather than lengthen it.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📈</span>
+            <h4>A — Scale Up and Out, Block on Saturation</h4>
+          </div>
+          <p>Blocking callers when workers are busy just moves the queue into the thread pool, the socket backlog, and the clients' timeouts. Latency grows without bound, threads and connections are exhausted, and nothing tells clients to back off. Autoscaling reacts in tens of seconds to minutes, well after a 25x spike has arrived, and sizing for 50k rps permanently means paying for roughly 25x the baseline capacity. <strong>Caveat:</strong> autoscaling is still valuable for sustained load increases; it complements backpressure rather than replacing it.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">♾️</span>
+            <h4>B — Unbounded In-Memory Queue</h4>
+          </div>
+          <p>An infinite queue is a <strong>latency and memory time bomb</strong>. Accepting everything means the backlog grows at the gap between arrival rate and service rate, which could be tens of thousands of requests per second here, so memory runs out within seconds to minutes. Even before that, requests wait so long that clients have already timed out and retried, and workers burn CPU on abandoned requests (wasted work). The p99 SLO is lost, and merely monitoring queue length documents the failure without preventing it.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📬</span>
+            <h4>D — Broker as the Only Buffer</h4>
+          </div>
+          <p>A durable broker such as Kafka absorbs bursts well for <em>fire-and-forget</em> workloads and makes a good fallback tier. Used as the only mechanism, it pushes the problem downstream: consumer lag grows, end-to-end latency becomes unbounded, and payment clients receive an acknowledgement for work that may finish minutes later, so the p99 SLO on processed requests is not protected. Clients also get no overload signal, and the broker and consumers still need backpressure once they saturate.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Bounded Queues with Explicit Backpressure ✓</h4>
+          </div>
+          <p>Implement bounded in-memory queues featuring per-instance limits to apply backpressure to callers. When queues reach capacity, issue a clear overload signal (such as an HTTP 429 with a Retry-After hea</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Memory Safety</th><th>p99 Latency of Admitted Requests</th><th>Overload Signal to Clients</th><th>Observability</th><th>Capacity Headroom Needed</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Scale and Block</td><td>Poor ❌ (threads and connections pile up)</td><td>Poor ❌ (grows with load)</td><td>None ❌</td><td>Medium ⚠</td><td>High ❌ (sized for peak)</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Unbounded Queue</td><td>Very poor ❌ (OOM)</td><td>Very poor ❌ (unbounded wait)</td><td>None ❌</td><td>Low ⚠ (length only)</td><td>Low ✅</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Bounded Queues + Backpressure ✓</td><td>Strong ✅ (bounded)</td><td>Strong ✅ (bounded wait)</td><td>Explicit ✅ (429 or 503 with Retry-After)</td><td>High ✅ (depth, wait, rejects)</td><td>Low–Medium ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Broker Only</td><td>Good ✅ (disk-backed)</td><td>Poor ❌ (lag unbounded)</td><td>Weak ⚠ (late, via status)</td><td>Medium ⚠ (consumer lag)</td><td>Medium ⚠ (broker cluster)</td><td>Medium–High ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Scale and Block</h4>
+          </div>
+          <p>Gradual, predictable growth where capacity can be added ahead of demand and a request waiting a few extra milliseconds is harmless.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Unbounded Queue</h4>
+          </div>
+          <p>Almost never in production; at most for small internal batch pipelines where memory is provably bounded by the size of the input.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Bounded Queues + Backpressure</h4>
+          </div>
+          <p>Latency-sensitive services with bursty, CPU-bound work and clients that can retry: payments, authentication, search, API gateways.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Broker Only</h4>
+          </div>
+          <p>Asynchronous workloads where the caller does not wait for the result (event ingestion, notifications, analytics) and delayed processing is acceptable.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Admission Control on the Request Path</h3>
+        <p>Requests are admitted only if the bounded queue has room; otherwise the client gets an immediate overload signal and backs off:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Mobile Client
+    participant G as Gateway
+    participant S as Service Instance
+    participant Q as Bounded Queue
+    participant W as Worker Pool
+    C-&gt;&gt;G: POST /payments with idempotency key
+    G-&gt;&gt;S: Forward request
+    S-&gt;&gt;Q: 1. Try to enqueue with deadline
+    alt Queue has room
+        Q--&gt;&gt;S: 2a. Accepted
+        Q-&gt;&gt;W: 3. Dequeue if deadline not passed
+        W--&gt;&gt;S: 4. Validated and processed
+        S--&gt;&gt;C: 200 result
+    else Queue full
+        Q--&gt;&gt;S: 2b. Rejected immediately
+        S--&gt;&gt;C: 429 or 503 with Retry-After
+        C-&gt;&gt;C: Back off with jitter, then retry
+    end">sequenceDiagram
+    participant C as Mobile Client
+    participant G as Gateway
+    participant S as Service Instance
+    participant Q as Bounded Queue
+    participant W as Worker Pool
+    C-&gt;&gt;G: POST /payments with idempotency key
+    G-&gt;&gt;S: Forward request
+    S-&gt;&gt;Q: 1. Try to enqueue with deadline
+    alt Queue has room
+        Q--&gt;&gt;S: 2a. Accepted
+        Q-&gt;&gt;W: 3. Dequeue if deadline not passed
+        W--&gt;&gt;S: 4. Validated and processed
+        S--&gt;&gt;C: 200 result
+    else Queue full
+        Q--&gt;&gt;S: 2b. Rejected immediately
+        S--&gt;&gt;C: 429 or 503 with Retry-After
+        C-&gt;&gt;C: Back off with jitter, then retry
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Bounded Queue with Deadline-Aware Admission</h3>
+        <p>Admission is decided before any CPU work: rate limit per client, reject when the queue is full, and skip jobs whose deadline passed while they waited:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">const</span> MAX_WAIT <span class="tk-op">=</span> <span class="tk-num">200ms</span></span>
+<span class="line"><span class="tk-kw">const</span> WORKERS <span class="tk-op">=</span> <span class="tk-num">8</span></span>
+<span class="line"><span class="tk-kw">const</span> SERVICE_TIME <span class="tk-op">=</span> <span class="tk-num">10ms</span></span>
+<span class="line"><span class="tk-kw">const</span> QUEUE_LIMIT <span class="tk-op">=</span> (WORKERS <span class="tk-op">/</span> SERVICE_TIME) <span class="tk-op">*</span> MAX_WAIT       <span class="tk-com">// about 160 slots (Little&#x27;s Law)</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handlePayment</span>(req):</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> rateLimiter.<span class="tk-fn">allow</span>(req.clientId):                    <span class="tk-com">// per-client token bucket</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">reject</span>(<span class="tk-num">429</span>, retryAfter <span class="tk-op">=</span> <span class="tk-num">1s</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> queue.<span class="tk-fn">size</span>() <span class="tk-op">&gt;=</span> QUEUE_LIMIT:</span>
+<span class="line">        metrics.<span class="tk-fn">increment</span>(<span class="tk-str">&#x27;rejected_queue_full&#x27;</span>)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">reject</span>(<span class="tk-num">503</span>, retryAfter <span class="tk-op">=</span> <span class="tk-fn">jitter</span>(<span class="tk-num">1s</span>, <span class="tk-num">3s</span>))        <span class="tk-com">// cheap, before any validation</span></span>
+<span class="line"></span>
+<span class="line">    job <span class="tk-op">=</span> {req: req, enqueuedAt: <span class="tk-fn">now</span>(), deadline: <span class="tk-fn">now</span>() <span class="tk-op">+</span> MAX_WAIT}</span>
+<span class="line">    queue.<span class="tk-fn">push</span>(job)</span>
+<span class="line">    metrics.<span class="tk-fn">gauge</span>(<span class="tk-str">&#x27;queue_depth&#x27;</span>, queue.<span class="tk-fn">size</span>())</span>
+<span class="line">    <span class="tk-kw">return</span> job.promise.<span class="tk-kw">await</span>()                                  <span class="tk-com">// resolved by a worker</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">worker</span>():</span>
+<span class="line">    <span class="tk-kw">loop</span> forever:</span>
+<span class="line">        job <span class="tk-op">=</span> queue.<span class="tk-fn">pop</span>()</span>
+<span class="line">        metrics.<span class="tk-fn">observe</span>(<span class="tk-str">&#x27;queue_wait_ms&#x27;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> job.enqueuedAt)</span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-fn">now</span>() <span class="tk-op">&gt;</span> job.deadline:</span>
+<span class="line">            job.promise.<span class="tk-fn">reject</span>(<span class="tk-num">503</span>)                             <span class="tk-com">// client has likely given up: skip the CPU work</span></span>
+<span class="line">            <span class="tk-kw">continue</span></span>
+<span class="line">        validated <span class="tk-op">=</span> <span class="tk-fn">validate</span>(job.req)                           <span class="tk-com">// 5-20 ms CPU</span></span>
+<span class="line">        job.promise.<span class="tk-fn">resolve</span>(<span class="tk-fn">process</span>(validated, idempotencyKey <span class="tk-op">=</span> job.req.idempotencyKey))</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">jitter</span>(minDelay, maxDelay):</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">random</span>(minDelay, maxDelay)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Adaptive variant: shrink QUEUE_LIMIT when p99 queue wait exceeds MAX_WAIT, grow it slowly when healthy (AIMD)</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Bounding by count only:</strong> A queue of 10,000 items at 10 ms each is a 100-second wait for a single worker. Size by wait time (Little's Law) and drop requests whose deadline has already passed.</li>
+          <li><strong>Rejecting without telling clients how to retry:</strong> Bare 500s trigger immediate retries. Return 429 or 503 with Retry-After and require exponential backoff with jitter.</li>
+          <li><strong>Non-idempotent payment retries:</strong> A client that retries after a timeout can double charge unless the endpoint dedupes on an idempotency key.</li>
+          <li><strong>Shedding after the expensive work:</strong> Rejecting after validation wastes the CPU you are trying to protect. Check admission before parsing and validating.</li>
+          <li><strong>Static limits that drift:</strong> Hard-coded limits go stale as code and hardware change. Prefer adaptive concurrency limits (for example AIMD or gradient-based) or re-run load tests every release.</li>
+          <li><strong>Ignoring queue wait as a metric:</strong> CPU alone looks fine right up to the cliff. Alert on queue wait time and rejection rate, and consider autoscaling on them.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Overload protection is built in <strong>layers</strong>, from the cheapest rejection at the edge to the most expensive work at the core:</p>
+        <ul>
+          <li><strong>Step 0 — Measure capacity:</strong> Load-test to find the saturation point per instance (workers divided by service time) and the p99 at 70%, 90%, and 100% utilization.</li>
+          <li><strong>Step 1 — Edge rate limiting:</strong> Per-client or per-tenant token buckets at the API gateway so no single caller consumes the whole budget.</li>
+          <li><strong>Step 2 — Bounded admission per instance:</strong> A concurrency limit and a bounded queue sized from the wait budget (Little's Law), with deadline-aware dropping.</li>
+          <li><strong>Step 3 — Explicit signals:</strong> 429 or 503 with Retry-After, jittered client backoff, and client-side caps on total retries.</li>
+          <li><strong>Step 4 — Prioritization and isolation:</strong> Separate lanes or bulkheads so low-value traffic cannot starve critical payment flows, plus circuit breakers on downstream dependencies.</li>
+          <li><strong>Step 5 — Elasticity and durable overflow:</strong> Autoscale on queue wait and CPU for sustained growth, pre-scale for known campaigns, and route delay-tolerant work (receipts, analytics) through a durable broker.</li>
+        </ul>
+        <p>Reject early, reject cheaply, and tell the client what to do next.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>You cannot serve 25x traffic with a fixed pool, so <strong>decide what degrades</strong>. With bounded queues it is the excess requests, not the SLO or the process. Explicit rejection plus client backoff turns a meltdown into a controlled slowdown. Durable brokers and autoscaling help, but only after admission control is in place.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Liam&#x27;s Duplicate-Charge Dilemma: Selecting the Right Idempotency Strategy — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">27 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Idempotency</span>
+      <span class="tag tag--green">Duplicate Charges</span>
+      <span class="tag tag--amber">Payments</span>
+      <span class="tag tag--blue">Distributed Systems</span>
+      <span class="tag tag--red">Transactional Outbox</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Liam&#x27;s Duplicate-Charge Dilemma: Selecting the Right Idempotency Strategy</h1>
+      <p class="q-scenario"><strong>Liam</strong> is a senior backend systems architect leading the core transaction infrastructure for a mission-critical, worldwide payments platform. The API processes millions of financial transactions daily across multi-region deployments in the Americas, Europe, and Asia-Pacific. The system has suffered intermittent, high-severity duplicate charge incidents driven by two distinct failure modes: <em>unreliable mobile networks</em> where client apps experience HTTP connection timeouts before receiving gateway acknowledgments (triggering aggressive automatic retry loops), and <em>asynchronous message broker consumers</em> (e.g., Apache Kafka / RabbitMQ) redelivering payment-execution messages during broker failovers or consumer group rebalances. Liam must implement an enterprise idempotency architecture that satisfies non-negotiable operational criteria: <strong>strictly zero duplicate billings</strong> under any failure condition, <strong>sub-100ms p99 response times</strong> for global mobile clients, <strong>linear multi-region scalability</strong> capable of handling traffic spikes without centralized write contention, <strong>guaranteed side-effect delivery</strong> (receipts, webhooks, fulfillment events) without dual-write inconsistencies, and <strong>comprehensive observability</strong> for immediate dispute triage and auditing. Liam must evaluate competing architectural patterns to choose the optimal solution.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A) Implement a synchronous check-and-insert using a central relational database: demand an idempotency key from clients. For every request, check a centralized SQL database; if absent, insert the key and execute the charge within the same transaction, depending on database unique constraints to halt duplicates.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">B) Utilize a rapid distributed cache reservation: clients provide an idempotency key, and the system attempts a compare-and-swap (CAS) reservation in a cache (like Redis) with a brief TTL. It then processes the payment and asynchronously saves the result to a durable database. If the cache reservation is unsuccessful, the request is either queued or rejected.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">C) Employ durable local idempotency combined with a transactional outbox: require an idempotency key from clients. Within each region, persist both the business operation and the idempotency marker in a single local database transaction (leveraging unique constraints on the account and key). Publish any side-effects via an outbox pattern. Return the saved outcome for duplicate keys, and use background jobs to clean up expired keys and reconcile any cross-region duplicates.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">D) Construct a specialized, centralized idempotency microservice: create a distinct application dedicated to managing idempotency keys and their states (utilizing quorum-based replication for accuracy). Require all charge attempts to synchronously consult this service to verify and reserve keys, making it the definitive authority for observability and deduplication.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Durable Local Idempotency with Transactional Outbox</h3>
+        <p>In high-throughput financial architectures, preventing duplicate billing while maintaining global sub-100ms response times requires eliminating distributed coordination from the critical request path. <strong>Durable Local Idempotency combined with a Transactional Outbox (Option C)</strong> succeeds because it encapsulates both the business transaction (ledger entry, payment status) and the idempotency reservation within an <em>atomic ACID commit inside the local regional database</em>. Coupled with a compound unique constraint on <code>(account_id, idempotency_key)</code> and an outbox table for downstream event dispatch, it guarantees zero duplicate charges, survives crashes without state desynchronization, and scales independently across regions:</p>
+        <ul>
+          <li><strong>Atomic State Mutation & Deduplication:</strong> By persisting the business payment record, ledger entry, and idempotency marker within the exact same local ACID transaction, the system eliminates phantom charges and orphaned keys. If a worker crashes or the transaction aborts, the entire state rolls back atomically, preventing corrupted intermediate records.</li>
+          <li><strong>Zero Trans-Oceanic Latency Penalty:</strong> Each regional deployment writes directly to its local database shard/replica (leveraging regional tenant pinning or geo-distributed relational tables). Transactions commit locally in single-digit milliseconds, satisfying strict mobile p99 latency targets without trans-continental round trips.</li>
+          <li><strong>Guaranteed Side-Effect Delivery via Outbox:</strong> External notifications, webhook dispatches, and fulfillment events are written to an <code>outbox_events</code> table within the same transaction. A reliable CDC tailer (e.g., Debezium) or dedicated outbox worker guarantees at-least-once downstream message publication, eliminating the classic 'dual-write' dilemma.</li>
+          <li><strong>Deterministic Replay of Cached Responses:</strong> When a network hiccup causes a client or broker to resend an already-processed idempotency key, the local database catches the compound unique constraint violation. The service retrieves the stored response payload and returns it immediately with an <code>Idempotent-Replay: true</code> header, ensuring identical results without re-executing payment processing.</li>
+          <li><strong>Autonomous High Availability & Bounded Growth:</strong> Regional outages remain localized rather than taking down global payment processing. In addition, lean active table performance is preserved via background vacuum/pruning jobs that archive keys older than the client retry SLA (e.g., 72 hours), while asynchronous cross-region reconciliation workers detect and resolve rare cross-region split-brain conflicts.</li>
+        </ul>
+        <p>By unifying <strong>local ACID database transactions</strong>, <strong>compound unique constraints</strong>, and a <strong>transactional outbox</strong>, Liam eliminates duplicate charges, protects downstream side effects against node crashes, and achieves predictable sub-100ms response times globally.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🐢</span>
+            <h4>A — Synchronous Check-and-Insert via Centralized SQL Database</h4>
+          </div>
+          <p>Routing all payment transactions from around the world to a single centralized relational database introduces severe trans-oceanic network latency (150–300ms round trips between Europe/Asia and North America), violating mobile performance budgets. At scale, global connection concurrency creates catastrophic database connection pool starvation and hot-row contention. Furthermore, the central database is an unmitigated single point of failure (SPOF) that halts worldwide commerce during maintenance or network partitions. <strong>Caveat:</strong> Lacks an outbox pattern, leaving external webhooks and event streams prone to silent failure if an application crashes after DB commit.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚠️</span>
+            <h4>B — Distributed Cache Reservation (Redis CAS) with Async Durable Save</h4>
+          </div>
+          <p>Relying on an in-memory cache (like Redis) for CAS reservations with asynchronous durable database writes creates a catastrophic vulnerability known as the 'dual-write gap'. If the application server executes the charge with the payment card gateway but crashes before completing the asynchronous durable write, money has been withdrawn with zero persistent record in the ledger. Moreover, if a delayed broker retry or client retry occurs after the cache key's TTL expires (or if Redis evicts keys under memory exhaustion), the system treats the retry as a brand-new transaction and double-charges the user. <strong>Caveat:</strong> Volatile caches must never serve as the primary source of truth for financial transactions.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>D — Centralized Dedicated Idempotency Microservice</h4>
+          </div>
+          <p>Decoupling idempotency into a distinct external microservice separates the idempotency lock from the business transaction, creating a distributed two-phase commit (2PC) problem across microservice boundaries. If a network partition isolates the idempotency service after the payment is authorized, Liam's system cannot determine whether to commit or abort. Synchronous remote RPCs backed by quorum consensus (e.g., Raft/Paxos) introduce substantial tail latency on every transaction and add heavy operational overhead to maintain a highly available, quorum-based cluster on the critical path of every payment. <strong>Caveat:</strong> Turning idempotency into a separate microservice trades local atomic guarantees for distributed failure modes.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Durable Local Idempotency with Transactional Outbox ✓</h4>
+          </div>
+          <p>C) Employ durable local idempotency combined with a transactional outbox: require an idempotency key from clients. Within each region, persist both the business operation and the idempotency marker in</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Zero Double Charges</th><th>Mobile Latency (p99)</th><th>Multi-Region Scalability</th><th>Crash Resilience</th><th>Side-Effect Reliability</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Central SQL Check-and-Insert</td><td>✅ Strong (ACID)</td><td>❌ (&gt;250ms WAN Latency)</td><td>❌ Centralized Bottleneck</td><td>⚠️ Vulnerable Post-Commit</td><td>❌ High Dual-Write Risk</td></tr>
+            <tr><td class="tt-option">B — Distributed Cache (Redis CAS)</td><td>❌ Fatal (TTL/Crash Loss)</td><td>✅ (&lt;10ms In-Memory)</td><td>✅ Highly Scalable</td><td>❌ Data Loss on Server Crash</td><td>❌ Unreliable Event Firing</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Durable Local DB + Outbox ✓</td><td>✅ Guaranteed (Local ACID)</td><td>✅ (&lt;50ms Regional)</td><td>✅ Sharded / Regional Scale</td><td>✅ Fully Crash-Resilient</td><td>✅ Guaranteed (Outbox CDC)</td></tr>
+            <tr><td class="tt-option">D — Dedicated Idempotency Service</td><td>⚠️ Risk (Distributed Desync)</td><td>❌ Moderate (Remote RPC)</td><td>⚠️ Quorum Scaling Limits</td><td>⚠️ Complex 2PC Failure</td><td>⚠️ Independent Failure Point</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Centralized SQL Check-and-Insert</h4>
+          </div>
+          <p>Single-region monoliths with modest transaction throughput (<200 RPS) where all services and databases share the same low-latency local network and multi-region expansion is not required.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Distributed Cache (Redis CAS)</h4>
+          </div>
+          <p>Non-financial, high-throughput scenarios where occasional duplicate execution is completely harmless and microsecond performance is essential (e.g., video view counts, ad-click telemetry deduplication, or rate-limited notification dispatching).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Durable Local DB + Outbox</h4>
+          </div>
+          <p>Worldwide payment processing, financial ledgers, e-commerce order checkouts, and mission-critical distributed systems requiring zero double charges, strict multi-region low latency, and guaranteed event propagation.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Dedicated Idempotency Service</h4>
+          </div>
+          <p>Large enterprise organizations with dozens of legacy heterogeneous backends lacking local ACID databases, where a centralized audit-and-deduplication proxy is mandated across disparate third-party SaaS integrations.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Durable Local Idempotency: Request Lifecycle and Deterministic Replay</h3>
+        <p>The API gateway reserves the idempotency key in the local regional database, authorizes the payment externally without holding DB locks, commits the result atomically with outbox events, and replays cached responses on duplicate retries.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    autonumber
+    actor Client as Mobile Client / Broker
+    participant API as Regional Payment Gateway
+    participant DB as Local Regional DB
+    participant PSP as Payment Processor (Rail)
+
+    Client-&gt;&gt;API: POST /v1/charges (Key: k_987, Body)
+    API-&gt;&gt;DB: INSERT INTO idempotency_keys (key, payload_hash, status=&#x27;STARTED&#x27;)
+    alt Case 1: First Attempt (Reservation Succeeded)
+        DB--&gt;&gt;API: 1 row inserted (Lock acquired)
+        API-&gt;&gt;PSP: POST /v1/authorizations ($120.00)
+        PSP--&gt;&gt;API: 200 OK (Auth ID: ch_abc123)
+        rect rgb(235, 248, 235)
+            Note over API,DB: Atomic Local ACID Transaction Commit
+            API-&gt;&gt;DB: BEGIN TX
+            API-&gt;&gt;DB: INSERT INTO charges (id, amount, status=&#x27;PAID&#x27;)
+            API-&gt;&gt;DB: INSERT INTO outbox_events (event_type=&#x27;charge.captured&#x27;, payload=&#x27;...&#x27;)
+            API-&gt;&gt;DB: UPDATE idempotency_keys SET status=&#x27;COMPLETED&#x27;, response_code=200, response_body=&#x27;...&#x27;
+            API-&gt;&gt;DB: COMMIT TX
+        end
+        DB--&gt;&gt;API: Transaction Committed
+        API--&gt;&gt;Client: 200 OK (Charge Created: ch_abc123)
+    else Case 2: Duplicate Attempt (Already Completed)
+        DB--xAPI: Error: Unique Constraint Violation
+        API-&gt;&gt;DB: SELECT status, payload_hash, response_code, response_body FROM idempotency_keys WHERE key=&#x27;k_987&#x27;
+        DB--&gt;&gt;API: Row found: status=&#x27;COMPLETED&#x27;, payload_hash matches
+        API--&gt;&gt;Client: 200 OK (Idempotent-Replay: true, Cached Payload)
+    else Case 3: In-Flight Collision (Still Processing)
+        DB--xAPI: Error: Unique Constraint Violation
+        API-&gt;&gt;DB: SELECT status FROM idempotency_keys WHERE key=&#x27;k_987&#x27;
+        DB--&gt;&gt;API: Row found: status=&#x27;STARTED&#x27;
+        API--&gt;&gt;Client: 409 Conflict (Retry-After: 2)
+    end">sequenceDiagram
+    autonumber
+    actor Client as Mobile Client / Broker
+    participant API as Regional Payment Gateway
+    participant DB as Local Regional DB
+    participant PSP as Payment Processor (Rail)
+
+    Client-&gt;&gt;API: POST /v1/charges (Key: k_987, Body)
+    API-&gt;&gt;DB: INSERT INTO idempotency_keys (key, payload_hash, status=&#x27;STARTED&#x27;)
+    alt Case 1: First Attempt (Reservation Succeeded)
+        DB--&gt;&gt;API: 1 row inserted (Lock acquired)
+        API-&gt;&gt;PSP: POST /v1/authorizations ($120.00)
+        PSP--&gt;&gt;API: 200 OK (Auth ID: ch_abc123)
+        rect rgb(235, 248, 235)
+            Note over API,DB: Atomic Local ACID Transaction Commit
+            API-&gt;&gt;DB: BEGIN TX
+            API-&gt;&gt;DB: INSERT INTO charges (id, amount, status=&#x27;PAID&#x27;)
+            API-&gt;&gt;DB: INSERT INTO outbox_events (event_type=&#x27;charge.captured&#x27;, payload=&#x27;...&#x27;)
+            API-&gt;&gt;DB: UPDATE idempotency_keys SET status=&#x27;COMPLETED&#x27;, response_code=200, response_body=&#x27;...&#x27;
+            API-&gt;&gt;DB: COMMIT TX
+        end
+        DB--&gt;&gt;API: Transaction Committed
+        API--&gt;&gt;Client: 200 OK (Charge Created: ch_abc123)
+    else Case 2: Duplicate Attempt (Already Completed)
+        DB--xAPI: Error: Unique Constraint Violation
+        API-&gt;&gt;DB: SELECT status, payload_hash, response_code, response_body FROM idempotency_keys WHERE key=&#x27;k_987&#x27;
+        DB--&gt;&gt;API: Row found: status=&#x27;COMPLETED&#x27;, payload_hash matches
+        API--&gt;&gt;Client: 200 OK (Idempotent-Replay: true, Cached Payload)
+    else Case 3: In-Flight Collision (Still Processing)
+        DB--xAPI: Error: Unique Constraint Violation
+        API-&gt;&gt;DB: SELECT status FROM idempotency_keys WHERE key=&#x27;k_987&#x27;
+        DB--&gt;&gt;API: Row found: status=&#x27;STARTED&#x27;
+        API--&gt;&gt;Client: 409 Conflict (Retry-After: 2)
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Durable Regional Idempotency Engine with Transactional Outbox</h3>
+        <p>Production Python implementation illustrating atomic key reservation, SHA-256 payload verification, external PSP authorization, atomic business + outbox commit, and deterministic cached replay.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">python</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">import</span> hashlib</span>
+<span class="line"><span class="tk-kw">import</span> json</span>
+<span class="line"><span class="tk-kw">import</span> time</span>
+<span class="line"><span class="tk-kw">from</span> dataclasses <span class="tk-kw">import</span> dataclass</span>
+<span class="line"><span class="tk-kw">from</span> typing <span class="tk-kw">import</span> Any, Dict, Optional</span>
+<span class="line"></span>
+<span class="line">@dataclass</span>
+<span class="line"><span class="tk-kw">class</span> PaymentResponse:</span>
+<span class="line">    status_code: int</span>
+<span class="line">    body: Dict[str, Any]</span>
+<span class="line">    headers: Dict[str, str]</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">class</span> <span class="tk-fn">DuplicateRequestException</span>(Exception):</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, message: str, status_code: int, retry_after: Optional[int] <span class="tk-op">=</span> <span class="tk-lit">None</span>):</span>
+<span class="line">        <span class="tk-fn">super</span>().<span class="tk-fn">__init__</span>(message)</span>
+<span class="line">        self.status_code <span class="tk-op">=</span> status_code</span>
+<span class="line">        self.retry_after <span class="tk-op">=</span> retry_after</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">class</span> PaymentService:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, db_pool, psp_client, max_inflight_wait_sec: float <span class="tk-op">=</span> <span class="tk-num">2.0</span>):</span>
+<span class="line">        self.db_pool <span class="tk-op">=</span> db_pool</span>
+<span class="line">        self.psp_client <span class="tk-op">=</span> psp_client</span>
+<span class="line">        self.max_inflight_wait_sec <span class="tk-op">=</span> max_inflight_wait_sec</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">process_charge</span>(self, account_id: str, idempotency_key: str, payload: Dict[str, Any]) <span class="tk-op">-&gt;</span> PaymentResponse:</span>
+<span class="line">        <span class="tk-com"># 1. Compute deterministic cryptographic fingerprint of normalized request body</span></span>
+<span class="line">        canonical_body <span class="tk-op">=</span> json.<span class="tk-fn">dumps</span>(payload, sort_keys<span class="tk-op">=</span><span class="tk-lit">True</span>, separators<span class="tk-op">=</span>(<span class="tk-str">&#x27;,&#x27;</span>, <span class="tk-str">&#x27;:&#x27;</span>))</span>
+<span class="line">        payload_hash <span class="tk-op">=</span> hashlib.<span class="tk-fn">sha256</span>(canonical_body.<span class="tk-fn">encode</span>(<span class="tk-str">&#x27;utf-8&#x27;</span>)).<span class="tk-fn">hexdigest</span>()</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># 2. Attempt atomic reservation in local regional database</span></span>
+<span class="line">        <span class="tk-kw">with</span> self.db_pool.<span class="tk-fn">get_connection</span>() <span class="tk-kw">as</span> conn:</span>
+<span class="line">            reserved <span class="tk-op">=</span> conn.<span class="tk-fn">execute</span>(</span>
+<span class="line">                <span class="tk-str">&#x27;&#x27;</span>&#x27;</span>
+<span class="line">                INSERT INTO <span class="tk-fn">payment_idempotency</span> (account_id, idempotency_key, payload_hash, status, created_at)</span>
+<span class="line">                <span class="tk-fn">VALUES</span> (<span class="tk-op">%</span>s, <span class="tk-op">%</span>s, <span class="tk-op">%</span>s, <span class="tk-str">&#x27;STARTED&#x27;</span>, <span class="tk-fn">NOW</span>())</span>
+<span class="line">                ON <span class="tk-fn">CONFLICT</span> (account_id, idempotency_key) DO NOTHING</span>
+<span class="line">                RETURNING id;</span>
+<span class="line">                <span class="tk-str">&#x27;&#x27;</span>&#x27;,</span>
+<span class="line">                (account_id, idempotency_key, payload_hash)</span>
+<span class="line">            ).<span class="tk-fn">fetchone</span>()</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># 3. Handle conflict if key was already reserved</span></span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> reserved:</span>
+<span class="line">            <span class="tk-kw">return</span> self.<span class="tk-fn">_handle_existing_key</span>(account_id, idempotency_key, payload_hash)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># 4. First-time request: Execute payment rail authorization OUTSIDE of DB transaction</span></span>
+<span class="line">        <span class="tk-com"># Crucial: Never hold open DB connection locks during external network HTTP calls</span></span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            psp_result <span class="tk-op">=</span> self.psp_client.<span class="tk-fn">authorize_and_capture</span>(</span>
+<span class="line">                account_id<span class="tk-op">=</span>account_id,</span>
+<span class="line">                amount<span class="tk-op">=</span>payload[<span class="tk-str">&#x27;amount&#x27;</span>],</span>
+<span class="line">                currency<span class="tk-op">=</span>payload[<span class="tk-str">&#x27;currency&#x27;</span>],</span>
+<span class="line">                payment_method<span class="tk-op">=</span>payload[<span class="tk-str">&#x27;payment_method_id&#x27;</span>]</span>
+<span class="line">            )</span>
+<span class="line">        <span class="tk-kw">except</span> Exception <span class="tk-kw">as</span> psp_err:</span>
+<span class="line">            <span class="tk-com"># Record failure in idempotency table so subsequent retries see the error</span></span>
+<span class="line">            <span class="tk-kw">with</span> self.db_pool.<span class="tk-fn">get_connection</span>() <span class="tk-kw">as</span> conn:</span>
+<span class="line">                conn.<span class="tk-fn">execute</span>(</span>
+<span class="line">                    <span class="tk-str">&#x27;&#x27;</span>&#x27;</span>
+<span class="line">                    UPDATE payment_idempotency</span>
+<span class="line">                    SET status <span class="tk-op">=</span> <span class="tk-str">&#x27;FAILED&#x27;</span>, response_code <span class="tk-op">=</span> <span class="tk-num">502</span>, response_body <span class="tk-op">=</span> <span class="tk-op">%</span>s, updated_at <span class="tk-op">=</span> <span class="tk-fn">NOW</span>()</span>
+<span class="line">                    WHERE account_id <span class="tk-op">=</span> <span class="tk-op">%</span>s AND idempotency_key <span class="tk-op">=</span> <span class="tk-op">%</span>s;</span>
+<span class="line">                    <span class="tk-str">&#x27;&#x27;</span>&#x27;,</span>
+<span class="line">                    (json.<span class="tk-fn">dumps</span>({<span class="tk-str">&#x27;error&#x27;</span>: <span class="tk-fn">str</span>(psp_err)}), account_id, idempotency_key)</span>
+<span class="line">                )</span>
+<span class="line">            <span class="tk-kw">raise</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># 5. Atomic local transaction: persist business charge, transactional outbox event, and idempotency completion</span></span>
+<span class="line">        response_body <span class="tk-op">=</span> {</span>
+<span class="line">            <span class="tk-str">&#x27;charge_id&#x27;</span>: psp_result.charge_id,</span>
+<span class="line">            <span class="tk-str">&#x27;amount&#x27;</span>: payload[<span class="tk-str">&#x27;amount&#x27;</span>],</span>
+<span class="line">            <span class="tk-str">&#x27;currency&#x27;</span>: payload[<span class="tk-str">&#x27;currency&#x27;</span>],</span>
+<span class="line">            <span class="tk-str">&#x27;status&#x27;</span>: <span class="tk-str">&#x27;succeeded&#x27;</span></span>
+<span class="line">        }</span>
+<span class="line">        outbox_event <span class="tk-op">=</span> {</span>
+<span class="line">            <span class="tk-str">&#x27;event_type&#x27;</span>: <span class="tk-str">&#x27;payment.charge.succeeded&#x27;</span>,</span>
+<span class="line">            <span class="tk-str">&#x27;aggregate_id&#x27;</span>: psp_result.charge_id,</span>
+<span class="line">            <span class="tk-str">&#x27;account_id&#x27;</span>: account_id,</span>
+<span class="line">            <span class="tk-str">&#x27;payload&#x27;</span>: response_body,</span>
+<span class="line">            <span class="tk-str">&#x27;occurred_at&#x27;</span>: time.<span class="tk-fn">time</span>()</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">with</span> self.db_pool.<span class="tk-fn">get_connection</span>() <span class="tk-kw">as</span> conn:</span>
+<span class="line">            <span class="tk-kw">with</span> conn.<span class="tk-fn">transaction</span>():  <span class="tk-com"># Single atomic regional ACID commit</span></span>
+<span class="line">                <span class="tk-com"># (a) Insert durable financial charge record</span></span>
+<span class="line">                conn.<span class="tk-fn">execute</span>(</span>
+<span class="line">                    <span class="tk-str">&#x27;&#x27;</span>&#x27;</span>
+<span class="line">                    INSERT INTO <span class="tk-fn">charges</span> (charge_id, account_id, amount, currency, status, created_at)</span>
+<span class="line">                    <span class="tk-fn">VALUES</span> (<span class="tk-op">%</span>s, <span class="tk-op">%</span>s, <span class="tk-op">%</span>s, <span class="tk-op">%</span>s, <span class="tk-str">&#x27;SUCCEEDED&#x27;</span>, <span class="tk-fn">NOW</span>());</span>
+<span class="line">                    <span class="tk-str">&#x27;&#x27;</span>&#x27;,</span>
+<span class="line">                    (psp_result.charge_id, account_id, payload[<span class="tk-str">&#x27;amount&#x27;</span>], payload[<span class="tk-str">&#x27;currency&#x27;</span>])</span>
+<span class="line">                )</span>
+<span class="line">                <span class="tk-com"># (b) Insert side-effects into transactional outbox for CDC / Kafka dispatch</span></span>
+<span class="line">                conn.<span class="tk-fn">execute</span>(</span>
+<span class="line">                    <span class="tk-str">&#x27;&#x27;</span>&#x27;</span>
+<span class="line">                    INSERT INTO <span class="tk-fn">outbox_events</span> (event_type, aggregate_type, aggregate_id, payload, created_at)</span>
+<span class="line">                    <span class="tk-fn">VALUES</span> (<span class="tk-op">%</span>s, <span class="tk-str">&#x27;charge&#x27;</span>, <span class="tk-op">%</span>s, <span class="tk-op">%</span>s, <span class="tk-fn">NOW</span>());</span>
+<span class="line">                    <span class="tk-str">&#x27;&#x27;</span>&#x27;,</span>
+<span class="line">                    (outbox_event[<span class="tk-str">&#x27;event_type&#x27;</span>], outbox_event[<span class="tk-str">&#x27;aggregate_id&#x27;</span>], json.<span class="tk-fn">dumps</span>(outbox_event))</span>
+<span class="line">                )</span>
+<span class="line">                <span class="tk-com"># (c) Transition idempotency marker to COMPLETED with cached response</span></span>
+<span class="line">                conn.<span class="tk-fn">execute</span>(</span>
+<span class="line">                    <span class="tk-str">&#x27;&#x27;</span>&#x27;</span>
+<span class="line">                    UPDATE payment_idempotency</span>
+<span class="line">                    SET status <span class="tk-op">=</span> <span class="tk-str">&#x27;COMPLETED&#x27;</span>, response_code <span class="tk-op">=</span> <span class="tk-num">200</span>, response_body <span class="tk-op">=</span> <span class="tk-op">%</span>s, updated_at <span class="tk-op">=</span> <span class="tk-fn">NOW</span>()</span>
+<span class="line">                    WHERE account_id <span class="tk-op">=</span> <span class="tk-op">%</span>s AND idempotency_key <span class="tk-op">=</span> <span class="tk-op">%</span>s;</span>
+<span class="line">                    <span class="tk-str">&#x27;&#x27;</span>&#x27;,</span>
+<span class="line">                    (json.<span class="tk-fn">dumps</span>(response_body), account_id, idempotency_key)</span>
+<span class="line">                )</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">PaymentResponse</span>(status_code<span class="tk-op">=</span><span class="tk-num">200</span>, body<span class="tk-op">=</span>response_body, headers<span class="tk-op">=</span>{<span class="tk-str">&#x27;Idempotent-Replay&#x27;</span>: <span class="tk-str">&#x27;false&#x27;</span>})</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">_handle_existing_key</span>(self, account_id: str, idempotency_key: str, payload_hash: str) <span class="tk-op">-&gt;</span> PaymentResponse:</span>
+<span class="line">        <span class="tk-com"># Fetch existing record state</span></span>
+<span class="line">        <span class="tk-kw">with</span> self.db_pool.<span class="tk-fn">get_connection</span>() <span class="tk-kw">as</span> conn:</span>
+<span class="line">            row <span class="tk-op">=</span> conn.<span class="tk-fn">execute</span>(</span>
+<span class="line">                <span class="tk-str">&#x27;&#x27;</span>&#x27;</span>
+<span class="line">                SELECT payload_hash, status, response_code, response_body, created_at</span>
+<span class="line">                FROM payment_idempotency</span>
+<span class="line">                WHERE account_id <span class="tk-op">=</span> <span class="tk-op">%</span>s AND idempotency_key <span class="tk-op">=</span> <span class="tk-op">%</span>s;</span>
+<span class="line">                <span class="tk-str">&#x27;&#x27;</span>&#x27;,</span>
+<span class="line">                (account_id, idempotency_key)</span>
+<span class="line">            ).<span class="tk-fn">fetchone</span>()</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> row:</span>
+<span class="line">            <span class="tk-kw">raise</span> <span class="tk-fn">RuntimeError</span>(<span class="tk-str">&#x27;Inconsistent idempotency state: key collision occurred but row missing&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># Guard: Reject payload mutations with same key (tampering / client bug)</span></span>
+<span class="line">        <span class="tk-kw">if</span> row[<span class="tk-str">&#x27;payload_hash&#x27;</span>] <span class="tk-op">!=</span> payload_hash:</span>
+<span class="line">            <span class="tk-kw">raise</span> <span class="tk-fn">DuplicateRequestException</span>(</span>
+<span class="line">                message<span class="tk-op">=</span><span class="tk-str">&#x27;Idempotency key reused with different request payload.&#x27;</span>,</span>
+<span class="line">                status_code<span class="tk-op">=</span><span class="tk-num">422</span>  <span class="tk-com"># HTTP 422 Unprocessable Entity</span></span>
+<span class="line">            )</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># If already completed, deterministic replay of cached response</span></span>
+<span class="line">        <span class="tk-kw">if</span> row[<span class="tk-str">&#x27;status&#x27;</span>] <span class="tk-op">==</span> <span class="tk-str">&#x27;COMPLETED&#x27;</span>:</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">PaymentResponse</span>(</span>
+<span class="line">                status_code<span class="tk-op">=</span>row[<span class="tk-str">&#x27;response_code&#x27;</span>],</span>
+<span class="line">                body<span class="tk-op">=</span>json.<span class="tk-fn">loads</span>(row[<span class="tk-str">&#x27;response_body&#x27;</span>]),</span>
+<span class="line">                headers<span class="tk-op">=</span>{<span class="tk-str">&#x27;Idempotent-Replay&#x27;</span>: <span class="tk-str">&#x27;true&#x27;</span>}</span>
+<span class="line">            )</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># If in-flight (&#x27;STARTED&#x27;), signal client conflict with retry guidance</span></span>
+<span class="line">        <span class="tk-kw">if</span> row[<span class="tk-str">&#x27;status&#x27;</span>] <span class="tk-op">==</span> <span class="tk-str">&#x27;STARTED&#x27;</span>:</span>
+<span class="line">            <span class="tk-kw">raise</span> <span class="tk-fn">DuplicateRequestException</span>(</span>
+<span class="line">                message<span class="tk-op">=</span><span class="tk-str">&#x27;Concurrent charge request with identical idempotency key is currently processing.&#x27;</span>,</span>
+<span class="line">                status_code<span class="tk-op">=</span><span class="tk-num">409</span>,  <span class="tk-com"># HTTP 409 Conflict</span></span>
+<span class="line">                retry_after<span class="tk-op">=</span><span class="tk-num">2</span></span>
+<span class="line">            )</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># Replay failed payment response if previously failed</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">PaymentResponse</span>(</span>
+<span class="line">            status_code<span class="tk-op">=</span>row[<span class="tk-str">&#x27;response_code&#x27;</span>],</span>
+<span class="line">            body<span class="tk-op">=</span>json.<span class="tk-fn">loads</span>(row[<span class="tk-str">&#x27;response_body&#x27;</span>]),</span>
+<span class="line">            headers<span class="tk-op">=</span>{<span class="tk-str">&#x27;Idempotent-Replay&#x27;</span>: <span class="tk-str">&#x27;true&#x27;</span>}</span>
+<span class="line">        )</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Holding DB Locks During External Gateway Calls:</strong> Opening a database transaction, acquiring an idempotency row lock, and making a synchronous HTTP call to an external payment processor (e.g., Stripe, Adyen) within that open transaction. If the payment gateway takes 3–5 seconds to respond, database connections are quickly starved, causing connection pool exhaustion and cascading system failure. The reservation (<code>STARTED</code>) must commit immediately, releasing the connection before calling the gateway, and a separate transaction must finalize the state.</li>
+          <li><strong>Omitting Request Payload Fingerprinting:</strong> Relying exclusively on the client-provided key without validating the request body. If a buggy or malicious client accidentally reuses the same idempotency key for two different transactions (e.g., a $10 donation and a $1,000 order), returning the cached result silences the second payment without processing it. Systems must hash the normalized payload (SHA-256) and reject mismatches with <code>HTTP 422 Unprocessable Entity</code>.</li>
+          <li><strong>Ignoring In-Flight Request Concurrency:</strong> Failing to handle concurrent identical requests that arrive milliseconds apart (e.g., broker redelivery during consumer rebalancing or mobile multi-touch). If the second request finds an existing record with status <code>STARTED</code>, treating it as an error or crashing results in client failure. Services must recognize in-flight locks and either cleanly return <code>HTTP 409 Conflict</code> with a <code>Retry-After</code> header or block on an internal conditional variable for short durations.</li>
+          <li><strong>Unbounded Idempotency Table Growth:</strong> Neglecting data retention policies for the idempotency table. Accumulating billions of historical keys over years bloats B-tree indexes, slowing insert throughput and vacuum operations. Production systems range-partition tables by timestamp and run scheduled background cleanup jobs to drop partitions older than the maximum retry window (typically 24 to 72 hours).</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Enterprise payment processors handling billions in transaction volume (such as Stripe, Adyen, and Shopify) design multi-region idempotency systems using local durability and transactional outbox pipelines:</p>
+        <ul>
+          <li><strong>Step 1 — Ingress Request Fingerprinting:</strong> The API gateway extracts the <code>Idempotency-Key</code> header, client credentials, and computes a deterministic SHA-256 hash of the canonicalized request body (amount, currency, recipient, customer ID).</li>
+          <li><strong>Step 2 — Atomic State Reservation:</strong> Inside the local regional database, a transaction inserts a record into <code>payment_idempotency</code> with <code>status = 'STARTED'</code>. A database unique constraint on <code>(account_id, idempotency_key)</code> ensures that only one worker can proceed.</li>
+          <li><strong>Step 3 — Collision & Replay Resolution:</strong> If a unique key collision occurs, the system reads the existing record: if <code>status == 'COMPLETED'</code>, it verifies the payload hash and returns the cached HTTP response with <code>Idempotent-Replay: true</code>; if <code>status == 'STARTED'</code>, it returns <code>HTTP 409 Conflict</code> (or polls with exponential backoff for up to 3 seconds).</li>
+          <li><strong>Step 4 — Atomic Execution & Outbox Commit:</strong> The worker authorizes the charge with the upstream payment processor (e.g., Visa/Mastercard rail). Upon receiving success, it opens an atomic local DB transaction to: (a) create the charge record, (b) write the <code>charge.completed</code> event to the <code>transactional_outbox</code>, and (c) update the idempotency record to <code>status = 'COMPLETED'</code> along with the response payload.</li>
+          <li><strong>Step 5 — Asynchronous Outbox Relay & CDC:</strong> An outbox poller or Change Data Capture (CDC) engine (such as Debezium tailing the Postgres WAL) streams outbox events to Apache Kafka topics for downstream ledger reconciliation, email receipts, and customer webhooks without adding latency to the client response.</li>
+        </ul>
+        <p>This battle-tested sequence ensures that financial state mutations, idempotency reservations, and outbound event notifications stay perfectly synchronized without distributed transactions.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Never separate idempotency tracking from the underlying business mutation: <strong>atomically commit the idempotency marker, business entity, and outbox event in the same local ACID transaction</strong>, using compound unique constraints to defeat race conditions and returning cached results on retries.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

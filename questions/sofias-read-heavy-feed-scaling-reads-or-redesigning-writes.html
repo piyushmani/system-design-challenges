@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sofia&#x27;s read-heavy feed: scaling reads or redesigning writes? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">29 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Read-Heavy Systems</span>
+      <span class="tag tag--green">News Feeds</span>
+      <span class="tag tag--amber">Scaling Reads</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Sofia&#x27;s read-heavy feed: scaling reads or redesigning writes?</h1>
+      <p class="q-scenario"><strong>Sofia</strong> is a backend systems architect responsible for scaling an expanding social media platform. The platform faces an intensely skewed read-heavy traffic distribution (90% reads, 10% writes), peaking at <code>20,000 reads/sec</code> and <code>2,000 writes/sec</code>. Users expect their timeline feeds to render in under <code>150ms</code> (p95), though product requirements permit feeds to be eventually consistent by a few seconds. The write profile is dominated by append operations—such as publishing new posts, liking items, and establishing follow links—with minimal in-place record updates. The existing single-primary relational SQL database is experiencing catastrophic saturation: multi-table joins are choking read latencies, read replicas exhibit severe replication lag during spikes, and cache-aside invalidation schemes are collapsing under stampeding cache misses.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Maintain the single SQL primary database, upgrade its hardware (vertical scaling), and introduce a robust Redis read-through cache that invalidates synchronously upon writes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Implement a primary-write, read-replica SQL setup using asynchronous replication. Direct the majority of reads to the replicas while sending crucial reads to the primary.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Embrace CQRS: utilize a streamlined write model (such as a single primary or append-only events), broadcast write events through an asynchronous pipeline, and construct denormalized read models optimized for querying to serve clients. Tolerate eventual consistency while establishing protocols for data reconciliation and replays.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Migrate to a multi-master, synchronous distributed SQL database deployed across multiple datacenters or zones, allowing any node to process both reads and writes with strict consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: CQRS with Asynchronous Materialized Feed Projections</h3>
+        <p>In social media platforms, relational normalized schemas fail at scale because assembling a dynamic timeline requires multi-way joins across <code>users</code>, <code>followers</code>, <code>posts</code>, <code>likes</code>, and <code>media</code>. Executing these joins at 20,000 QPS overwhelms database CPU and memory bandwidth. <strong>Command Query Responsibility Segregation (CQRS)</strong> fundamentally decouples the write ingestion path from the read query path. The write path accepts appends into a high-throughput, append-only store or streamlined relational table and immediately emits domain events (e.g., <code>PostCreated</code>, <code>UserFollowed</code>) to an event stream like Kafka. Asynchronous stream consumers (fan-out workers) project these events into <strong>pre-aggregated, denormalized read models</strong>—such as Redis Sorted Sets or wide-column stores (Cassandra/ScyllaDB)—where each user's feed is a pre-materialized list of post IDs. Reads become simple $O(1)$ or $O(K)$ range slices requiring zero runtime joins, effortlessly serving 20,000 QPS within single-digit milliseconds while honoring the acceptable eventual consistency SLA.</p>
+        <ul>
+          <li><strong>Eliminates runtime relational joins:</strong> Read queries fetch pre-materialized, denormalized timeline structures, reducing complex multi-table joins to simple single-key range queries (e.g., Redis <code>ZREVRANGE</code>).</li>
+          <li><strong>High-throughput append-only writes:</strong> Stripping relational constraints and indexes from the write path allows the command engine to process 2,000 writes/sec without locking or contention.</li>
+          <li><strong>Isolated scaling vectors:</strong> Read-serving infrastructure (cache clusters, document stores) can be scaled horizontally and independently from the event ingestion and persistence pipeline.</li>
+          <li><strong>Resilient replayability:</strong> Storing immutable events in an event log enables background workers to rebuild, backfill, or modify read projection schemas at any time without downtime.</li>
+          <li><strong>Natural alignment with business SLAs:</strong> Sub-150ms read latency is guaranteed through pre-computed timelines, while the tolerated 2-3 second propagation delay provides adequate headroom for stream fan-out.</li>
+        </ul>
+        <p>At scale, relational normalization is the enemy of sub-100ms read latencies. Decoupling reads from writes via CQRS and asynchronously pre-computing timeline projections converts an unscalable join problem into an effortless, linearly scalable range-scan operation.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>A — Vertical Scaling + Synchronous Cache Invalidation</h4>
+          </div>
+          <p>Vertical hardware scaling hits a hard technical and financial ceiling. Furthermore, invalidating cache entries synchronously on every write at 2,000 writes/sec causes write amplification and massive cache stampedes (thundering herds). Evicting the feeds of thousands of followers on every new post forces subsequent read requests to hit the overloaded primary database, rapidly triggering connection exhaustion and total outage.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚠️</span>
+            <h4>B — Primary-Write with Asynchronous Read Replicas</h4>
+          </div>
+          <p>Adding read replicas distributes query volume but does not fix the fundamental algorithmic bottleneck: executing expensive, un-indexed multi-table relational joins across millions of rows at 20,000 queries per second. Replicas still replicate every write via WAL logs, consuming CPU and disk I/O, while asynchronous replication lag causes stale reads and replica desynchronization under load.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>D — Synchronous Multi-Master Distributed SQL</h4>
+          </div>
+          <p>Multi-master distributed SQL databases (e.g., CockroachDB, Spanner) enforce strict ACID transactional consistency across distributed nodes via consensus protocols (Raft/Paxos) and two-phase commit. This adds significant network coordination latency to every write and still requires expensive distributed joins across shards for timeline assembly, completely over-engineering consistency where eventual consistency was explicitly acceptable.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — CQRS with Asynchronous Materialized Feed Projections ✓</h4>
+          </div>
+          <p>Embrace CQRS: utilize a streamlined write model (such as a single primary or append-only events), broadcast write events through an asynchronous pipeline, and construct denormalized read models optimi</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read Latency (p95)</th><th>Write Scalability</th><th>Join Elimination</th><th>Cache Stampede Resilience</th><th>Eventual Consistency Alignment</th><th>Operational Overhead</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Vertical Scaling + Synchronous Cache</td><td>Poor Under Stampedes ❌</td><td>Hardware Bottleneck ❌</td><td>No (Joins Retained) ❌</td><td>Vulnerable to Invalidation Herd ❌</td><td>Strict but Brittle ⚠</td><td>Low initially, High at limit ⚠</td></tr>
+            <tr><td class="tt-option">B — Primary-Replica SQL Cluster</td><td>High Tail Latency (Joins) ❌</td><td>Moderate ⚠</td><td>No (Joins on Replicas) ❌</td><td>Replication Lag Issues ❌</td><td>Inconsistent Replicas ⚠</td><td>Moderate ⚠</td></tr>
+            <tr><td class="tt-option">C — CQRS with Materialized Read Models</td><td>Single-Digit ms (&lt;50ms) ✅</td><td>High (Append-Only) ✅</td><td>Yes (Pre-computed Feeds) ✅</td><td>Immune to Invalidation Herd ✅</td><td>Perfect Match ✅</td><td>Higher Operational Complexity ⚠</td></tr>
+            <tr><td class="tt-option">D — Synchronous Distributed SQL</td><td>Moderate to High (Consensus) ⚠</td><td>Constrained by WAN Consensus ❌</td><td>Distributed Joins are Expensive ❌</td><td>High Overhead ⚠</td><td>Over-Engineered Strict ACID ❌</td><td>High Complexity ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Vertical Scaling + Synchronous Cache</h4>
+          </div>
+          <p>Early-stage startups with simple relational schemas and modest QPS (<500 reads/sec) where developer velocity and operational simplicity outweigh scaling limits.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Primary-Replica SQL Cluster</h4>
+          </div>
+          <p>Enterprise reporting and business intelligence systems where reads consist of periodic analytical queries across normalized tables that don't need real-time user-facing latency.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — CQRS with Materialized Read Models</h4>
+          </div>
+          <p>High-scale, read-intensive consumer applications (news feeds, activity streams, e-commerce storefronts) where read QPS is massive and latency must remain sub-150ms.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Synchronous Distributed SQL</h4>
+          </div>
+          <p>Global financial ledgering, payment gateways, and banking core engines requiring strict multi-region serializability and zero data loss.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> CQRS Event-Driven Feed Projection Pipeline</h3>
+        <p>Writes are accepted into an append-only command log and streamed asynchronously via Kafka. Fan-out workers project updates directly into pre-aggregated Redis timeline mailboxes for sub-millisecond client queries.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    autonumber
+    participant Author as Author Client
+    participant CommandAPI as Write / Command API
+    participant WriteDB as Append-Only Event Store
+    participant Broker as Kafka (post-events)
+    participant Fanout as Fanout Worker Fleet
+    participant ReadCache as Redis (User Timelines)
+    participant Reader as Follower Client
+    participant ReadAPI as Read / Query API
+    Author-&gt;&gt;CommandAPI: POST /posts/create (Content, MediaID)
+    CommandAPI-&gt;&gt;WriteDB: Insert Post (Append-Only)
+    CommandAPI-&gt;&gt;Broker: Publish PostCreated Event
+    CommandAPI--&gt;&gt;Author: 201 Created (PostID)
+    Broker-&gt;&gt;Fanout: Consume PostCreated Event
+    Fanout-&gt;&gt;Fanout: Query Follower IDs for Author
+    Fanout-&gt;&gt;ReadCache: LPUSH / ZADD to Follower Timelines (Batch)
+    Note over ReadCache: Feeds materialized within 500ms
+    Reader-&gt;&gt;ReadAPI: GET /feed/timeline?limit=20
+    ReadAPI-&gt;&gt;ReadCache: ZREVRANGEBYSCORE (User:Timeline)
+    ReadCache--&gt;&gt;ReadAPI: Return 20 Pre-sorted PostIDs
+    ReadAPI--&gt;&gt;Reader: 200 OK (Hydrated Feed in &lt;30ms)">sequenceDiagram
+    autonumber
+    participant Author as Author Client
+    participant CommandAPI as Write / Command API
+    participant WriteDB as Append-Only Event Store
+    participant Broker as Kafka (post-events)
+    participant Fanout as Fanout Worker Fleet
+    participant ReadCache as Redis (User Timelines)
+    participant Reader as Follower Client
+    participant ReadAPI as Read / Query API
+    Author-&gt;&gt;CommandAPI: POST /posts/create (Content, MediaID)
+    CommandAPI-&gt;&gt;WriteDB: Insert Post (Append-Only)
+    CommandAPI-&gt;&gt;Broker: Publish PostCreated Event
+    CommandAPI--&gt;&gt;Author: 201 Created (PostID)
+    Broker-&gt;&gt;Fanout: Consume PostCreated Event
+    Fanout-&gt;&gt;Fanout: Query Follower IDs for Author
+    Fanout-&gt;&gt;ReadCache: LPUSH / ZADD to Follower Timelines (Batch)
+    Note over ReadCache: Feeds materialized within 500ms
+    Reader-&gt;&gt;ReadAPI: GET /feed/timeline?limit=20
+    ReadAPI-&gt;&gt;ReadCache: ZREVRANGEBYSCORE (User:Timeline)
+    ReadCache--&gt;&gt;ReadAPI: Return 20 Pre-sorted PostIDs
+    ReadAPI--&gt;&gt;Reader: 200 OK (Hydrated Feed in &lt;30ms)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> CQRS Stream Worker for Asynchronous Feed Fan-out</h3>
+        <p>An asynchronous stream consumer processing PostCreated events, determining follower distribution, and batching updates into Redis read-model caches.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> FeedProjectionWorker:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, kafka_consumer, graph_service, redis_pool):</span>
+<span class="line">        self.consumer <span class="tk-op">=</span> kafka_consumer</span>
+<span class="line">        self.graph <span class="tk-op">=</span> graph_service</span>
+<span class="line">        self.redis <span class="tk-op">=</span> redis_pool</span>
+<span class="line">        self.CELEBRITY_THRESHOLD <span class="tk-op">=</span> <span class="tk-num">25000</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">process_event_loop</span>(self):</span>
+<span class="line">        <span class="tk-kw">for</span> message <span class="tk-kw">in</span> self.consumer.<span class="tk-fn">poll_batch</span>(batch_size<span class="tk-op">=</span><span class="tk-num">100</span>):</span>
+<span class="line">            event <span class="tk-op">=</span> <span class="tk-fn">json_deserialize</span>(message.value)</span>
+<span class="line">            <span class="tk-kw">if</span> event.type <span class="tk-op">==</span> <span class="tk-str">&#x27;POST_CREATED&#x27;</span>:</span>
+<span class="line">                self.<span class="tk-fn">fanout_post</span>(event)</span>
+<span class="line">            <span class="tk-kw">elif</span> event.type <span class="tk-op">==</span> <span class="tk-str">&#x27;POST_DELETED&#x27;</span>:</span>
+<span class="line">                self.<span class="tk-fn">remove_post</span>(event)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">fanout_post</span>(self, event):</span>
+<span class="line">        author_id <span class="tk-op">=</span> event.author_id</span>
+<span class="line">        post_id <span class="tk-op">=</span> event.post_id</span>
+<span class="line">        timestamp <span class="tk-op">=</span> event.created_at</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># Check if author is a high-degree celebrity node</span></span>
+<span class="line">        follower_count <span class="tk-op">=</span> self.graph.<span class="tk-fn">get_follower_count</span>(author_id)</span>
+<span class="line">        <span class="tk-kw">if</span> follower_count <span class="tk-op">&gt;=</span> self.CELEBRITY_THRESHOLD:</span>
+<span class="line">            <span class="tk-com"># Store only in celebrity recent posts set; followers pull at read time</span></span>
+<span class="line">            self.redis.<span class="tk-fn">zadd</span>(f<span class="tk-str">&#x27;celeb:posts:{author_id}&#x27;</span>, {post_id: timestamp})</span>
+<span class="line">            <span class="tk-kw">return</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># Stream followers in chunks of 1,000 to prevent memory spikes</span></span>
+<span class="line">        cursor <span class="tk-op">=</span> <span class="tk-lit">None</span></span>
+<span class="line">        <span class="tk-kw">while</span> <span class="tk-lit">True</span>:</span>
+<span class="line">            followers, cursor <span class="tk-op">=</span> self.graph.<span class="tk-fn">get_followers_page</span>(author_id, cursor<span class="tk-op">=</span>cursor, page_size<span class="tk-op">=</span><span class="tk-num">1000</span>)</span>
+<span class="line">            <span class="tk-kw">if</span> <span class="tk-kw">not</span> followers:</span>
+<span class="line">                <span class="tk-kw">break</span></span>
+<span class="line"></span>
+<span class="line">            <span class="tk-com"># Pipeline Redis updates to minimize network roundtrips</span></span>
+<span class="line">            pipe <span class="tk-op">=</span> self.redis.<span class="tk-fn">pipeline</span>()</span>
+<span class="line">            <span class="tk-kw">for</span> follower_id <span class="tk-kw">in</span> followers:</span>
+<span class="line">                feed_key <span class="tk-op">=</span> f<span class="tk-str">&#x27;feed:user:{follower_id}&#x27;</span></span>
+<span class="line">                pipe.<span class="tk-fn">zadd</span>(feed_key, {post_id: timestamp})</span>
+<span class="line">                <span class="tk-com"># Trim timeline to retain only the most recent 800 items</span></span>
+<span class="line">                pipe.<span class="tk-fn">zremrangebyrank</span>(feed_key, <span class="tk-num">0</span>, <span class="tk-op">-</span><span class="tk-num">801</span>)</span>
+<span class="line">            pipe.<span class="tk-fn">execute</span>()</span>
+<span class="line"></span>
+<span class="line">            <span class="tk-kw">if</span> cursor is <span class="tk-lit">None</span>:</span>
+<span class="line">                <span class="tk-kw">break</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Pure fan-out on write for mega-influencers:</strong> Attempting to insert a post into 20 million follower timelines simultaneously, locking up Kafka queues and exhausting Redis memory.</li>
+          <li><strong>Full object payload duplication:</strong> Storing the entire post, author profile, and comments inside every follower's timeline list rather than storing lightweight <code>post_id</code> references.</li>
+          <li><strong>Lack of backpressure and dead-letter queues:</strong> Allowing projection worker failures to halt the event consumption pipeline, causing feed updates to stall indefinitely.</li>
+          <li><strong>Failing to support out-of-order event delivery:</strong> Ingesting events without monotonic logical timestamps or version tags, causing edited or deleted posts to be overwritten by delayed create events.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Every major social platform (Twitter/X, Facebook, LinkedIn, Instagram) migrated away from monolithic relational joins toward fan-out CQRS architectures early in their growth curves. Materializing feeds into user-centric timelines is the proven blueprint for handling tens of thousands of feed reads per second.</p>
+        <ul>
+          <li><strong>Hybrid Push/Pull fan-out:</strong> Push new posts into the timeline mailboxes of followers for regular users (fan-out on write), but pull celebrity posts at query time (fan-out on read) to prevent write explosions when accounts with millions of followers publish.</li>
+          <li><strong>Two-tier materialized caching:</strong> Store only the most recent 800 post IDs in Redis sorted sets per active user; fetch full post contents (hydrated payload) in a single batched multi-get query.</li>
+          <li><strong>Active vs. Inactive user pruning:</strong> Only materialize feeds for users who have logged in within the past 14 days. If an inactive user returns, compute their feed on-demand and cache it.</li>
+          <li><strong>CDC with Debezium:</strong> If preserving an existing SQL write model, use Change Data Capture (Debezium/Kafka Connect) to stream commit logs into Kafka topics without modifying application write code.</li>
+          <li><strong>Read-your-own-writes handling:</strong> When an author posts, immediately append the post to the local client state or prepend it directly to the author's own timeline cache so they perceive instantaneous consistency.</li>
+        </ul>
+        <p>Architectural maturity means recognizing that read models and write models have fundamentally conflicting optimization targets. CQRS allows each side to achieve maximum performance without compromise.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When joins choke read performance at scale, <strong>stop joining at read time</strong>; use CQRS to pre-materialize denormalized feeds asynchronously.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

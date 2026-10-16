@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Choosing a Storage Architecture for High-Cardinality IoT Time-Series Data — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">22 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Time-Series</span>
+      <span class="tag tag--green">IoT Data</span>
+      <span class="tag tag--amber">Storage Patterns</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Choosing a Storage Architecture for High-Cardinality IoT Time-Series Data</h1>
+      <p class="q-scenario"><strong>Ethan</strong> leads the backend team at a firm collecting telemetry from roughly <strong>200,000 edge devices</strong>, each sending <strong>6 to 10 numeric metrics per second</strong>. That is about <strong>1.2 to 2 million data points per second</strong>, or roughly 100 to 170 billion per day. Dashboards need <strong>sub-second to low-second</strong> queries over the most recent <strong>5 to 15 minutes</strong>, analysts need ad-hoc and trend queries across <strong>months or years</strong>, and rare investigations need <strong>full-resolution scans over 30 to 90 days</strong>. The data has <strong>high cardinality</strong> (device, metric, tags), storage cost matters, and the platform must survive a <strong>regional outage</strong>. He needs the architecture that best balances ingest scale, fast recent queries, cheap long-term storage, availability, and observability.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Use a single, strongly consistent relational database (sharded PostgreSQL or MySQL) with time-based partitioning and transactional writes, keep full-resolution raw data for the entire retention period, and maintain materialized views for aggregates.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Use a fully managed time-series database (e.g., InfluxCloud or TimescaleDB) in one primary region with native downsampling and retention, ingest through a synchronous API, and add a read replica to serve dashboards.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Write all raw events to object storage (e.g., S3) as append-only blobs, compute aggregates with scheduled batch ETL, and query the data lake with Trino/Presto, accepting minutes-to-hours latency for most queries.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Build a tiered hot/warm/cold architecture: ingest into a write-heavy store (DynamoDB, Cassandra, or similar) with a TTL for the hot window, use a Kafka plus Flink/Beam stream layer to downsample and archive full-resolution data to S3 as Parquet, and keep pre-computed recent rollups plus a thin index for dashboards.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Tiered Hot/Warm/Cold Architecture</h3>
+        <p>Each requirement in this scenario pulls on a different storage property: <strong>write throughput</strong> (1.2 to 2 million points per second), <strong>low-latency reads on a tiny recent window</strong>, <strong>cheap capacity for years of data</strong>, and <strong>cross-region durability</strong>. No single store optimizes all four, so the right answer is a <strong>tiered hot/warm/cold architecture</strong> that puts each slice of data on the storage that suits how it is queried. Dashboards only touch the last 5 to 15 minutes and full-resolution scans are rare, so most of the data can sit in cheap columnar object storage while a small, hot, pre-aggregated window serves the interactive queries. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Ingest is decoupled and buffered:</strong> Kafka absorbs bursts and partitions by device, so devices never wait on a database, consumers can fall behind and catch up, and raw events can be replayed to fix a bug or rebuild a rollup.</li>
+          <li><strong>Dashboards read pre-computed rollups:</strong> A dashboard panel needs tens of points, not millions of raw samples. Stream-computed 1s/10s/1m rollups plus a thin index (device to series) deliver sub-second reads without scanning raw data.</li>
+          <li><strong>Long-term storage is cheap and queryable:</strong> Parquet on S3 (ideally under an Iceberg or Delta table format) is columnar, compressed, and costs a small fraction of provisioned database storage. Even at an optimistic 16 bytes per raw point (timestamp plus value, before series keys and compression), 90 days is roughly 150 to 250 TB, which is what rules out keeping everything on database disks.</li>
+          <li><strong>Resilience is built from replaceable pieces:</strong> Cross-region replication of the log (e.g., MirrorMaker 2), S3 cross-region replication, and a multi-DC hot store (Cassandra, or DynamoDB global tables) mean a regional outage degrades freshness rather than durability, and Kafka retention plus S3 can rebuild any derived tier.</li>
+          <li><strong>Observability comes naturally:</strong> Consumer lag, event-time watermark delay, and the age of the latest data point per tier give direct freshness SLOs, so ingest problems show up before dashboards go blank.</li>
+        </ul>
+        <p>A production-grade version includes <strong>idempotent writes</strong> (deterministic keys such as device + metric + timestamp), <strong>overlapping tier boundaries</strong> (hot TTL longer than rollup lag), <strong>file compaction</strong> on S3, and <strong>tier-aware query routing</strong>. Track end-to-end freshness, consumer lag, and cost per million points per tier; if recent-query latency or cost drifts, adjust the hot window and rollup resolutions before adding another store.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>A — Sharded Relational Database</h4>
+          </div>
+          <p>A relational database offers strong transactions that telemetry does not need: the data is append-only and rarely updated. At 1.2 to 2 million inserts per second, even well-batched <code>COPY</code> or multi-row inserts require many shards, each maintaining indexes on a high-cardinality key that slow every write. Keeping full-resolution data for the whole retention period on database disks is the most expensive tier available, and materialized-view refreshes over billions of rows compete with ingest for the same resources. Cross-region replication of an OLTP store adds lag and failover complexity. <strong>Caveat:</strong> at a few tens of thousands of points per second, PostgreSQL with time partitioning is a simple and excellent choice.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>B — Managed Time-Series Database in One Region</h4>
+          </div>
+          <p>A managed TSDB is a strong fit for mid-scale telemetry and offers native downsampling, but this design has two structural gaps. Everything lives in <strong>one region</strong>, and a read replica in that region does not help during a regional outage. <strong>Synchronous ingestion</strong> also couples 200,000 devices directly to database availability: a slowdown turns into timeouts and data loss at the edge unless a buffer is added. High-cardinality series and full-resolution retention are also where managed TSDB bills and index sizes grow fastest. <strong>Caveat:</strong> if volume were 10 to 50 times smaller and one region were acceptable, this would be the simplest, lowest-operations answer.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🪣</span>
+            <h4>C — Object Storage With Batch ETL</h4>
+          </div>
+          <p>This is the right design for the <em>cold tier</em> and the wrong design for the whole system. Object storage plus Trino is cheap, scales almost without limit, and handles ad-hoc historical scans well, but batch ETL and a lake query engine answer in minutes to hours, which misses the sub-second dashboard requirement for the last 5 to 15 minutes. Streaming many small objects also creates a small-files problem that degrades query performance unless compaction runs continuously. <strong>Caveat:</strong> for purely offline analytics with no interactive dashboards, this is the cheapest and simplest option.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Tiered Hot/Warm/Cold Architecture ✓</h4>
+          </div>
+          <p>Build a tiered hot/warm/cold architecture: ingest into a write-heavy store (DynamoDB, Cassandra, or similar) with a TTL for the hot window, use a Kafka plus Flink/Beam stream layer to downsample and a</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Ingest Scalability (1.2–2M points/s)</th><th>Recent-Query Latency (5–15 min)</th><th>Long-Term Storage Cost</th><th>Regional Resilience</th><th>Ad-hoc Historical Queries</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Sharded Relational DB</td><td>Low–Medium (many shards needed) ❌</td><td>Good until load grows, then degrades ⚠</td><td>Very high ❌</td><td>Weak (cross-region OLTP replication) ❌</td><td>Moderate (large scans are expensive) ⚠</td><td>High (shard management, rebalancing) ❌</td></tr>
+            <tr><td class="tt-option">B — Managed TSDB, One Region</td><td>Medium (sync API couples devices to DB) ⚠</td><td>Good ✅</td><td>Medium–High at this volume ⚠</td><td>Single region ❌</td><td>Good via downsampling, weak for long raw scans ⚠</td><td>Low (managed) ✅</td></tr>
+            <tr><td class="tt-option">C — Object Storage + Batch ETL</td><td>Very high ✅</td><td>Minutes to hours ❌</td><td>Very low ✅</td><td>High (cross-region replication) ✅</td><td>Excellent ✅</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Tiered Hot/Warm/Cold ✓</td><td>Very high ✅</td><td>Sub-second to low seconds ✅</td><td>Low ✅</td><td>High (replicated log, S3, multi-DC hot store) ✅</td><td>Good ✅</td><td>High (most moving parts) ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sharded Relational DB</h4>
+          </div>
+          <p>Moderate write rates (tens of thousands of points per second), strong relational requirements such as joins with business data, and a team that already runs PostgreSQL or MySQL well.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Managed TSDB, One Region</h4>
+          </div>
+          <p>Mid-scale telemetry in a single region where regional outages are tolerable, the team wants minimal operations, and series cardinality stays within the vendor's comfortable range.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Object Storage + Batch ETL</h4>
+          </div>
+          <p>Offline analytics, compliance archives, or ML feature pipelines where results can arrive minutes or hours later and no interactive dashboards exist. Also the right choice for the cold tier of a larger design.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Tiered Hot/Warm/Cold</h4>
+          </div>
+          <p>Millions of points per second, high cardinality, interactive dashboards on recent data, long retention for trends, rare full-resolution scans, and a requirement to survive a regional outage.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Tiered Telemetry Architecture</h3>
+        <p>Ingest is buffered in Kafka, fanned out to a hot store and a stream processor, and archived to S3. Dashboards read the hot tier; history reads Parquet:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    DEV[&quot;200k edge devices&quot;] --&gt; GW[&quot;Ingest gateway&quot;]
+    GW --&gt; K[&quot;Kafka, partitioned by device&quot;]
+    K --&gt; SINK[&quot;Hot-store writer, idempotent&quot;]
+    SINK --&gt; HOT[&quot;Hot store, TTL 24 to 48 h&quot;]
+    K --&gt; FL[&quot;Flink or Beam, event-time windows&quot;]
+    FL --&gt; RU[&quot;Recent rollups 1s, 10s, 1m&quot;]
+    FL --&gt; S3[&quot;S3 Parquet, Iceberg tables&quot;]
+    RU --&gt; API[&quot;Query API with tier routing&quot;]
+    HOT --&gt; API
+    API --&gt; DASH[&quot;Dashboards, last 5 to 15 min&quot;]
+    S3 --&gt; TR[&quot;Trino, Athena or Spark&quot;]
+    TR --&gt; HIST[&quot;Ad-hoc and historical analysis&quot;]
+    K -.-&gt;|MirrorMaker 2| K2[&quot;Kafka in Region B&quot;]
+    S3 -.-&gt;|Cross-region replication| S3B[&quot;S3 in Region B&quot;]">flowchart LR
+    DEV[&quot;200k edge devices&quot;] --&gt; GW[&quot;Ingest gateway&quot;]
+    GW --&gt; K[&quot;Kafka, partitioned by device&quot;]
+    K --&gt; SINK[&quot;Hot-store writer, idempotent&quot;]
+    SINK --&gt; HOT[&quot;Hot store, TTL 24 to 48 h&quot;]
+    K --&gt; FL[&quot;Flink or Beam, event-time windows&quot;]
+    FL --&gt; RU[&quot;Recent rollups 1s, 10s, 1m&quot;]
+    FL --&gt; S3[&quot;S3 Parquet, Iceberg tables&quot;]
+    RU --&gt; API[&quot;Query API with tier routing&quot;]
+    HOT --&gt; API
+    API --&gt; DASH[&quot;Dashboards, last 5 to 15 min&quot;]
+    S3 --&gt; TR[&quot;Trino, Athena or Spark&quot;]
+    TR --&gt; HIST[&quot;Ad-hoc and historical analysis&quot;]
+    K -.-&gt;|MirrorMaker 2| K2[&quot;Kafka in Region B&quot;]
+    S3 -.-&gt;|Cross-region replication| S3B[&quot;S3 in Region B&quot;]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent Hot Writes, Event-Time Rollups, and Tier-Aware Routing</h3>
+        <p>A hot-store writer that is safe under Kafka replays, a stream job that tolerates late data, and a query router that sends each request to the cheapest tier that can answer it:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Hot-store writer: at-least-once delivery from Kafka is safe because writes are idempotent</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">writeHot</span>(batch):</span>
+<span class="line">    <span class="tk-kw">for</span> p <span class="tk-kw">in</span> batch:</span>
+<span class="line">        key <span class="tk-op">=</span> (p.deviceId, p.metric, <span class="tk-fn">hourBucket</span>(p.ts))</span>
+<span class="line">        hotStore.<span class="tk-fn">put</span>(key, column <span class="tk-op">=</span> p.ts, value <span class="tk-op">=</span> p.value, ttl <span class="tk-op">=</span> <span class="tk-num">48h</span>)   <span class="tk-com">// same key + ts overwrites, no duplicates</span></span>
+<span class="line">    kafka.<span class="tk-fn">commitOffsets</span>(batch)                                        <span class="tk-com">// commit only after the write is durable</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Stream job: event-time rollups tolerate late and out-of-order data</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">buildRollups</span>(stream):</span>
+<span class="line">    stream.<span class="tk-fn">withWatermarks</span>(maxOutOfOrder <span class="tk-op">=</span> <span class="tk-num">30s</span>)</span>
+<span class="line">          .<span class="tk-fn">keyBy</span>(p <span class="tk-op">-&gt;</span> (p.deviceId, p.metric))</span>
+<span class="line">          .<span class="tk-fn">window</span>(<span class="tk-fn">Tumbling</span>(<span class="tk-num">10s</span>)).<span class="tk-fn">allowedLateness</span>(<span class="tk-num">2m</span>)</span>
+<span class="line">          .<span class="tk-fn">aggregate</span>(count, min, max, sum, quantileSketch)</span>
+<span class="line">          .<span class="tk-fn">sinkTo</span>(rollupStore)                                        <span class="tk-com">// read by dashboards</span></span>
+<span class="line">    stream.<span class="tk-fn">batch</span>(maxAge <span class="tk-op">=</span> <span class="tk-num">5m</span>, maxSize <span class="tk-op">=</span> 256MB)</span>
+<span class="line">          .<span class="tk-fn">writeParquet</span>(s3, partitionBy <span class="tk-op">=</span> [date, hour, deviceBucket]) <span class="tk-com">// compact small files later</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Query router: pick the tier by time range and resolution</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">query</span>(metric, devices, <span class="tk-kw">from</span>, to, needRaw):</span>
+<span class="line">    <span class="tk-kw">if</span> needRaw <span class="tk-kw">and</span> (to <span class="tk-op">-</span> <span class="tk-kw">from</span>) <span class="tk-op">&gt;</span> <span class="tk-num">6h</span>:   <span class="tk-kw">return</span> trino.<span class="tk-fn">submitAsync</span>(<span class="tk-fn">rawScan</span>(metric, devices, <span class="tk-kw">from</span>, to))   <span class="tk-com">// minutes, rare</span></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">from</span> <span class="tk-op">&gt;=</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> <span class="tk-num">15m</span>:            <span class="tk-kw">return</span> rollupStore.<span class="tk-fn">read</span>(metric, devices, <span class="tk-kw">from</span>, to)             <span class="tk-com">// dashboards, tens of points</span></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">from</span> <span class="tk-op">&gt;=</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> <span class="tk-num">48h</span>:            <span class="tk-kw">return</span> hotStore.<span class="tk-fn">scan</span>(metric, devices, <span class="tk-kw">from</span>, to)                <span class="tk-com">// recent raw, bounded scan</span></span>
+<span class="line">    <span class="tk-kw">return</span> trino.<span class="tk-fn">query</span>(rollups1m, metric, devices, <span class="tk-kw">from</span>, to)                                          <span class="tk-com">// months and years of trends</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Unbounded tag cardinality:</strong> Putting request IDs, firmware strings, or free-text values in tags multiplies series count and blows up the hot store, the index, and the rollups. Set cardinality budgets and enforce them at ingest.</li>
+          <li><strong>Partitioning by time only:</strong> All current writes land on the newest partition, creating a hot spot. Partition by device bucket plus a time window.</li>
+          <li><strong>Treating a wide-column store as an analytics engine:</strong> Cross-device aggregations over raw rows are slow and expensive there. Serve them from rollups or an OLAP engine.</li>
+          <li><strong>Ignoring late and out-of-order data:</strong> Devices reconnect and flush buffered samples. Use event-time watermarks with allowed lateness, and keep a path to recompute rollups from raw data.</li>
+          <li><strong>The small-files problem on S3:</strong> Streaming writers that flush tiny files per minute cripple Trino and Athena. Batch by size or age and compact to a few hundred MB per file.</li>
+          <li><strong>Non-idempotent writes:</strong> Kafka consumers are at-least-once, so replays create duplicates unless keys are deterministic (device + metric + timestamp) or deduplicated downstream.</li>
+          <li><strong>No overlap between tiers:</strong> If the hot TTL is shorter than rollup lag plus archive lag, dashboards show gaps. Keep the hot window comfortably longer than the slowest downstream tier.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams build this architecture <strong>from the bottom up</strong>, adding a tier only when a measured requirement demands it. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Size the problem:</strong> Measure points per second, series cardinality, payload size, retention, and the real query mix. Decide which queries are interactive (seconds) and which are analytical (minutes are fine).</li>
+          <li><strong>Step 1 — Buffer first:</strong> Put a durable log (Kafka, Kinesis, or Pulsar) in front of everything, partitioned by device, and have edge agents batch and compress samples (for example one message per device every few seconds) to cut per-request overhead.</li>
+          <li><strong>Step 2 — Archive raw data early:</strong> Land raw events in S3 as Parquet under Iceberg or Delta. It is the cheapest durable copy, supports replay, and makes every later tier rebuildable.</li>
+          <li><strong>Step 3 — Add the hot tier and rollups:</strong> Choose the hot store by query shape (key lookups favor wide-column stores; flexible slicing favors a TSDB or OLAP engine), and stream-compute 1s/10s/1m rollups for dashboards.</li>
+          <li><strong>Step 4 — Query engine for history:</strong> Use Trino, Athena, or Spark with date and device-bucket partition pruning, and compact files continuously. Serve long-range trends from 1m/1h rollups and reserve raw scans for rare investigations.</li>
+          <li><strong>Step 5 — Multi-region and observability:</strong> Replicate the log and object storage, set freshness and lag SLOs, enforce cardinality budgets, and track cost per tier.</li>
+        </ul>
+        <p>Add each tier because a measurement demands it, not because the architecture diagram looks complete.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>No single store fits ingest rate, recent-query latency, cheap retention, and regional resilience at once. <strong>Match each time window to the storage built for how it is queried</strong>: a buffered log for ingest, a small hot tier with rollups for dashboards, and Parquet on object storage for history. The price is operational complexity, so lean on managed services and keep raw data in S3 as the source of truth for rebuilding everything else.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

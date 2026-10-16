@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Balancing Inventory Accuracy and Read Speed in an Event-Driven Order Flow — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">21 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Inventory Management</span>
+      <span class="tag tag--green">Event-Driven Architecture</span>
+      <span class="tag tag--amber">Consistency</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Balancing Inventory Accuracy and Read Speed in an Event-Driven Order Flow</h1>
+      <p class="q-scenario"><strong>Liam</strong>, a backend engineer, is designing the order-processing flow for a <strong>high-volume e-commerce platform</strong> that handles <strong>thousands of events per second</strong>. Product and checkout pages need <strong>low-latency inventory reads</strong>, the architecture must be <strong>event-driven</strong> (scalable, with <strong>event replay</strong> for analytics and recovery), and one business rule is non-negotiable: <strong>inventory must never be oversold</strong>. Stock for each SKU has a single authoritative owner (the inventory database), browse pages can tolerate a few seconds of staleness, but the purchasing user must see their own reservation immediately. The team also needs high availability and good observability without adopting exotic infrastructure. Which architecture should he choose?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A completely asynchronous event-sourced architecture: record each inventory modification as an event in Kafka, employing event-sourcing and CQRS to asynchronously generate materialized read models. Depend on compacted topics as the single source of truth, rebuilding read models from events as required. Tolerate eventual consistency for reads and rely on compensating transactions in case of overselling.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">A synchronous, strongly consistent architecture: during checkout, make a synchronous call to the Inventory service to execute a serializable transaction (or two-phase commit) on a central inventory database, using distributed locks to prevent negative inventory balances. Only emit events once the transaction has successfully committed.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">A hybrid approach using a transactional outbox and a read-your-writes cache: atomically commit inventory updates alongside an outbox record in the database. A background worker then publishes these outbox entries to Kafka for global events and materialized views. To serve customer reads, implement a local write-through/read-through Redis cache (or a session-based read-your-writes cache) to deliver near-real-time inventory data, preventing stale reads for the purchasing user. Ensure consumers are idempotent and process events in order when necessary.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">A decentralized architecture utilizing CRDT replication: represent inventory using conflict-free replicated counters distributed across services via peer-to-peer replication. Depend on the convergence properties of CRDTs to achieve eventual consistency, enabling each region to handle read requests locally with minimal latency and without the need for a central message broker.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Transactional Outbox + Read-Your-Writes Cache</h3>
+        <p>The anti-oversell rule is an <strong>invariant</strong> (stock never goes below zero), and an invariant needs a <strong>single serialization point</strong>. Option C keeps that point in a transactional database using an atomic conditional decrement, and treats Kafka and the cache as <em>downstream projections</em>. The <strong>transactional outbox</strong> closes the gap between 'the database committed' and 'the event was published', so replay and analytics stay accurate, while the cache plus per-session read-your-writes delivers low-latency reads. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Correctness lives in one place:</strong> <code>UPDATE inventory SET available = available - :qty WHERE sku = :sku AND available &gt;= :qty</code> is atomic and cannot drive stock negative, even with many concurrent buyers. If zero rows are updated, the item is out of stock.</li>
+          <li><strong>No lost or phantom events:</strong> The stock change and the outbox row commit in the same local transaction, so an event exists if and only if the change committed. This removes the crash window of 'commit, then publish' that makes direct dual writes unreliable.</li>
+          <li><strong>Fast, honest reads:</strong> Product pages read a Redis projection (typically sub-millisecond to a few milliseconds) that may lag by seconds. The purchasing user's session carries the version of their last write, so a stale cache entry is bypassed and they never see their own reservation disappear.</li>
+          <li><strong>Replay and analytics:</strong> Kafka receives every committed change as an ordered per-SKU stream (keyed by SKU), so read models, search indexes, and analytics can be rebuilt by replaying the topic without making Kafka the arbiter of stock.</li>
+          <li><strong>Operationally proportionate:</strong> A relational database, an outbox relay (or Debezium CDC), Kafka, and Redis are all mainstream components. There are no distributed locks, no 2PC, and no custom convergence logic to maintain.</li>
+        </ul>
+        <p>A solid implementation includes an <strong>atomic conditional decrement</strong>, a <strong>reservation with TTL</strong>, an <strong>outbox relay or CDC</strong>, <strong>idempotent consumers</strong>, and <strong>versioned cache writes</strong>. Monitor outbox lag, cache-versus-database drift, reservation expiry rate, and oversell count (which must stay at zero). If outbox lag grows, reads degrade gracefully but stock correctness is unaffected.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📜</span>
+            <h4>A — Event Sourcing + CQRS on Kafka</h4>
+          </div>
+          <p>Event sourcing is excellent for audit and replay, but a log cannot reject a command by itself. To enforce <em>stock never goes negative</em> you still need a single writer per SKU that validates before appending. As written, the option accepts eventual consistency and fixes overselling with <strong>compensating transactions</strong>, which means customers are sold stock that does not exist and then apologized to. Using compacted topics as the sole source of truth also discards history (compaction keeps only the latest value per key), which undermines replay. <strong>Caveat:</strong> event sourcing with a validating command handler per SKU is a legitimate design when full history is the product requirement.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>B — Synchronous Serializable Transactions + Locks</h4>
+          </div>
+          <p>Strongly consistent, but at a high price. Serializable or 2PC transactions plus distributed locks on a central database put every checkout in one contention queue, couple checkout availability to the lock service and the database, and add tail latency exactly when traffic peaks. Emitting events only <em>after</em> commit also recreates the <strong>dual-write problem</strong>: a crash between commit and publish silently loses events. Option C achieves the same no-oversell guarantee with a single-row atomic update, no distributed locks, and a reliable event hand-off.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>D — CRDT Replication</h4>
+          </div>
+          <p>CRDT counters converge without coordination, which suits things like view counts. But <strong>non-negative stock is a global invariant</strong> that coordination-free replication cannot protect: two regions can each sell the last unit while partitioned, and a PN-counter will happily converge to -1. Bounded-counter or escrow designs exist, but they reintroduce coordination for the last units. Dropping the broker also removes the replayable log the requirements ask for.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Transactional Outbox + Read-Your-Writes Cache ✓</h4>
+          </div>
+          <p>A hybrid approach using a transactional outbox and a read-your-writes cache: atomically commit inventory updates alongside an outbox record in the database. A background worker then publishes these ou</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Oversell Prevention</th><th>Read Latency</th><th>Operational Overhead</th><th>Replayability</th><th>Availability Under Load</th><th>Event Reliability</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Event Sourcing + CQRS</td><td>Weak ❌ (compensate after the fact)</td><td>Low ✅ (local read models)</td><td>High ⚠ (compaction, rebuilds, CQRS)</td><td>Excellent ✅ (if not compacted)</td><td>High ✅</td><td>Good ✅</td></tr>
+            <tr><td class="tt-option">B — Sync Serializable + Locks</td><td>Strong ✅</td><td>Medium ⚠ (lock waits)</td><td>Medium ⚠ (locks, 2PC)</td><td>Poor ❌ (events only after commit)</td><td>Low ❌ (central bottleneck)</td><td>Weak ❌ (dual write)</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Outbox + Read-Your-Writes Cache ✓</td><td>Strong ✅ (atomic conditional update)</td><td>Low ✅ (cache hits)</td><td>Medium ⚠ (relay, cache)</td><td>Good ✅ (Kafka log)</td><td>High ✅</td><td>Strong ✅ (outbox)</td></tr>
+            <tr><td class="tt-option">D — CRDT Replication</td><td>None ❌ (can converge below zero)</td><td>Very low ✅ (local reads)</td><td>High ❌ (custom replication)</td><td>Poor ❌ (no broker)</td><td>Very high ✅</td><td>Weak ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Event Sourcing + CQRS</h4>
+          </div>
+          <p>Audit-heavy domains (ledgers, financial positions) where full history is the product, with a validating command handler per aggregate that accepts or rejects before appending.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Sync Serializable + Locks</h4>
+          </div>
+          <p>Low-volume systems (back-office, B2B ordering) where one database comfortably handles the load and simplicity matters more than peak throughput.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Outbox + Read-Your-Writes Cache</h4>
+          </div>
+          <p>High-volume retail where stock must never go negative, reads vastly outnumber writes, and events need to drive search, analytics, and notifications.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — CRDT Replication</h4>
+          </div>
+          <p>Counters that only grow or tolerate drift (likes, views, presence) across regions, where no global bound has to be enforced.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Read Path with Read-Your-Writes Fallback</h3>
+        <p>A read is served from the cache when its version is new enough for this session, and falls back to the database when the cache is behind:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant A as Inventory API
+    participant R as Redis Read Model
+    participant D as Inventory DB
+    C-&gt;&gt;A: GET stock for sku with session min version
+    A-&gt;&gt;R: 1. GET inv key
+    alt Cache version is current enough
+        R--&gt;&gt;A: 2a. available and version
+    else Cache missing or older than session version
+        R--&gt;&gt;A: 2b. Miss or stale
+        A-&gt;&gt;D: 3. SELECT available, version
+        D--&gt;&gt;A: 4. Row
+        A-&gt;&gt;R: 5. SET only if version is newer
+    end
+    A--&gt;&gt;C: available and version">sequenceDiagram
+    participant C as Client
+    participant A as Inventory API
+    participant R as Redis Read Model
+    participant D as Inventory DB
+    C-&gt;&gt;A: GET stock for sku with session min version
+    A-&gt;&gt;R: 1. GET inv key
+    alt Cache version is current enough
+        R--&gt;&gt;A: 2a. available and version
+    else Cache missing or older than session version
+        R--&gt;&gt;A: 2b. Miss or stale
+        A-&gt;&gt;D: 3. SELECT available, version
+        D--&gt;&gt;A: 4. Row
+        A-&gt;&gt;R: 5. SET only if version is newer
+    end
+    A--&gt;&gt;C: available and version</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Atomic Reserve with Outbox, Relay, and Idempotent Projection</h3>
+        <p>The decision is a single conditional update in the database; the event is written in the same transaction; a relay publishes it; consumers apply it idempotently and the read path honours the session version:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reserveStock</span>(requestId, orderId, sku, qty):</span>
+<span class="line">    tx <span class="tk-op">=</span> db.<span class="tk-kw">begin</span>()</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        prior <span class="tk-op">=</span> tx.<span class="tk-fn">query</span>(<span class="tk-str">&#x27;SELECT result FROM idempotency WHERE request_id = ?&#x27;</span>, requestId)</span>
+<span class="line">        <span class="tk-kw">if</span> prior <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">            <span class="tk-kw">return</span> prior.result                                   <span class="tk-com">// safe retry</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// Atomic guard: the row can never go below zero</span></span>
+<span class="line">        updated <span class="tk-op">=</span> tx.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;UPDATE inventory SET available = available - ?, version = version + 1 WHERE sku = ? AND available &gt;= ?&#x27;</span>, qty, sku, qty)</span>
+<span class="line">        <span class="tk-kw">if</span> updated <span class="tk-op">==</span> <span class="tk-num">0</span>:</span>
+<span class="line">            tx.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;INSERT INTO idempotency(request_id, result) VALUES (?, OUT_OF_STOCK)&#x27;</span>, requestId)</span>
+<span class="line">            tx.<span class="tk-fn">commit</span>()</span>
+<span class="line">            <span class="tk-kw">return</span> OUT_OF_STOCK</span>
+<span class="line"></span>
+<span class="line">        row <span class="tk-op">=</span> tx.<span class="tk-fn">query</span>(<span class="tk-str">&#x27;SELECT available, version FROM inventory WHERE sku = ?&#x27;</span>, sku)</span>
+<span class="line">        tx.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;INSERT INTO reservations(order_id, sku, qty, expires_at) VALUES (?, ?, ?, now() + 15 minutes)&#x27;</span>, orderId, sku, qty)</span>
+<span class="line">        tx.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;INSERT INTO outbox(event_id, sku, type, payload) VALUES (uuid(), ?, ?, ?)&#x27;</span>, sku, <span class="tk-str">&#x27;InventoryReserved&#x27;</span>, <span class="tk-fn">json</span>(orderId, qty, row.version, row.available))</span>
+<span class="line">        tx.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;INSERT INTO idempotency(request_id, result) VALUES (?, RESERVED)&#x27;</span>, requestId)</span>
+<span class="line">        tx.<span class="tk-fn">commit</span>()                                               <span class="tk-com">// stock change and event are atomic</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">Reserved</span>(version <span class="tk-op">=</span> row.version)</span>
+<span class="line">    <span class="tk-kw">catch</span> error:</span>
+<span class="line">        tx.<span class="tk-fn">rollback</span>()</span>
+<span class="line">        <span class="tk-kw">throw</span> error</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">relayOutbox</span>():                                           <span class="tk-com">// one worker per shard of hash(sku) keeps per-sku order</span></span>
+<span class="line">    <span class="tk-kw">loop</span> forever:</span>
+<span class="line">        batch <span class="tk-op">=</span> db.<span class="tk-fn">query</span>(<span class="tk-str">&#x27;SELECT * FROM outbox WHERE published_at IS NULL ORDER BY id LIMIT 100&#x27;</span>)</span>
+<span class="line">        <span class="tk-kw">for</span> event <span class="tk-kw">in</span> batch:</span>
+<span class="line">            kafka.<span class="tk-fn">send</span>(topic <span class="tk-op">=</span> <span class="tk-str">&#x27;inventory-events&#x27;</span>, key <span class="tk-op">=</span> event.sku, value <span class="tk-op">=</span> event)</span>
+<span class="line">        kafka.<span class="tk-fn">flush</span>()</span>
+<span class="line">        db.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;UPDATE outbox SET published_at = now() WHERE id IN (?)&#x27;</span>, <span class="tk-fn">ids</span>(batch))</span>
+<span class="line">        <span class="tk-kw">if</span> batch is empty: <span class="tk-fn">sleep</span>(<span class="tk-num">50ms</span>)</span>
+<span class="line">    <span class="tk-com">// a crash after send but before the update re-sends the batch: consumers must be idempotent</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onInventoryEvent</span>(event):</span>
+<span class="line">    <span class="tk-com">// use an atomic compare-and-set (for example a Lua script) so concurrent consumers cannot race</span></span>
+<span class="line">    redis.<span class="tk-fn">setIfNewer</span>(<span class="tk-str">&#x27;inv:&#x27;</span> <span class="tk-op">+</span> event.sku, {available: event.available, version: event.version}, ttl <span class="tk-op">=</span> <span class="tk-num">1h</span>)</span>
+<span class="line">    searchIndex.<span class="tk-fn">upsert</span>(event.sku, inStock <span class="tk-op">=</span> event.available <span class="tk-op">&gt;</span> <span class="tk-num">0</span>)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getAvailability</span>(sku, sessionMinVersion):</span>
+<span class="line">    entry <span class="tk-op">=</span> redis.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;inv:&#x27;</span> <span class="tk-op">+</span> sku)</span>
+<span class="line">    <span class="tk-kw">if</span> entry <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> entry.version <span class="tk-op">&gt;=</span> sessionMinVersion:</span>
+<span class="line">        <span class="tk-kw">return</span> entry                                              <span class="tk-com">// normal fast path</span></span>
+<span class="line">    row <span class="tk-op">=</span> db.<span class="tk-fn">query</span>(<span class="tk-str">&#x27;SELECT available, version FROM inventory WHERE sku = ?&#x27;</span>, sku)   <span class="tk-com">// read-your-writes fallback</span></span>
+<span class="line">    redis.<span class="tk-fn">setIfNewer</span>(<span class="tk-str">&#x27;inv:&#x27;</span> <span class="tk-op">+</span> sku, row)</span>
+<span class="line">    <span class="tk-kw">return</span> row</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Dual writes without an outbox:</strong> Updating the database and publishing to Kafka as two independent steps. A crash between them loses or duplicates events. Write the event row in the same transaction.</li>
+          <li><strong>Treating the cache as the stock authority:</strong> Decrementing a Redis counter and 'syncing later' reintroduces oversell on eviction or failover. The database decrement is the decision.</li>
+          <li><strong>Unversioned cache writes:</strong> Two concurrent updates can write to the cache out of order and leave an older value in place. Store a version with each entry and only overwrite with a newer one, atomically (for example with a Lua script).</li>
+          <li><strong>Non-idempotent consumers:</strong> The outbox relay delivers at-least-once, so a redelivered InventoryReserved event must not change a read model twice.</li>
+          <li><strong>Losing per-SKU ordering:</strong> Several relay workers racing on one outbox, or a Kafka key that is not the SKU, can reorder events for a single product. Key by SKU and shard the relay, or use CDC.</li>
+          <li><strong>Reservations that never expire:</strong> Abandoned carts hold stock forever. Give every reservation a TTL and a reaper that returns the units.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams treat inventory as <strong>two different problems</strong>: an authoritative ledger for decisions and cheap projections for display. A typical rollout looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define the invariant and the staleness budget:</strong> Which operations must be exact (reserve, release, commit) and which may be seconds stale (browse pages, search facets)?</li>
+          <li><strong>Step 1 — Authoritative ledger:</strong> Atomic conditional decrement plus a reservation row with a TTL in the inventory database, with an idempotency key on every reserve request.</li>
+          <li><strong>Step 2 — Outbox:</strong> Write the event row in the same transaction, then publish via a relay or Debezium CDC into Kafka keyed by SKU.</li>
+          <li><strong>Step 3 — Projections:</strong> Idempotent consumers build Redis and search read models. Cache entries carry a version so an older write never overwrites a newer one.</li>
+          <li><strong>Step 4 — Read-your-writes:</strong> Return the new version in the reserve response; the session sends it back on reads and the read path falls through to the database if the cache is behind.</li>
+          <li><strong>Step 5 — Observability and reconciliation:</strong> Track outbox lag, consumer lag, and drift between ledger and projections, and run a periodic job that rebuilds a projection from the log.</li>
+        </ul>
+        <p>Keep the decision path small and synchronous, and let everything else be asynchronous and replayable.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Put the <strong>invariant</strong> where it can be enforced atomically, then <strong>derive everything else from events</strong>. A transactional outbox gives reliable replay without making the log responsible for correctness, and a versioned read-your-writes cache gives fast reads without risking oversell. If a hard no-oversell guarantee were not required, simpler eventually consistent designs would become viable.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aiden&#x27;s read-versus-write scaling challenge — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">24 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Read vs Write Scaling</span>
+      <span class="tag tag--green">Architecture</span>
+      <span class="tag tag--amber">Performance</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Aiden&#x27;s read-versus-write scaling challenge</h1>
+      <p class="q-scenario"><strong>Aiden</strong>, a backend architect, is designing an <strong>e-commerce catalog platform</strong>. Traffic is about <strong>95% reads</strong>, peaking at <strong>millions of QPS globally</strong>, and browsing and search must return with <strong>P95 latency under 100 ms</strong>. Writes are less frequent but include <strong>inventory adjustments and price changes</strong> that must be fully durable, and some flows (such as <strong>decrementing inventory at checkout</strong>) require strict accuracy. He needs an architecture that <strong>scales reads efficiently</strong>, keeps browse latency low, and <strong>guarantees correctness for the critical writes</strong>, while staying operationally manageable.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Retain a solitary primary SQL database for all write operations and provision numerous read replicas. Send all read traffic to the replicas and direct writes to the primary node. Depend on tracking replica lag and dynamically adjust the number and size of replicas to satisfy read requirements.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Horizontally partition the primary database (using hash or range sharding) such that each partition contains its own leader and replica nodes. Direct both read and write operations to the corresponding partition leader. Accommodate growth by provisioning additional partitions as system load increases.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Implement the CQRS (Command Query Responsibility Segregation) pattern: maintain a strongly consistent write model (such as a single primary or leader-per-critical-shard) for transactional operations (like checkout and inventory), and asynchronously push denormalized read models into specialized databases (e.g., search indexes, key-value stores, or read-optimized databases). Direct browse and search queries to these read models, while routing critical writes to the write model; support read-your-writes for transactional processes by querying the write model directly or utilizing short-lived caches.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Deploy a globally distributed, strongly consistent database system (similar to Spanner) featuring synchronous cross-region replication, allowing every replica to process read queries with strict consistency. Tolerate increased write latency and higher operational expenses to achieve globally consistent read operations.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: CQRS with Specialized Read Models</h3>
+        <p>The two halves of this workload have <strong>opposite needs</strong>. Browsing and search need massive fan-out, text and faceted queries, and global proximity, and they tolerate seconds of staleness. Checkout and inventory need <strong>serializable correctness</strong> on a tiny fraction of the traffic. <strong>CQRS</strong> gives each side its own model and store: a small, strongly consistent <strong>write model</strong> for commands, and <strong>denormalized read models</strong> (search index, key-value store, CDN-cached pages) fed asynchronously and scaled independently. It is the only option that scales reads by orders of magnitude without making every read pay for write-grade consistency:</p>
+        <ul>
+          <li><strong>Read scaling is decoupled from the database:</strong> Millions of QPS are served by search clusters, key-value stores, and CDN or edge caches, not by the transactional database. Read capacity grows by adding read-model nodes and cache tiers.</li>
+          <li><strong>The right data structure per query:</strong> Browse needs precomputed, join-free documents. Search needs an inverted index with facets and ranking. A relational primary cannot serve either at this scale and latency.</li>
+          <li><strong>Strict correctness where it counts:</strong> Inventory decrements and price validation execute against a single authoritative write model with transactions and constraints, so overselling is prevented at the source of truth.</li>
+          <li><strong>Regional proximity for reads:</strong> Read models can be replicated to every region, giving low browse latency without forcing synchronous cross-region commits on writes.</li>
+          <li><strong>Independent evolution and failure isolation:</strong> A slow projector or a search outage degrades freshness or search quality, not checkout. Read models can be rebuilt from the event log.</li>
+        </ul>
+        <p>Keep the <strong>write model small and strict</strong>, build read models <strong>shaped like the queries</strong>, publish changes through an <strong>outbox to a durable log</strong>, and make checkout <strong>re-check price and stock at write time</strong>. Monitor projection lag, search freshness, and oversell or reservation-failure rates.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📚</span>
+            <h4>A — Single Primary + Many Replicas</h4>
+          </div>
+          <p>Simple and often the right first step, but it <strong>hits limits at this scale</strong>: the primary must ship its log to every replica, so the replica count and lag are bounded by it. Millions of QPS would need a very large replica fleet, replicas still execute relational queries (poorly suited to full-text and faceted search), and replica lag causes stale or inconsistent reads without any of the isolation CQRS offers. It is the starting point, not the destination.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>B — Sharded Primary (Leader per Shard)</h4>
+          </div>
+          <p>Sharding scales <strong>writes and storage</strong>, but the bottleneck here is read volume and query type. Sending reads to shard leaders keeps expensive queries on the transactional path, cross-shard browse and search queries become scatter-gather, and rebalancing adds operational risk. The write side may need sharding eventually (leader-per-critical-shard is part of option C), but it does not solve read scaling or search.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌍</span>
+            <h4>D — Globally Strongly Consistent Database</h4>
+          </div>
+          <p>Spanner-style systems offer remarkable guarantees, but <strong>paying for strict consistency on every browse read</strong> is the wrong trade. Strong reads and synchronous cross-region commits add latency and cost, and the 95% read traffic does not need them. Browse and search still need specialized indexes and caches to reach millions of QPS under 100 ms. It can serve as the write model for critical data, but as the single answer it over-buys consistency and under-delivers on search and read economics.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — CQRS with Specialized Read Models ✓</h4>
+          </div>
+          <p>Implement the CQRS (Command Query Responsibility Segregation) pattern: maintain a strongly consistent write model (such as a single primary or leader-per-critical-shard) for transactional operations (</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read Scalability (millions QPS)</th><th>Browse / Search Latency</th><th>Write Correctness</th><th>Read Freshness</th><th>Cost Efficiency</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Primary + Replicas</td><td>Limited by replica fan-out ❌</td><td>Medium ⚠</td><td>Strong ✅</td><td>Replica lag ⚠</td><td>Medium ⚠</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Sharded Leaders</td><td>Limited (reads hit leaders) ❌</td><td>Medium, scatter-gather ⚠</td><td>Strong per shard ✅</td><td>Fresh ✅</td><td>Medium ⚠</td><td>High ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — CQRS ✓</td><td>Excellent ✅</td><td>Excellent ✅</td><td>Strong on write model ✅</td><td>Seconds of lag ⚠</td><td>Good ✅</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">D — Global Strongly Consistent DB</td><td>Good, costly ⚠</td><td>Depends on read mode ⚠</td><td>Strong ✅</td><td>Fresh ✅</td><td>Poor (high cost) ❌</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Primary + Replicas</h4>
+          </div>
+          <p>Early and mid-scale systems where reads exceed one node but replicas can handle the load, queries are relational, and a few seconds of lag are acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Sharded Leaders</h4>
+          </div>
+          <p>Write throughput or data size exceeds a single node, and access patterns are keyed (tenant, user, SKU) so queries stay within one shard.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — CQRS</h4>
+          </div>
+          <p>Very high read fan-out with specialized query needs (search, facets, personalization), a small set of strict transactional writes, and tolerance for seconds of read staleness.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Global Strongly Consistent DB</h4>
+          </div>
+          <p>Globally distributed transactional data (for example financial or inventory ledgers) where strict consistency across regions is a core requirement and the cost is justified.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> CQRS Catalog Architecture</h3>
+        <p>Browse and search never touch the transactional database. Commands go to the write model, which feeds the read models through a log:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    U[&quot;Shoppers&quot;] --&gt; CDN[&quot;CDN / edge cache&quot;]
+    CDN --&gt; RAPI[&quot;Read API&quot;]
+    RAPI --&gt; SI[(&quot;Search index (facets, text)&quot;)]
+    RAPI --&gt; KV[(&quot;Key-value store: product pages&quot;)]
+    U --&gt; CAPI[&quot;Command API: cart and checkout&quot;]
+    CAPI --&gt; WM[(&quot;Write model: transactional DB (inventory, price)&quot;)]
+    WM --&gt; OB[&quot;Outbox / CDC&quot;]
+    OB --&gt; LOG[&quot;Durable log (Kafka)&quot;]
+    LOG --&gt; PR[&quot;Projectors (idempotent, versioned)&quot;]
+    PR --&gt; SI
+    PR --&gt; KV
+    PR -. &quot;invalidate&quot; .-&gt; CDN">flowchart LR
+    U[&quot;Shoppers&quot;] --&gt; CDN[&quot;CDN / edge cache&quot;]
+    CDN --&gt; RAPI[&quot;Read API&quot;]
+    RAPI --&gt; SI[(&quot;Search index (facets, text)&quot;)]
+    RAPI --&gt; KV[(&quot;Key-value store: product pages&quot;)]
+    U --&gt; CAPI[&quot;Command API: cart and checkout&quot;]
+    CAPI --&gt; WM[(&quot;Write model: transactional DB (inventory, price)&quot;)]
+    WM --&gt; OB[&quot;Outbox / CDC&quot;]
+    OB --&gt; LOG[&quot;Durable log (Kafka)&quot;]
+    LOG --&gt; PR[&quot;Projectors (idempotent, versioned)&quot;]
+    PR --&gt; SI
+    PR --&gt; KV
+    PR -. &quot;invalidate&quot; .-&gt; CDN</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Strict Commands, Versioned Projections, Eventually Consistent Reads</h3>
+        <p>An atomic conditional inventory decrement with an outbox event, an idempotent projector for the search and key-value read models, and read and checkout paths that use the right model:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Command side: small, strict, transactional ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reserveInventory</span>(sku, qty, orderId):</span>
+<span class="line">    tx.<span class="tk-kw">begin</span></span>
+<span class="line">    row <span class="tk-op">=</span> db.<span class="tk-fn">queryOne</span>(</span>
+<span class="line">        <span class="tk-str">&#x27;UPDATE inventory SET available = available - ?, version = version + 1 &#x27;</span> <span class="tk-op">+</span></span>
+<span class="line">        <span class="tk-str">&#x27;WHERE sku = ? AND available &gt;= ? RETURNING available, version&#x27;</span>, qty, sku, qty)</span>
+<span class="line">    <span class="tk-kw">if</span> row <span class="tk-op">==</span> <span class="tk-lit">null</span>:                                      <span class="tk-com">// condition failed: not enough stock</span></span>
+<span class="line">        tx.<span class="tk-fn">rollback</span>()</span>
+<span class="line">        <span class="tk-kw">return</span> OUT_OF_STOCK</span>
+<span class="line">    db.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;reservations&#x27;</span>, {orderId: orderId, sku: sku, qty: qty, expiresAt: <span class="tk-fn">now</span>() <span class="tk-op">+</span> <span class="tk-num">10</span> min})</span>
+<span class="line">    db.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;outbox&#x27;</span>, {type: <span class="tk-str">&#x27;InventoryChanged&#x27;</span>, sku: sku,</span>
+<span class="line">                         available: row.available, version: row.version})</span>
+<span class="line">    tx.commit</span>
+<span class="line">    <span class="tk-kw">return</span> RESERVED</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">checkout</span>(cart):</span>
+<span class="line">    <span class="tk-kw">for</span> item <span class="tk-kw">in</span> cart.items:</span>
+<span class="line">        price <span class="tk-op">=</span> writeModel.<span class="tk-fn">getPrice</span>(item.sku)            <span class="tk-com">// authoritative price at the moment of payment</span></span>
+<span class="line">        <span class="tk-kw">if</span> price <span class="tk-op">!=</span> item.displayedPrice: <span class="tk-kw">return</span> <span class="tk-fn">PRICE_CHANGED</span>(item.sku, price)</span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-fn">reserveInventory</span>(item.sku, item.qty, cart.orderId) <span class="tk-op">!=</span> RESERVED:</span>
+<span class="line">            <span class="tk-fn">releaseReservations</span>(cart.orderId)</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">OUT_OF_STOCK</span>(item.sku)</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">chargeAndConfirm</span>(cart)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Relay: CDC tails the outbox and publishes to Kafka, keyed by sku ----</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Projector: idempotent and version-checked ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onCatalogEvent</span>(e):</span>
+<span class="line">    doc <span class="tk-op">=</span> kvStore.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;sku:&#x27;</span> <span class="tk-op">+</span> e.sku)</span>
+<span class="line">    <span class="tk-kw">if</span> doc <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> doc.version <span class="tk-op">&gt;=</span> e.version: <span class="tk-kw">return</span>  <span class="tk-com">// duplicate or out-of-order event</span></span>
+<span class="line">    doc <span class="tk-op">=</span> <span class="tk-fn">applyEvent</span>(doc, e)                             <span class="tk-com">// price, stock status, attributes</span></span>
+<span class="line">    searchIndex.<span class="tk-fn">upsert</span>(e.sku, doc)                       <span class="tk-com">// powers browse and search facets</span></span>
+<span class="line">    kvStore.<span class="tk-fn">put</span>(<span class="tk-str">&#x27;sku:&#x27;</span> <span class="tk-op">+</span> e.sku, doc)                     <span class="tk-com">// powers product pages</span></span>
+<span class="line">    cdn.<span class="tk-fn">invalidate</span>(<span class="tk-str">&#x27;/products/&#x27;</span> <span class="tk-op">+</span> e.sku)                 <span class="tk-com">// optional, or rely on short TTL</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Query side: never touches the write database ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">search</span>(query, filters):</span>
+<span class="line">    <span class="tk-kw">return</span> searchIndex.<span class="tk-fn">search</span>(query, filters)            <span class="tk-com">// eventually consistent, p95 well under 100 ms</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getProductPage</span>(sku):</span>
+<span class="line">    <span class="tk-kw">return</span> kvStore.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;sku:&#x27;</span> <span class="tk-op">+</span> sku)                     <span class="tk-com">// displayed stock is a hint, not a guarantee</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Trusting browse data at checkout:</strong> Displayed stock and price are hints. The command must re-check against the write model, or you will oversell and mischarge.</li>
+          <li><strong>Dual writes to the write model and read models:</strong> Writing to both from application code creates divergence on partial failures. Publish via a transactional outbox and CDC.</li>
+          <li><strong>Non-idempotent or unordered projections:</strong> Replays and reordering overwrite newer data. Use versions and per-key ordering (key the stream by SKU).</li>
+          <li><strong>Read-modify-write inventory logic:</strong> Reading stock, checking in the app, then writing back races under concurrency. Use a single conditional update.</li>
+          <li><strong>No rebuild path:</strong> Read models will need to be rebuilt after bugs or schema changes. Keep the event log or snapshots and automate replay.</li>
+          <li><strong>Adopting CQRS too early:</strong> For modest load, a primary with replicas and a CDN is far simpler. Introduce CQRS when measurements show it is needed.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Large catalogs (marketplaces, retailers, travel platforms) usually evolve toward this shape in stages:</p>
+        <ul>
+          <li><strong>Step 0 — Measure and classify:</strong> Separate browse, search, product-detail, cart, and checkout traffic. Note which operations need strict consistency (inventory, price at checkout) and which do not.</li>
+          <li><strong>Step 1 — Cache aggressively:</strong> CDN and edge caching for product pages with short TTLs and event-driven invalidation often removes most read load.</li>
+          <li><strong>Step 2 — Add a search and key-value read model:</strong> Project catalog data into a search engine and a KV or document store through an outbox and a log.</li>
+          <li><strong>Step 3 — Keep the write model strict:</strong> Transactional inventory and pricing with constraints, reservations with expiry, and idempotent commands.</li>
+          <li><strong>Step 4 — Make checkout authoritative:</strong> Re-read price and availability from the write model, and reserve before charging.</li>
+          <li><strong>Step 5 — Operate the pipeline:</strong> Projection lag SLOs, replay and rebuild tooling, and reconciliation between write and read models.</li>
+        </ul>
+        <p>Serve the <strong>many</strong> from caches and indexes, and protect the <strong>few</strong> critical writes with a strict, small core.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When reads outnumber writes by 20 to 1 and the two have different consistency needs, <strong>separate them</strong>. Use CQRS to keep a strict, small write model for inventory and price and scale reads through denormalized, regionally replicated read models and caches. Re-validate critical data at checkout.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

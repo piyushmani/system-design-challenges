@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jared must guarantee orders and events without sacrificing throughput — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">26 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Ordering Guarantees</span>
+      <span class="tag tag--green">Event Processing</span>
+      <span class="tag tag--amber">Throughput</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Jared must guarantee orders and events without sacrificing throughput</h1>
+      <p class="q-scenario"><strong>Jared</strong>, a senior backend developer for a rapidly expanding e-commerce platform, leads the order management service. Upon every customer purchase, the system must atomically perform two distinct actions: (1) persist the authoritative order records into the primary relational SQL database, and (2) emit an <code>OrderCreated</code> domain event to an asynchronous message broker (such as Apache Kafka or RabbitMQ) so downstream services—including payment processing, inventory reservation, fraud detection, and customer notifications—can react immediately. Under flash sales and holiday shopping peaks, the service experiences severe traffic surges. The operational requirements demand <strong>maximum write throughput</strong>, <strong>sub-second latency</strong>, and an absolute guarantee of <strong>zero event loss</strong>. The architectural strategy must scale horizontally without resorting to fragile global distributed transactions (like 2PC/XA), and it must provide clear operational observability, inspection of failed events, and idempotent retries. Which architectural pattern is best suited for Jared's system?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A) Implement a two-phase commit (XA) protocol or employ a transaction coordinator that spans both the message broker and the database, ensuring the data insertion and the event publication occur atomically within a single, global transaction.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">B) Execute synchronous calls to the downstream systems (such as billing and inventory) immediately following the database write but still within the primary request transaction. Wait for their successful replies before committing the transaction, effectively treating the entire order process as one strictly consistent operation.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">C) Adopt the transactional outbox pattern: record both the order data and an event payload into an outbox table within a single, local database transaction. Deploy an independent background process (either a polling worker or CDC mechanism) to reliably forward these outbox entries to the event bus, incorporating idempotency and retry logic, while updating the status of sent items and providing visibility into any failures.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">D) Perform a best-effort, fire-and-forget message publication to the event bus immediately after the database commit completes. Rely on scheduled reconciliation processes or compensating transactions to detect and fix any state inconsistencies caused by lost events or downstream failures.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Transactional Outbox Pattern with Asynchronous Event Relay</h3>
+        <p>The <strong>Transactional Outbox pattern</strong> is the industry gold standard for solving the distributed <em>dual-write problem</em> without sacrificing throughput or availability. By bundling the domain mutation (saving the order) and the message payload into the same database within a single, local ACID transaction, Jared achieves guaranteed atomicity. An asynchronous relay process—via Change Data Capture (CDC) or an index-optimized polling worker—reliably forwards outbox events to the message broker, completely decoupling the primary write path from broker latency or outages:</p>
+        <ul>
+          <li><strong>Guaranteed Dual-Write Atomicity:</strong> By writing to both the <code>orders</code> table and an <code>outbox</code> table inside a single local database transaction, atomicity is guaranteed by the relational database engine. Either both succeed or both roll back, making partial failure states impossible without any distributed transaction overhead.</li>
+          <li><strong>Ultra-Low Write Latency & High Throughput:</strong> The synchronous order submission path only touches the local database, completely bypassing network hops and round-trip acknowledgments to the message broker. The checkout API responds in single-digit milliseconds even during peak traffic.</li>
+          <li><strong>Resilience & Fault Isolation:</strong> If the message broker suffers a network partition, rebalance pause, or total outage, customer orders continue to commit without disruption. Outgoing messages accumulate safely in durable storage until the broker recovers.</li>
+          <li><strong>Native Observability & Triage:</strong> Because unpublished events reside in an observable SQL table, operational teams can query stuck, failed, or pending events directly using SQL, compute real-time relay lag metrics, and trigger granular replays without complex tooling.</li>
+          <li><strong>Reliable At-Least-Once Delivery:</strong> An independent relay (such as Debezium or a transactional polling daemon) reads committed outbox entries and publishes them with built-in retries, backoff, and dead-letter queue routing.</li>
+        </ul>
+        <p>By decoupling local transactional persistence from asynchronous event dispatch, the <strong>Transactional Outbox pattern</strong> delivers zero event loss, maximum write throughput, and full operational visibility while avoiding distributed transaction bottlenecks.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>A — Two-Phase Commit (XA / Distributed Transactions)</h4>
+          </div>
+          <p>Two-Phase Commit (2PC) coordinates atomicity across heterogeneous systems (database and message broker) via a distributed coordinator. However, 2PC holds locks on both systems across network round-trips during the prepare and commit phases, causing severe latency spikes, lock contention, and reduced throughput. Furthermore, if the coordinator or broker fails during the commit window, transactions remain blocked in doubt. <strong>Caveat:</strong> Most modern, cloud-native message brokers (like Apache Kafka) do not support XA transactions, making this practically non-viable at scale.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">💥</span>
+            <h4>B — Synchronous In-Transaction RPCs</h4>
+          </div>
+          <p>Holding open an authoritative SQL database transaction while invoking external downstream RPCs (billing, inventory) is a dangerous distributed anti-pattern. Network latency, retries, or downstream slowness hold database connection slots and row locks open for seconds, triggering connection pool exhaustion and cascading failures. <strong>Caveat:</strong> A single outage or high latency spike in the billing or inventory service will completely halt Jared's entire checkout pipeline.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔥</span>
+            <h4>D — Fire-and-Forget Message Publication</h4>
+          </div>
+          <p>Attempting to publish an event to the message broker immediately following a database commit in application memory provides zero reliability. If the application server crashes, restarts, or encounters a network partition right after committing the database transaction but before the message broker acknowledges receipt, the event is permanently lost. <strong>Caveat:</strong> Scheduled reconciliation jobs (such as cron audits) detect missing orders hours later, violating real-time inventory and billing requirements and creating complex reconciliation debt.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Transactional Outbox Pattern with Asynchronous Event Relay ✓</h4>
+          </div>
+          <p>C) Adopt the transactional outbox pattern: record both the order data and an event payload into an outbox table within a single, local database transaction. Deploy an independent background process (e</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Throughput</th><th>Write Latency</th><th>Zero Event Loss</th><th>System Availability</th><th>Operational Observability</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Distributed 2PC/XA</td><td>❌</td><td>❌</td><td>✅</td><td>❌</td><td>⚠</td></tr>
+            <tr><td class="tt-option">B — Sync In-Tx RPCs</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Transactional Outbox ✓</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+            <tr><td class="tt-option">D — Fire-and-Forget</td><td>✅</td><td>✅</td><td>❌</td><td>⚠</td><td>❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Distributed 2PC/XA</h4>
+          </div>
+          <p>Legacy monolithic ERP or core banking systems with monolithic XA-compliant databases on local high-speed SAN networks where write volume is low and strict serializability across stores is legally mandated.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Sync In-Tx RPCs</h4>
+          </div>
+          <p>Internal monolithic scripts, lightweight internal tooling, or proof-of-concept CRUD prototypes where throughput is trivial and downstream failure must immediately abort the whole workflow.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Transactional Outbox</h4>
+          </div>
+          <p>High-throughput distributed systems, e-commerce checkouts, and microservices architectures requiring decoupled write performance, high availability, and 100% reliable event dispatch.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Fire-and-Forget</h4>
+          </div>
+          <p>Non-critical metric collection, clickstream tracking, or best-effort telemetry logging where occasional lost events do not violate business invariants or cause financial discrepancies.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Transactional Outbox Architecture &amp; CDC Pipeline</h3>
+        <p>How the order and outbox records commit atomically in a local transaction, followed by decoupled CDC extraction and Kafka publishing:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TD
+    Client[&quot;E-Commerce Client&quot;] --&gt;|1. Submit Order| API[&quot;Order Service API&quot;]
+    subgraph PrimaryDB [&quot;Primary Relational SQL Database&quot;]
+        TX[&quot;Local ACID Transaction&quot;]
+        OrdersTable[(&quot;orders Table&quot;)]
+        OutboxTable[(&quot;outbox_events Table&quot;)]
+        WAL[(&quot;Write-Ahead Log / Binlog&quot;)]
+        TX --&gt;|Atomic Write| OrdersTable
+        TX --&gt;|Atomic Write| OutboxTable
+        OrdersTable -.-&gt;|Flush| WAL
+        OutboxTable -.-&gt;|Flush| WAL
+    end
+    API --&gt;|Begin / Commit| TX
+    API --&gt;&gt;|2. HTTP 201 Created| Client
+    subgraph EventStreaming [&quot;Decoupled Async Relay&quot;]
+        CDC[&quot;Debezium CDC Engine&quot;]
+        Kafka[&quot;Apache Kafka Broker&quot;]
+        CDC --&gt;|3. Read Committed Log| WAL
+        CDC --&gt;|4. Publish (Key: order_id)| Kafka
+    end
+    subgraph DownstreamServices [&quot;Idempotent Downstream Consumers&quot;]
+        Billing[&quot;Billing Service&quot;]
+        Inventory[&quot;Inventory Service&quot;]
+        Notifications[&quot;Notification Service&quot;]
+        Kafka --&gt;|5. Consume| Billing
+        Kafka --&gt;|5. Consume| Inventory
+        Kafka --&gt;|5. Consume| Notifications
+    end">flowchart TD
+    Client[&quot;E-Commerce Client&quot;] --&gt;|1. Submit Order| API[&quot;Order Service API&quot;]
+    subgraph PrimaryDB [&quot;Primary Relational SQL Database&quot;]
+        TX[&quot;Local ACID Transaction&quot;]
+        OrdersTable[(&quot;orders Table&quot;)]
+        OutboxTable[(&quot;outbox_events Table&quot;)]
+        WAL[(&quot;Write-Ahead Log / Binlog&quot;)]
+        TX --&gt;|Atomic Write| OrdersTable
+        TX --&gt;|Atomic Write| OutboxTable
+        OrdersTable -.-&gt;|Flush| WAL
+        OutboxTable -.-&gt;|Flush| WAL
+    end
+    API --&gt;|Begin / Commit| TX
+    API --&gt;&gt;|2. HTTP 201 Created| Client
+    subgraph EventStreaming [&quot;Decoupled Async Relay&quot;]
+        CDC[&quot;Debezium CDC Engine&quot;]
+        Kafka[&quot;Apache Kafka Broker&quot;]
+        CDC --&gt;|3. Read Committed Log| WAL
+        CDC --&gt;|4. Publish (Key: order_id)| Kafka
+    end
+    subgraph DownstreamServices [&quot;Idempotent Downstream Consumers&quot;]
+        Billing[&quot;Billing Service&quot;]
+        Inventory[&quot;Inventory Service&quot;]
+        Notifications[&quot;Notification Service&quot;]
+        Kafka --&gt;|5. Consume| Billing
+        Kafka --&gt;|5. Consume| Inventory
+        Kafka --&gt;|5. Consume| Notifications
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Transactional Outbox Pattern &amp; Polling Relay Implementation</h3>
+        <p>Implementation illustrating the atomic order creation transaction and a concurrency-safe polling relay using SKIP LOCKED.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ==============================================================================</span></span>
+<span class="line"><span class="tk-com">// 1. ORDER SERVICE: ATOMIC LOCAL TRANSACTION</span></span>
+<span class="line"><span class="tk-com">// ==============================================================================</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">createOrder</span>(orderRequest):</span>
+<span class="line">    <span class="tk-com">// Begin a local ACID transaction in the primary SQL database</span></span>
+<span class="line">    db.<span class="tk-fn">beginTransaction</span>()</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        orderId <span class="tk-op">=</span> <span class="tk-fn">generateUUID</span>()</span>
+<span class="line">        </span>
+<span class="line">        <span class="tk-com">// 1a. Persist the core domain entity</span></span>
+<span class="line">        db.<span class="tk-fn">execute</span>(</span>
+<span class="line">            <span class="tk-str">&quot;INSERT INTO orders (id, customer_id, total_amount, status, created_at) &quot;</span> <span class="tk-op">+</span></span>
+<span class="line">            <span class="tk-str">&quot;VALUES (?, ?, ?, &#x27;CREATED&#x27;, ?)&quot;</span>,</span>
+<span class="line">            orderId, orderRequest.customerId, orderRequest.totalAmount, <span class="tk-fn">now</span>()</span>
+<span class="line">        )</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// 1b. Construct the standardized domain event envelope</span></span>
+<span class="line">        eventPayload <span class="tk-op">=</span> {</span>
+<span class="line">            <span class="tk-str">&quot;eventId&quot;</span>: <span class="tk-fn">generateUUID</span>(),</span>
+<span class="line">            <span class="tk-str">&quot;eventType&quot;</span>: <span class="tk-str">&quot;OrderCreated&quot;</span>,</span>
+<span class="line">            <span class="tk-str">&quot;aggregateType&quot;</span>: <span class="tk-str">&quot;Order&quot;</span>,</span>
+<span class="line">            <span class="tk-str">&quot;aggregateId&quot;</span>: orderId,</span>
+<span class="line">            <span class="tk-str">&quot;occurredAt&quot;</span>: <span class="tk-fn">now</span>().<span class="tk-fn">isoformat</span>(),</span>
+<span class="line">            <span class="tk-str">&quot;data&quot;</span>: {</span>
+<span class="line">                <span class="tk-str">&quot;orderId&quot;</span>: orderId,</span>
+<span class="line">                <span class="tk-str">&quot;customerId&quot;</span>: orderRequest.customerId,</span>
+<span class="line">                <span class="tk-str">&quot;items&quot;</span>: orderRequest.items,</span>
+<span class="line">                <span class="tk-str">&quot;totalAmount&quot;</span>: orderRequest.totalAmount</span>
+<span class="line">            }</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// 1c. Insert event into outbox table inside the SAME transaction</span></span>
+<span class="line">        db.<span class="tk-fn">execute</span>(</span>
+<span class="line">            <span class="tk-str">&quot;INSERT INTO outbox_events (id, aggregate_type, aggregate_id, event_type, payload, status, created_at) &quot;</span> <span class="tk-op">+</span></span>
+<span class="line">            <span class="tk-str">&quot;VALUES (?, &#x27;Order&#x27;, ?, &#x27;OrderCreated&#x27;, ?, &#x27;PENDING&#x27;, ?)&quot;</span>,</span>
+<span class="line">            eventPayload[<span class="tk-str">&quot;eventId&quot;</span>], orderId, <span class="tk-fn">serializeToJson</span>(eventPayload), <span class="tk-fn">now</span>()</span>
+<span class="line">        )</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// 1d. Commit local transaction atomically (Both order and outbox record commit together)</span></span>
+<span class="line">        db.<span class="tk-fn">commit</span>()</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// Return immediate success to client without waiting for message broker</span></span>
+<span class="line">        <span class="tk-kw">return</span> { <span class="tk-str">&quot;success&quot;</span>: <span class="tk-lit">true</span>, <span class="tk-str">&quot;orderId&quot;</span>: orderId, <span class="tk-str">&quot;status&quot;</span>: <span class="tk-str">&quot;CREATED&quot;</span> }</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">catch</span> DatabaseError <span class="tk-kw">as</span> err:</span>
+<span class="line">        db.<span class="tk-fn">rollback</span>()</span>
+<span class="line">        logger.<span class="tk-fn">error</span>(<span class="tk-str">&quot;Failed to persist order and outbox event&quot;</span>, err)</span>
+<span class="line">        <span class="tk-kw">throw</span> <span class="tk-fn">OrderPlacementException</span>(<span class="tk-str">&quot;Order could not be placed. Please retry.&quot;</span>)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ==============================================================================</span></span>
+<span class="line"><span class="tk-com">// 2. BACKGROUND RELAY WORKER (POLLING WITH SKIP LOCKED OR CDC RELAY)</span></span>
+<span class="line"><span class="tk-com">// ==============================================================================</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">relayOutboxEventsWorker</span>(batchSize <span class="tk-op">=</span> <span class="tk-num">100</span>):</span>
+<span class="line">    <span class="tk-kw">while</span> <span class="tk-lit">true</span>:</span>
+<span class="line">        db.<span class="tk-fn">beginTransaction</span>()</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            <span class="tk-com">// Fetch unread events with FOR UPDATE SKIP LOCKED for safe concurrent scaling</span></span>
+<span class="line">            events <span class="tk-op">=</span> db.<span class="tk-fn">query</span>(</span>
+<span class="line">                <span class="tk-str">&quot;SELECT id, aggregate_id, event_type, payload FROM outbox_events &quot;</span> <span class="tk-op">+</span></span>
+<span class="line">                <span class="tk-str">&quot;WHERE status = &#x27;PENDING&#x27; ORDER BY created_at ASC LIMIT ? FOR UPDATE SKIP LOCKED&quot;</span>,</span>
+<span class="line">                batchSize</span>
+<span class="line">            )</span>
+<span class="line"></span>
+<span class="line">            <span class="tk-kw">if</span> events.<span class="tk-fn">isEmpty</span>():</span>
+<span class="line">                db.<span class="tk-fn">rollback</span>()</span>
+<span class="line">                <span class="tk-fn">sleep</span>(Duration.<span class="tk-fn">fromMilliseconds</span>(<span class="tk-num">50</span>))</span>
+<span class="line">                <span class="tk-kw">continue</span></span>
+<span class="line"></span>
+<span class="line">            <span class="tk-kw">for</span> event <span class="tk-kw">in</span> events:</span>
+<span class="line">                <span class="tk-com">// Publish to Kafka using aggregate_id as partition key to guarantee FIFO per order</span></span>
+<span class="line">                broker.<span class="tk-fn">publish</span>(</span>
+<span class="line">                    topic<span class="tk-op">=</span><span class="tk-str">&quot;order-events&quot;</span>,</span>
+<span class="line">                    partitionKey<span class="tk-op">=</span>event.aggregate_id,</span>
+<span class="line">                    messageId<span class="tk-op">=</span>event.id,</span>
+<span class="line">                    payload<span class="tk-op">=</span>event.payload</span>
+<span class="line">                )</span>
+<span class="line"></span>
+<span class="line">                <span class="tk-com">// Mark processed or delete to prevent table bloat</span></span>
+<span class="line">                db.<span class="tk-fn">execute</span>(</span>
+<span class="line">                    <span class="tk-str">&quot;UPDATE outbox_events SET status = &#x27;PROCESSED&#x27;, processed_at = ? WHERE id = ?&quot;</span>,</span>
+<span class="line">                    <span class="tk-fn">now</span>(), event.id</span>
+<span class="line">                )</span>
+<span class="line"></span>
+<span class="line">            db.<span class="tk-fn">commit</span>()</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">catch</span> Exception <span class="tk-kw">as</span> err:</span>
+<span class="line">            db.<span class="tk-fn">rollback</span>()</span>
+<span class="line">            logger.<span class="tk-fn">warn</span>(<span class="tk-str">&quot;Transient broker or database error during relay; retrying...&quot;</span>, err)</span>
+<span class="line">            <span class="tk-fn">sleep</span>(Duration.<span class="tk-fn">fromSeconds</span>(<span class="tk-num">1</span>))</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ==============================================================================</span></span>
+<span class="line"><span class="tk-com">// 3. DOWNSTREAM CONSUMER: IDEMPOTENT PROCESSING</span></span>
+<span class="line"><span class="tk-com">// ==============================================================================</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onOrderCreatedMessage</span>(message):</span>
+<span class="line">    consumerDb.<span class="tk-fn">beginTransaction</span>()</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        <span class="tk-com">// Attempt atomic insert into processed_events table to guard against duplicate deliveries</span></span>
+<span class="line">        rowsInserted <span class="tk-op">=</span> consumerDb.<span class="tk-fn">execute</span>(</span>
+<span class="line">            <span class="tk-str">&quot;INSERT INTO processed_events (event_id, processed_at) VALUES (?, ?) ON CONFLICT (event_id) DO NOTHING&quot;</span>,</span>
+<span class="line">            message.eventId, <span class="tk-fn">now</span>()</span>
+<span class="line">        )</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">if</span> rowsInserted <span class="tk-op">==</span> <span class="tk-num">0</span>:</span>
+<span class="line">            <span class="tk-com">// Event already processed; acknowledge message and skip execution</span></span>
+<span class="line">            consumerDb.<span class="tk-fn">rollback</span>()</span>
+<span class="line">            broker.<span class="tk-fn">acknowledge</span>(message)</span>
+<span class="line">            <span class="tk-kw">return</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// Execute domain logic (e.g. allocate inventory or trigger billing)</span></span>
+<span class="line">        <span class="tk-fn">allocateInventory</span>(message.data.items)</span>
+<span class="line">        consumerDb.<span class="tk-fn">commit</span>()</span>
+<span class="line">        broker.<span class="tk-fn">acknowledge</span>(message)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">catch</span> Exception <span class="tk-kw">as</span> err:</span>
+<span class="line">        consumerDb.<span class="tk-fn">rollback</span>()</span>
+<span class="line">        logger.<span class="tk-fn">error</span>(<span class="tk-str">&quot;Consumer processing failed; message will be redelivered&quot;</span>, err)</span>
+<span class="line">        <span class="tk-kw">throw</span> err</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Assuming Exactly-Once Delivery:</strong> Treating the outbox pattern as an end-to-end exactly-once system. Relay retries and consumer rebalances mean events <em>will</em> be delivered more than once; downstream consumers must be strictly idempotent.</li>
+          <li><strong>Lock Contention in Polling Relays:</strong> Using a naive <code>SELECT * FROM outbox WHERE status = 'PENDING'</code> without <code>FOR UPDATE SKIP LOCKED</code>, causing database deadlocks and worker contention as multiple relay instances scale.</li>
+          <li><strong>Unbounded Outbox Table Bloat:</strong> Forgetting an aggressive retention or truncation strategy for processed outbox entries, causing index degradation, high query latency, and database disk exhaustion.</li>
+          <li><strong>Coupling Events to Internal Database Schemas:</strong> Serializing internal database entities directly into the outbox payload instead of versioned, schema-governed public integration contracts (e.g., Protobuf, Avro, or JSON Schema).</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In production architectures handling massive scale, implementing the Transactional Outbox pattern centers around two dominant implementation patterns: Change Data Capture (CDC via Debezium) or Partitioned Polling with SKIP LOCKED.</p>
+        <ul>
+          <li><strong>Step 1 — Atomic Persistence:</strong> In the order creation handler, wrap the domain write and the outbox insertion into a single local ACID transaction. Write to <code>orders</code> and insert an event envelope into <code>outbox_events</code> containing an event UUID, aggregate type (<code>Order</code>), aggregate ID (<code>order_id</code>), event type (<code>OrderCreated</code>), and serialized JSON payload.</li>
+          <li><strong>Step 2 — High-Performance CDC Relay:</strong> Deploy <strong>Debezium Kafka Connect</strong> to tail the database transaction log (PostgreSQL WAL via logical replication, or MySQL Binlog). Debezium reads committed changes off-disk with zero SQL read overhead, guaranteeing high write throughput without periodic table polling.</li>
+          <li><strong>Step 3 — Routing & Partitioning:</strong> Configure the Debezium Outbox Event Router SMT (Single Message Transform) to route messages into Kafka topics (e.g., <code>order-events</code>), setting Kafka's message key to <code>order_id</code> to enforce strict FIFO ordering for every order.</li>
+          <li><strong>Step 4 — Downstream Idempotency:</strong> Implement an Idempotent Consumer pattern in downstream services (e.g., Billing and Inventory). Store incoming <code>eventId</code> in a dedicated deduplication table (using <code>INSERT ... ON CONFLICT DO NOTHING</code>) within the consumer's local transaction.</li>
+          <li><strong>Step 5 — Log Compaction & Storage Pruning:</strong> To prevent infinite table growth, either use Debezium's outbox event router which automatically drops the row, or implement time-based partition dropping (e.g., <code>pg_partman</code>) to truncate processed outbox partitions without vacuum overhead.</li>
+        </ul>
+        <p>This architecture powers tier-1 e-commerce platforms like Shopify, Netflix, and Uber, ensuring sub-second checkout latencies and unshakeable data consistency across hundreds of microservices.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Never attempt a distributed dual-write over the network. Commit business state and event payloads atomically into a <strong>local transactional outbox</strong>, and relay them asynchronously using <strong>Change Data Capture (CDC)</strong> paired with <strong>idempotent downstream consumers</strong>.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ethan&#x27;s Inventory Deadlock Dilemma: Which locking pattern prevails? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">29 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Deadlocks</span>
+      <span class="tag tag--green">Inventory</span>
+      <span class="tag tag--amber">Locking Patterns</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Ethan&#x27;s Inventory Deadlock Dilemma: Which locking pattern prevails?</h1>
+      <p class="q-scenario"><strong>Ethan</strong>, a backend engineer at an international e-commerce enterprise, is redesigning the multi-item inventory reservation engine. A standard customer checkout commonly bundles multiple distinct SKUs distributed across geographically separated regional fulfillment warehouses. Under high-concurrency peak shopping spikes, customers encounter intermittent 500 errors and severe checkout latency. Investigation reveals that concurrent checkout workers are acquiring pessimistic locks on warehouse/SKU records in non-deterministic, arbitrary sequences—triggering classic circular wait conditions, prolonged lock wait timeouts, and database deadlocks. Ethan must revamp the concurrency architecture to decisively eliminate deadlocks while preserving strict stock integrity across multi-warehouse orders.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Employ centralized distributed locks: Deploy a dedicated locking service (like Consul or etcd) and mandate that services obtain explicit locks for every warehouse and SKU needed for a reservation, enforcing a strict global locking order with leased timeouts.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Utilize optimistic concurrency control with Compare-And-Swap (CAS) retries: Confine reservations to individual storage nodes using ETags or versioned rows. Services read the latest item versions, perform local validation, and execute atomic writes; if a conflict arises, they retry using exponential backoff.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Implement partitioned shard leaders: Distribute inventory by warehouse or SKU, directing all reservation traffic for a specific item to its designated shard leader. For reservations involving multiple SKUs, send the entire request to a central coordinator that sequentially communicates with the respective leaders, using Two-Phase Commit (2PC) if atomicity is required.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Bypass distributed locks entirely: Merge data partitioning with an asynchronous saga or compensation model, enforcing serialization within each partition. Forward every SKU change to its respective leader/shard, execute the reservation processes as idempotent tasks, and manage the workflow through a saga coordinator that triggers compensatory actions upon failure.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Optimistic Concurrency Control (OCC) with Atomic CAS and Jittered Retries</h3>
+        <p>Deadlocks occur fundamentally when two or more transactions hold exclusive pessimistic locks on resources while simultaneously attempting to acquire locks on resources held by the other (the <em>circular wait</em> condition of the Coffman deadlock criteria). In Ethan's multi-warehouse, multi-SKU checkout flow, acquiring pessimistic database locks in non-deterministic sequences guarantees deadlocks under concurrent traffic. <strong>Optimistic Concurrency Control (OCC)</strong> with Compare-And-Swap (CAS) semantics fundamentally eliminates deadlocks because <strong>no transaction holds a lock while waiting for another resource</strong>. A checkout service reads the current version/ETag of each required SKU/warehouse record without locking, validates stock availability, and executes an atomic conditional mutation (e.g., <code>UPDATE inventory SET stock = stock - :qty, version = version + 1 WHERE sku = :sku AND warehouse = :wh AND version = :expected_version AND stock &gt;= :qty</code>). If any row was updated concurrently by another thread, the atomic write returns zero rows affected. The transaction fails fast with zero lock holding and immediately retries using truncated exponential backoff with full jitter. Because locks are never held across multi-resource evaluations, deadlocks become mathematically impossible.</p>
+        <ul>
+          <li><strong>Mathematical deadlock immunity:</strong> Because operations never acquire or hold pessimistic locks while waiting for subsequent resources, circular lock dependencies cannot form.</li>
+          <li><strong>Zero lock-wait latency:</strong> Transactions do not queue up behind stalled database lock tables; conflicting operations fail fast in microseconds and retry gracefully with jittered backoff.</li>
+          <li><strong>Localized atomic validation:</strong> Atomic CAS execution leverages native database atomic write primitives (e.g., PostgreSQL/MySQL conditional updates or DynamoDB ConditionExpressions) without external lock coordinators.</li>
+          <li><strong>Independent multi-resource progression:</strong> Multi-SKU checkouts can validate and conditionally decrement inventory items in parallel or sequential batches without fearing distributed blocking states.</li>
+          <li><strong>Minimal operational footprint:</strong> Eliminates the need to deploy, monitor, tune, and maintain complex distributed lock engines (Consul, Zookeeper, or etcd clusters).</li>
+        </ul>
+        <p>Pessimistic locking across multiple resources is the primary root cause of checkout deadlocks. Switching to optimistic concurrency with atomic CAS writes removes the lock-holding phase entirely, delivering deadlock-free performance and exceptional throughput.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>A — Centralized Distributed Locking (Consul / etcd)</h4>
+          </div>
+          <p>While enforcing a strict canonical locking order (e.g., sorting resources lexicographically) theoretically avoids deadlocks, orchestrating multi-resource distributed locks via Consul or etcd introduces massive network latency (multiple consensus round-trips per checkout). It creates an immense single-point bottleneck and leaves the system vulnerable to lock abandonment or split-brain mutations if network latency exceeds lock lease timeouts.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚠️</span>
+            <h4>C — Partitioned Shard Leaders with 2PC Coordination</h4>
+          </div>
+          <p>Routing multi-SKU reservations to distinct shard leaders coordinated via Two-Phase Commit (2PC) reintroduces pessimistic locking at the shard level. During Phase 1 (Prepare), shards must lock the inventory rows until the central coordinator issues Phase 2 (Commit). Any network delay or coordinator stall leaves locks held across multiple shards, throttling throughput and inviting cross-shard blocking deadlocks.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>D — Asynchronous Saga with Compensating Actions</h4>
+          </div>
+          <p>An asynchronous saga model processes reservations across shards asynchronously. However, when an order reserves SKU A successfully but fails on SKU B minutes later, a compensating transaction must be dispatched to release SKU A. During high-traffic flash events, thousands of pending sagas tie up scarce inventory with phantom reservations, creating false 'out-of-stock' signals and complex reconciliation overhead.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Optimistic Concurrency Control (OCC) with Atomic CAS and Jittered Retries ✓</h4>
+          </div>
+          <p>Utilize optimistic concurrency control with Compare-And-Swap (CAS) retries: Confine reservations to individual storage nodes using ETags or versioned rows. Services read the latest item versions, perf</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Deadlock Immunity</th><th>Lock Holding Overhead</th><th>Multi-SKU Basket Coordination</th><th>Throughput Under Low/Med Contention</th><th>Throughput Under Extreme Contention</th><th>Operational Simplicity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Centralized Distributed Locks (etcd)</td><td>Immune if Strictly Ordered ⚠</td><td>Severe Network Overhead ❌</td><td>High Coordination Delay ❌</td><td>Low to Moderate ❌</td><td>Severe Bottleneck ❌</td><td>High Complexity ❌</td></tr>
+            <tr><td class="tt-option">B — Optimistic Concurrency Control (CAS)</td><td>Mathematically Immune ✅</td><td>Zero Locks Held ✅</td><td>Straightforward Atomic Writes ✅</td><td>Very High (&gt;20k QPS) ✅</td><td>High Retry Rate (Needs Jitter) ⚠</td><td>High Simplicity ✅</td></tr>
+            <tr><td class="tt-option">C — Sharded Leaders with 2PC</td><td>Prone to Cross-Shard Deadlocks ❌</td><td>Locks Held During 2PC Phase 1 ❌</td><td>Blocking Coordination ❌</td><td>Moderate ⚠</td><td>Poor Scalability ❌</td><td>Very High Complexity ❌</td></tr>
+            <tr><td class="tt-option">D — Asynchronous Saga with Compensations</td><td>Deadlock Free ✅</td><td>Zero Locks Held ✅</td><td>Phantom Holds &amp; Rollbacks ⚠</td><td>High ✅</td><td>Moderate (Saga State Churn) ⚠</td><td>Complex Compensations ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Centralized Distributed Locks (etcd)</h4>
+          </div>
+          <p>Coarse-grained cluster-wide leader election or singleton maintenance cron orchestration where locking is infrequent and held for longer intervals.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Optimistic Concurrency Control (CAS)</h4>
+          </div>
+          <p>High-volume e-commerce checkout and multi-warehouse inventory reservation systems where transactions must remain deadlock-free, fast, and scalable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Sharded Leaders with 2PC</h4>
+          </div>
+          <p>Low-volume enterprise ERP or banking transactions requiring strict immediate multi-ledger balance synchronization within a unified low-latency LAN.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Asynchronous Saga with Compensations</h4>
+          </div>
+          <p>Long-running multi-stage business workflows (e.g., flight booking + hotel reservation + car rental) where operations take minutes and atomic locks are impossible.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Optimistic Concurrency Control (CAS) Multi-Item Reservation Flow</h3>
+        <p>Checkout service reads unreserved item state without locks, then executes atomic conditional compare-and-swap writes. On version conflict, it executes an immediate jittered retry with zero lock waiting.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    autonumber
+    participant Checkout as Checkout Worker
+    participant DB as Warehouse Inventory DB
+    Checkout-&gt;&gt;DB: 1. SELECT sku, warehouse_id, available, version WHERE sku IN (...) (No Locks)
+    DB--&gt;&gt;Checkout: Item A (Ver: 12, Stock: 5), Item B (Ver: 8, Stock: 2)
+    Note over Checkout: Evaluate locally: Stock &gt;= Requested Qty
+    Checkout-&gt;&gt;DB: 2. UPDATE inventory SET available = available - 1, version = version + 1 WHERE sku = &#x27;A&#x27; AND version = 12 AND available &gt;= 1
+    DB--&gt;&gt;Checkout: Success (1 row updated, new ver: 13)
+    Checkout-&gt;&gt;DB: 3. UPDATE inventory SET available = available - 1, version = version + 1 WHERE sku = &#x27;B&#x27; AND version = 8 AND available &gt;= 1
+    alt Version Collision on Item B (Concurrently updated by other checkout)
+        DB--&gt;&gt;Checkout: 0 rows updated (Version mismatch!)
+        Note over Checkout: Rollback Item A (Atomic Increment) -&gt; Zero Locks Left Held
+        Checkout-&gt;&gt;DB: UPDATE inventory SET available = available + 1, version = version + 1 WHERE sku = &#x27;A&#x27;
+        Note over Checkout: Jittered Exponential Backoff (e.g., sleep 25ms)
+        Checkout-&gt;&gt;Checkout: Retry complete reservation sequence
+    else All Items Succeeded
+        DB--&gt;&gt;Checkout: Success (1 row updated, new ver: 9)
+        Checkout--&gt;&gt;Checkout: Finalize Checkout &amp; Capture Payment
+    end">sequenceDiagram
+    autonumber
+    participant Checkout as Checkout Worker
+    participant DB as Warehouse Inventory DB
+    Checkout-&gt;&gt;DB: 1. SELECT sku, warehouse_id, available, version WHERE sku IN (...) (No Locks)
+    DB--&gt;&gt;Checkout: Item A (Ver: 12, Stock: 5), Item B (Ver: 8, Stock: 2)
+    Note over Checkout: Evaluate locally: Stock &gt;= Requested Qty
+    Checkout-&gt;&gt;DB: 2. UPDATE inventory SET available = available - 1, version = version + 1 WHERE sku = &#x27;A&#x27; AND version = 12 AND available &gt;= 1
+    DB--&gt;&gt;Checkout: Success (1 row updated, new ver: 13)
+    Checkout-&gt;&gt;DB: 3. UPDATE inventory SET available = available - 1, version = version + 1 WHERE sku = &#x27;B&#x27; AND version = 8 AND available &gt;= 1
+    alt Version Collision on Item B (Concurrently updated by other checkout)
+        DB--&gt;&gt;Checkout: 0 rows updated (Version mismatch!)
+        Note over Checkout: Rollback Item A (Atomic Increment) -&gt; Zero Locks Left Held
+        Checkout-&gt;&gt;DB: UPDATE inventory SET available = available + 1, version = version + 1 WHERE sku = &#x27;A&#x27;
+        Note over Checkout: Jittered Exponential Backoff (e.g., sleep 25ms)
+        Checkout-&gt;&gt;Checkout: Retry complete reservation sequence
+    else All Items Succeeded
+        DB--&gt;&gt;Checkout: Success (1 row updated, new ver: 9)
+        Checkout--&gt;&gt;Checkout: Finalize Checkout &amp; Capture Payment
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Deadlock-Free Multi-Item Inventory Reservation with OCC and Jitter</h3>
+        <p>Algorithm executing multi-item reservations using optimistic version verification, atomic CAS updates, and deterministic compensation on conflict.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> InventoryReservationService:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, db_client, max_retries<span class="tk-op">=</span><span class="tk-num">4</span>, base_backoff_ms<span class="tk-op">=</span><span class="tk-num">20</span>):</span>
+<span class="line">        self.db <span class="tk-op">=</span> db_client</span>
+<span class="line">        self.max_retries <span class="tk-op">=</span> max_retries</span>
+<span class="line">        self.base_backoff_ms <span class="tk-op">=</span> base_backoff_ms</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">reserve_cart_items</span>(self, cart_items):</span>
+<span class="line">        <span class="tk-com"># Sort items deterministically by warehouse and SKU to standardize update sequence</span></span>
+<span class="line">        sorted_items <span class="tk-op">=</span> <span class="tk-fn">sorted</span>(cart_items, key<span class="tk-op">=</span>lambda x: (x.warehouse_id, x.sku_id))</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">for</span> attempt <span class="tk-kw">in</span> <span class="tk-fn">range</span>(self.max_retries):</span>
+<span class="line">            <span class="tk-com"># Step 1: Read current states without acquiring any locks</span></span>
+<span class="line">            current_states <span class="tk-op">=</span> self.db.<span class="tk-fn">query_unlocked</span>([item.key <span class="tk-kw">for</span> item <span class="tk-kw">in</span> sorted_items])</span>
+<span class="line"></span>
+<span class="line">            <span class="tk-com"># Step 2: Validate stock availability locally</span></span>
+<span class="line">            <span class="tk-kw">for</span> item <span class="tk-kw">in</span> sorted_items:</span>
+<span class="line">                state <span class="tk-op">=</span> current_states.<span class="tk-fn">get</span>(item.key)</span>
+<span class="line">                <span class="tk-kw">if</span> <span class="tk-kw">not</span> state <span class="tk-kw">or</span> state.available <span class="tk-op">&lt;</span> item.quantity:</span>
+<span class="line">                    <span class="tk-kw">return</span> <span class="tk-fn">ReservationResult</span>(status<span class="tk-op">=</span>OUT_OF_STOCK, failed_item<span class="tk-op">=</span>item.sku_id)</span>
+<span class="line"></span>
+<span class="line">            <span class="tk-com"># Step 3: Attempt atomic CAS reservation sequentially</span></span>
+<span class="line">            reserved_records <span class="tk-op">=</span> []</span>
+<span class="line">            conflict <span class="tk-op">=</span> <span class="tk-lit">False</span></span>
+<span class="line"></span>
+<span class="line">            <span class="tk-kw">for</span> item <span class="tk-kw">in</span> sorted_items:</span>
+<span class="line">                state <span class="tk-op">=</span> current_states[item.key]</span>
+<span class="line">                <span class="tk-com"># Atomic conditional update</span></span>
+<span class="line">                rows_affected <span class="tk-op">=</span> self.db.<span class="tk-fn">execute_cas</span>(</span>
+<span class="line">                    sql<span class="tk-op">=</span><span class="tk-str">&#x27;&#x27;</span>&#x27;UPDATE warehouse_inventory </span>
+<span class="line">                           SET available <span class="tk-op">=</span> available <span class="tk-op">-</span> :qty, version <span class="tk-op">=</span> version <span class="tk-op">+</span> <span class="tk-num">1</span> </span>
+<span class="line">                           WHERE sku_id <span class="tk-op">=</span> :sku AND warehouse_id <span class="tk-op">=</span> :wh </span>
+<span class="line">                             AND version <span class="tk-op">=</span> :expected_ver AND available <span class="tk-op">&gt;=</span> :qty<span class="tk-str">&#x27;&#x27;</span>&#x27;,</span>
+<span class="line">                    params<span class="tk-op">=</span>{</span>
+<span class="line">                        <span class="tk-str">&#x27;qty&#x27;</span>: item.quantity,</span>
+<span class="line">                        <span class="tk-str">&#x27;sku&#x27;</span>: item.sku_id,</span>
+<span class="line">                        <span class="tk-str">&#x27;wh&#x27;</span>: item.warehouse_id,</span>
+<span class="line">                        <span class="tk-str">&#x27;expected_ver&#x27;</span>: state.version</span>
+<span class="line">                    }</span>
+<span class="line">                )</span>
+<span class="line"></span>
+<span class="line">                <span class="tk-kw">if</span> rows_affected <span class="tk-op">==</span> <span class="tk-num">1</span>:</span>
+<span class="line">                    reserved_records.<span class="tk-fn">append</span>(item)</span>
+<span class="line">                <span class="tk-kw">else</span>:</span>
+<span class="line">                    conflict <span class="tk-op">=</span> <span class="tk-lit">True</span></span>
+<span class="line">                    <span class="tk-kw">break</span></span>
+<span class="line"></span>
+<span class="line">            <span class="tk-kw">if</span> <span class="tk-kw">not</span> conflict:</span>
+<span class="line">                <span class="tk-com"># All items successfully reserved atomically without holding locks</span></span>
+<span class="line">                <span class="tk-kw">return</span> <span class="tk-fn">ReservationResult</span>(status<span class="tk-op">=</span>SUCCESS, items<span class="tk-op">=</span>reserved_records)</span>
+<span class="line"></span>
+<span class="line">            <span class="tk-com"># Step 4: Conflict encountered - Compensate any partially reserved items in this attempt</span></span>
+<span class="line">            <span class="tk-kw">for</span> compensated_item <span class="tk-kw">in</span> reserved_records:</span>
+<span class="line">                self.db.<span class="tk-fn">execute</span>(</span>
+<span class="line">                    sql<span class="tk-op">=</span><span class="tk-str">&#x27;&#x27;</span>&#x27;UPDATE warehouse_inventory </span>
+<span class="line">                           SET available <span class="tk-op">=</span> available <span class="tk-op">+</span> :qty, version <span class="tk-op">=</span> version <span class="tk-op">+</span> <span class="tk-num">1</span> </span>
+<span class="line">                           WHERE sku_id <span class="tk-op">=</span> :sku AND warehouse_id <span class="tk-op">=</span> :wh<span class="tk-str">&#x27;&#x27;</span>&#x27;,</span>
+<span class="line">                    params<span class="tk-op">=</span>{<span class="tk-str">&#x27;qty&#x27;</span>: compensated_item.quantity, <span class="tk-str">&#x27;sku&#x27;</span>: compensated_item.sku_id, <span class="tk-str">&#x27;wh&#x27;</span>: compensated_item.warehouse_id}</span>
+<span class="line">                )</span>
+<span class="line"></span>
+<span class="line">            <span class="tk-com"># Step 5: Jittered exponential backoff before retry</span></span>
+<span class="line">            jitter <span class="tk-op">=</span> <span class="tk-fn">random_uniform</span>(<span class="tk-num">0</span>, <span class="tk-num">1</span>)</span>
+<span class="line">            sleep_duration_ms <span class="tk-op">=</span> (self.base_backoff_ms <span class="tk-op">*</span> (<span class="tk-num">2</span> <span class="tk-op">*</span><span class="tk-op">*</span> attempt)) <span class="tk-op">*</span> jitter</span>
+<span class="line">            <span class="tk-fn">sleep_ms</span>(sleep_duration_ms)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">ReservationResult</span>(status<span class="tk-op">=</span>CONCURRENCY_TIMEOUT_EXCEEDED)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Retrying without jitter (Thundering Herd):</strong> Using fixed sleep intervals between retries, causing conflicting threads to collide repeatedly on subsequent CAS attempts.</li>
+          <li><strong>Failing to differentiate version conflict vs stock exhaustion:</strong> Retrying when the item is genuinely sold out, wasting database IOPS on impossible writes.</li>
+          <li><strong>Unbounded retry loops:</strong> Omitting a hard retry limit (e.g., failing to cap retries at 3 or 5), leading to request timeout cascades during extreme hot-item sales.</li>
+          <li><strong>Orphaned multi-item partial reservations:</strong> Successfully executing CAS for item 1, encountering total failure on item 2, and failing to release item 1's reservation.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Distributed database deadlocks across multi-item retail checkouts are among the most common scaling traps. Industry leaders (Amazon, Target, Walmart) eliminate cross-row pessimistic locks by shifting to atomic conditional updates with retry loops or reservation token patterns.</p>
+        <ul>
+          <li><strong>Deterministic item sorting on writes:</strong> Even when using optimistic atomic updates across multiple rows, always sort the reservation items by canonical key (e.g., <code>warehouse_id + ':' + sku_id</code>) before executing updates to maintain uniform execution order.</li>
+          <li><strong>Exponential backoff with full jitter:</strong> When a CAS version collision occurs, calculate retry sleep time using: <code>sleep = rand(0, min(max_backoff, base * 2 ^ attempt))</code> to prevent synchronous thundering herd retries.</li>
+          <li><strong>Two-phase reservation with TTL:</strong> Decrement <code>available_stock</code> and increment <code>reserved_stock</code> in the CAS update, stamping a 10-minute expiration timestamp to handle abandoned checkouts automatically.</li>
+          <li><strong>Short circuit out-of-stock:</strong> If a CAS update fails because remaining stock is below required quantity (rather than a version mismatch), abort immediately without retrying.</li>
+          <li><strong>Conditional SQL query pattern:</strong> Use standard atomic conditional SQL: <code>UPDATE warehouse_inventory SET quantity = quantity - :qty, version = version + 1 WHERE sku = :sku AND warehouse_id = :wh AND version = :ver AND quantity >= :qty RETURNING version</code>.</li>
+        </ul>
+        <p>Eliminating distributed deadlocks does not require heavy distributed locking frameworks. By adopting optimistic concurrency control with atomic CAS updates, you remove lock contention at the root.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Deadlocks cannot exist without held locks; <strong>use optimistic concurrency control with atomic CAS writes</strong> to eliminate locks and achieve non-blocking checkout concurrency.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

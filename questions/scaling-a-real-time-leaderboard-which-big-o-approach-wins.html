@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scaling a real-time leaderboard: which Big-O approach wins? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">24 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Leaderboards</span>
+      <span class="tag tag--green">Algorithmic Complexity</span>
+      <span class="tag tag--amber">Real-time</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Scaling a real-time leaderboard: which Big-O approach wins?</h1>
+      <p class="q-scenario"><strong>Maya</strong>, a backend engineer, is building a <strong>global gaming leaderboard</strong>. Players submit score updates at a <strong>massive rate</strong> (millions per day, with large bursts), and reads are even heavier: clients request the <strong>top 100 per region</strong> with a <strong>tail latency under 50 ms</strong>. Re-sorting all users on every update is <strong>O(N log N)</strong> and collapses at this scale. She needs a design that keeps <strong>update cost</strong> and <strong>read cost</strong> both feasible while balancing <strong>write throughput, availability, and consistency</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A single centralized in-memory sorted structure (such as one Redis Sorted Set) storing scores for every player. Each update requires O(log N) processing on the central server; read operations take O(1) to retrieve the top-100.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Partition players across multiple nodes based on user ID. Each partition keeps its own local sorted structure and top-100 list. For a global read, fetch the top-100 from all partitions and merge them during query execution to form the overall top-100 (merging k sorted lists).</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Employ an approximate streaming or heavy-hitter data structure (like Count-Min sketch or frequent-items sketch) to monitor top players. Updates execute in O(1) time using minimal memory, though results are estimations and might misorder scores near the cutoff.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Send all score updates to a durable message log (such as Kafka) and utilize a stream processor to incrementally update a materialized global and regional top-100 (acting as a background aggregator). Read queries access the cached materialized view in O(1) time, while updates are processed asynchronously and amortized in batches.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Stream-Updated Materialized Top-100</h3>
+        <p>The workload is <strong>write-heavy and read-heavier</strong>, but the read is always the same tiny result: the current top 100 per region. That is a textbook case for <strong>precomputing the answer</strong>. A durable log absorbs write bursts, partitioned stream processors keep a small top-K per partition (O(log K) per update, with K = 100), and a regional merger combines k tiny lists into a cached result. Reads become a single cache lookup, independent of player count and score update volume. Here is why it fits:</p>
+        <ul>
+          <li><strong>Read cost is O(1) and independent of write load:</strong> Clients read one cached value per region, so tail latency does not depend on how many scores arrive. Heavy read traffic never touches the ranking machinery.</li>
+          <li><strong>Write cost is small and parallel:</strong> Each partition owns a disjoint set of players. An update is a hash lookup plus an O(log 100) heap operation, and partitions scale horizontally with no cross-partition coordination.</li>
+          <li><strong>Merge happens once, not per read:</strong> The k-way merge of k lists of 100 entries is performed by the aggregator when a partition's top-K changes, not on every client request. Fan-out cost is paid once per change instead of once per read.</li>
+          <li><strong>Burst absorption and replay:</strong> The log buffers spikes, lets consumers lag temporarily, and allows rebuilding the leaderboard (new season, bug fix) by replaying events.</li>
+          <li><strong>Availability:</strong> Reads are served from a cache even if the stream processor is behind or restarting. The worst case is slightly stale rankings, not an outage.</li>
+        </ul>
+        <p>Partition the stream by <strong>player ID</strong>, keep <strong>per-partition top-K</strong>, merge <strong>per region</strong>, and publish to a <strong>cache or CDN</strong>. Track processing lag, publish-to-read freshness, merge time, and cache hit rate, and alert when freshness exceeds the product's tolerance.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏆</span>
+            <h4>A — Single Redis Sorted Set</h4>
+          </div>
+          <p>Simple and exact: <code>ZADD</code> is O(log N) and a top-100 read (<code>ZREVRANGE</code>) is O(log N + 100), not strictly O(1). The real limits are operational: one node's throughput and memory, a <strong>single failure domain</strong>, and cross-region read latency for global players. Heavy read traffic also competes with writes on the same node. It is a good first version and a reasonable building block (a sorted set per region inside the aggregator), but not the final answer for this load profile.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>B — Partitioned with Query-Time Merge</h4>
+          </div>
+          <p>Partitioning solves write scaling, but doing the merge <strong>on every read</strong> multiplies the cost of the heaviest traffic by the partition count k. Read latency becomes the <strong>maximum</strong> of k parallel calls, so tail latency worsens as k grows, and one slow partition slows every leaderboard read. The fix is to cache the merged result and recompute it when partitions change, which is exactly option D.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🎲</span>
+            <h4>C — Count-Min / Heavy-Hitter Sketch</h4>
+          </div>
+          <p>Sketches estimate <strong>frequencies</strong> of items in a stream (and Count-Min only overestimates). A leaderboard ranks <strong>arbitrary score values</strong> and needs <strong>exact order</strong>, including replacement of a player's previous score. Misordering near the cutoff is unacceptable when rank carries rewards or competitive meaning, and the memory saving is irrelevant when only 100 entries per region need to be stored exactly.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Stream-Updated Materialized Top-100 ✓</h4>
+          </div>
+          <p>Send all score updates to a durable message log (such as Kafka) and utilize a stream processor to incrementally update a materialized global and regional top-100 (acting as a background aggregator). R</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Update Cost</th><th>Read Cost / Tail Latency</th><th>Ranking Accuracy</th><th>Write Scalability</th><th>Availability</th><th>Freshness</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Single Sorted Set</td><td>O(log N) ✅</td><td>O(log N + 100), single node ⚠</td><td>Exact ✅</td><td>Limited to one node ❌</td><td>Single failure domain ❌</td><td>Real-time ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Partition + Merge on Read</td><td>O(log n/k) ✅</td><td>k fan-out, max of k latencies ❌</td><td>Exact ✅</td><td>Good ✅</td><td>Degrades if a partition is slow ⚠</td><td>Real-time ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — Sketch</td><td>O(1) ✅</td><td>Fast ✅</td><td>Approximate ❌</td><td>Good ✅</td><td>Good ✅</td><td>Real-time ✅</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Stream + Materialized Top-100 ✓</td><td>O(log K) amortized, batched ✅</td><td>O(1) cache read ✅</td><td>Exact (with care) ✅</td><td>Excellent ✅</td><td>Excellent (reads survive lag) ✅</td><td>Seconds of delay ⚠</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Sorted Set</h4>
+          </div>
+          <p>A moderate scale (up to tens of thousands of updates per second), exact ranks and instant freshness needed, and a single region or a board per region fitting on one node.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Partition + Merge on Read</h4>
+          </div>
+          <p>Occasional global queries over partitioned data where read volume is low, or as an internal step whose merged result is then cached.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Sketch</h4>
+          </div>
+          <p>Approximate popularity or trending detection (most frequent items, hot keys), where small errors near the cutoff do not matter.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Stream + Materialized Top-100</h4>
+          </div>
+          <p>Very high write rates, very high read fan-out for the same top-N result, many boards (global, regional, seasonal), and seconds of staleness acceptable.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Leaderboard Dataflow</h3>
+        <p>Score updates flow through a partitioned log into per-partition top-K state, merge per region, and are read from cache:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    G[&quot;Game servers&quot;] --&gt; K[&quot;Durable log (Kafka), partitioned by player ID&quot;]
+    K --&gt; P1[&quot;Processor 1: best score per player + top-100 heap&quot;]
+    K --&gt; P2[&quot;Processor 2: best score per player + top-100 heap&quot;]
+    K --&gt; P3[&quot;Processor k: best score per player + top-100 heap&quot;]
+    P1 --&gt; M[&quot;Regional merger: k-way merge of top-100 lists&quot;]
+    P2 --&gt; M
+    P3 --&gt; M
+    M --&gt; C[&quot;Cache / CDN: lb:region&quot;]
+    C --&gt; R[&quot;Clients: GET top-100&quot;]
+    M --&gt; GM[&quot;Global merger (merge of regional boards)&quot;]
+    GM --&gt; C">flowchart LR
+    G[&quot;Game servers&quot;] --&gt; K[&quot;Durable log (Kafka), partitioned by player ID&quot;]
+    K --&gt; P1[&quot;Processor 1: best score per player + top-100 heap&quot;]
+    K --&gt; P2[&quot;Processor 2: best score per player + top-100 heap&quot;]
+    K --&gt; P3[&quot;Processor k: best score per player + top-100 heap&quot;]
+    P1 --&gt; M[&quot;Regional merger: k-way merge of top-100 lists&quot;]
+    P2 --&gt; M
+    P3 --&gt; M
+    M --&gt; C[&quot;Cache / CDN: lb:region&quot;]
+    C --&gt; R[&quot;Clients: GET top-100&quot;]
+    M --&gt; GM[&quot;Global merger (merge of regional boards)&quot;]
+    GM --&gt; C</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Partition Top-K, Regional Merge, and O(1) Read</h3>
+        <p>Idempotent per-partition processing with a bounded heap, a debounced k-way merge per region, and a single-lookup read path:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">K <span class="tk-op">=</span> <span class="tk-num">100</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Stage 1: partition processor (partitioned by playerId, so each player has exactly one owner) ----</span></span>
+<span class="line">state: bestScore  <span class="tk-op">=</span> Map<span class="tk-op">&lt;</span>playerId, long<span class="tk-op">&gt;</span>           <span class="tk-com">// durable state store</span></span>
+<span class="line">       topK       <span class="tk-op">=</span> <span class="tk-fn">BoundedMinHeap</span>(K) <span class="tk-op">+</span> index     <span class="tk-com">// holds at most K (player, score) entries</span></span>
+<span class="line">       seenEvents <span class="tk-op">=</span> <span class="tk-fn">RecentIdSet</span>(window <span class="tk-op">=</span> <span class="tk-num">10</span> min)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onScoreEvent</span>(e):</span>
+<span class="line">    <span class="tk-kw">if</span> seenEvents.<span class="tk-fn">contains</span>(e.eventId): <span class="tk-kw">return</span>               <span class="tk-com">// idempotent under at-least-once delivery</span></span>
+<span class="line">    seenEvents.<span class="tk-fn">add</span>(e.eventId)</span>
+<span class="line"></span>
+<span class="line">    prev <span class="tk-op">=</span> bestScore.<span class="tk-fn">get</span>(e.playerId)</span>
+<span class="line">    <span class="tk-kw">if</span> prev <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> e.score <span class="tk-op">&lt;=</span> prev: <span class="tk-kw">return</span>             <span class="tk-com">// only improvements can change the board</span></span>
+<span class="line">    bestScore.<span class="tk-fn">put</span>(e.playerId, e.score)</span>
+<span class="line"></span>
+<span class="line">    changed <span class="tk-op">=</span> topK.<span class="tk-fn">upsert</span>(e.playerId, e.score)              <span class="tk-com">// O(log K); evicts the lowest if full</span></span>
+<span class="line">    <span class="tk-kw">if</span> changed:</span>
+<span class="line">        <span class="tk-fn">markDirty</span>(e.region)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// every 200 ms: publish only dirty regions (debounce)</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">flush</span>():</span>
+<span class="line">    <span class="tk-kw">for</span> region <span class="tk-kw">in</span> dirtyRegions:</span>
+<span class="line">        <span class="tk-fn">publish</span>(<span class="tk-str">&#x27;partial-topk&#x27;</span>, region, partitionId, topK.<span class="tk-fn">snapshot</span>(region))   <span class="tk-com">// &lt;= 100 entries</span></span>
+<span class="line">    dirtyRegions.<span class="tk-fn">clear</span>()</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Stage 2: regional merger ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onPartial</span>(region, partitionId, entries):</span>
+<span class="line">    partials[region][partitionId] <span class="tk-op">=</span> entries</span>
+<span class="line">    merged <span class="tk-op">=</span> <span class="tk-fn">kWayMerge</span>(partials[region].<span class="tk-fn">values</span>(),</span>
+<span class="line">                       limit <span class="tk-op">=</span> K,</span>
+<span class="line">                       order <span class="tk-op">=</span> (score DESC, achievedAt ASC))   <span class="tk-com">// deterministic tie-break</span></span>
+<span class="line">    <span class="tk-kw">if</span> merged <span class="tk-op">!=</span> lastPublished[region]:</span>
+<span class="line">        cache.<span class="tk-fn">set</span>(<span class="tk-str">&#x27;lb:&#x27;</span> <span class="tk-op">+</span> region, <span class="tk-fn">versioned</span>(merged), ttl <span class="tk-op">=</span> <span class="tk-num">60s</span> <span class="tk-op">+</span> jitter)</span>
+<span class="line">        lastPublished[region] <span class="tk-op">=</span> merged</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Read path: one lookup, independent of player count and write volume ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getTop100</span>(region):</span>
+<span class="line">    board <span class="tk-op">=</span> cache.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;lb:&#x27;</span> <span class="tk-op">+</span> region)</span>
+<span class="line">    <span class="tk-kw">if</span> board <span class="tk-op">==</span> <span class="tk-lit">null</span>: <span class="tk-kw">return</span> <span class="tk-fn">staleSnapshot</span>(region)             <span class="tk-com">// never recompute on the read path</span></span>
+<span class="line">    <span class="tk-kw">return</span> board</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Assuming scores only increase:</strong> A bounded top-100 heap breaks when scores can drop or players are removed, because the next-best candidate was discarded. Retain more state or an ordered store.</li>
+          <li><strong>Non-idempotent updates:</strong> At-least-once delivery will replay events. Without event IDs or versions, replays and out-of-order arrivals corrupt rankings.</li>
+          <li><strong>Partitioning by region or score instead of player ID:</strong> Updates for one player must reach the same owner, or the per-player best score is wrong. Hot regions also create hot partitions.</li>
+          <li><strong>Re-merging on every event:</strong> Publishing and merging on every single update creates needless churn. Batch or debounce merges (for example every 100 to 500 ms).</li>
+          <li><strong>Cache stampede on leaderboard expiry:</strong> A simultaneous expiry of popular regional boards sends reads to the backend. Use versioned keys, stale-while-revalidate, and TTL jitter.</li>
+          <li><strong>Ignoring tie-breaking:</strong> Equal scores need a deterministic order (for example earliest achiever first), or the board will flicker between merges.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Large leaderboards (game platforms, social feeds, trading boards) typically combine these ideas rather than choosing one:</p>
+        <ul>
+          <li><strong>Step 0 — Clarify semantics:</strong> Best score or latest score, can scores decrease, what freshness is acceptable, how many boards (global, region, friends, weekly).</li>
+          <li><strong>Step 1 — Start simple:</strong> One sorted set per region and board covers many products up to tens of thousands of updates per second.</li>
+          <li><strong>Step 2 — Decouple writes with a log:</strong> Put Kafka (or similar) in front, partitioned by player ID, to absorb bursts and enable replay.</li>
+          <li><strong>Step 3 — Hierarchical top-K:</strong> Per-partition top-K, regional merge, global merge of regional results.</li>
+          <li><strong>Step 4 — Serve from cache:</strong> Publish the materialized top-100 to Redis and a CDN, with short TTLs and versioned keys.</li>
+          <li><strong>Step 5 — Add personal rank:</strong> Maintain an order-statistics structure for 'my rank and neighbours' queries.</li>
+        </ul>
+        <p>Precompute what everyone reads, and compute lazily what only one person asks for.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When millions of reads ask for the <strong>same small answer</strong>, compute it once on the write path and serve it from cache. Use a durable log for burst absorption, <strong>per-partition top-K with a hierarchical merge</strong> for exactness, and accept seconds of staleness. Reach for it only when a single sorted set stops being enough.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

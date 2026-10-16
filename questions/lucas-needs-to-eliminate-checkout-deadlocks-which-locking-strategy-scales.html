@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lucas needs to eliminate checkout deadlocks — which locking strategy scales? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">29 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Deadlocks</span>
+      <span class="tag tag--green">Checkout</span>
+      <span class="tag tag--amber">Locking Strategies</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Lucas needs to eliminate checkout deadlocks — which locking strategy scales?</h1>
+      <p class="q-scenario"><strong>Lucas</strong>, a lead backend engineer at an expanding e-commerce platform, is diagnosing recurring distributed deadlocks during checkout. The checkout flow orchestrates multiple services—including <code>Orders</code>, <code>Inventory</code>, <code>Pricing</code>, and <code>Fraud</code>. During flash sales and flash events, concurrent attempts to purchase high-demand items cause catastrophic deadlocks and tail latency spikes as services attempt to acquire distributed locks across distinct databases and geographic regions. The platform must sustain tens of thousands of checkouts per minute, preserve regional high availability, minimize p99 latency, and eliminate cascading failures. While absolute global consistency is not required for read caches or recommendations, the system <em>strictly forbids overselling</em> restricted inventory.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Utilize distributed transactions (like 2PC or XA) spanning all services, ensuring every checkout either fully commits or completely rolls back. Retain pessimistic locking until the commit phase to ensure data consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Deploy a centralized locking mechanism (such as Redlock or a Redis-based global lock) that all services must utilize to secure locks on products and warehouses prior to executing any checkout operation.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Shard the products by SKU and implement a single-writer-per-shard model: direct all checkout actions for a specific SKU to the corresponding shard leader for sequential updating (or utilize a local actor/queue per SKU) while employing optimistic concurrency control for writes.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Transition the checkout process to be completely asynchronous via the saga pattern: quickly accept orders, emit reservation events, permit transient over-reservations, and execute compensating actions (such as cancellations or refunds) whenever inventory conflicts arise.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Single-Writer-per-Shard with Local Optimistic Concurrency</h3>
+        <p>Distributed deadlocks occur when concurrent transactions attempt to acquire shared resources in arbitrary, uncoordinated orders across network boundaries. In a microservices checkout topology, attempting to lock inventory rows across disparate databases via pessimistic locks or multi-node coordination creates classic <em>dining philosophers</em> dependency cycles. Sharding inventory deterministically by <code>SKU</code> and routing all mutations for a given SKU to a dedicated partition leader (or in-memory actor/queue) converts concurrent lock contention into serialized in-memory execution. By pairing this with <strong>optimistic concurrency control (OCC)</strong> and versioned state, each shard updates inventory locally without cross-network lock holding, eliminating circular lock dependencies entirely while preserving strict inventory bounds.</p>
+        <ul>
+          <li><strong>Eliminates circular lock wait dependencies:</strong> By funneling all inventory reservation commands for a specific SKU to a deterministic shard leader or actor queue, contention is serialized locally rather than coordinated across distributed network boundaries.</li>
+          <li><strong>Sub-millisecond local execution:</strong> In-memory validation and single-partition OCC updates avoid distributed consensus or multi-roundtrip lock negotiation, achieving tens of thousands of reservations per second per node.</li>
+          <li><strong>Zero overselling risk:</strong> Unlike asynchronous compensating models, the shard leader verifies remaining balance against hard allocations before acknowledging reservations, guaranteeing non-negative stock counts at the authoritative source.</li>
+          <li><strong>Fault isolation across partitions:</strong> An outage or hot-spot on one SKU partition (e.g., a viral sneaker release) does not block checkout threads or lock tables for unaffected catalog items across the fleet.</li>
+          <li><strong>Predictable failover semantics:</strong> Using consensus-backed shard leases (such as Raft groups or Paxos partitions), a partition failover elects a new leader with monotonically increasing fencing tokens, preventing split-brain writes.</li>
+        </ul>
+        <p>Eliminating deadlocks requires removing distributed pessimistic lock holding. Sharding by SKU and utilizing a single-writer execution model turns distributed deadlocks into sequential local state transitions, ensuring both extreme throughput and guaranteed inventory accuracy.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>A — Distributed Transactions (2PC / XA)</h4>
+          </div>
+          <p>Two-Phase Commit (2PC) mandates that all participating microservices hold local pessimistic database locks throughout Phase 1 (Prepare) and Phase 2 (Commit). In a multi-region microservices environment, latency is dictated by the slowest network round-trip. Holding locks across services dramatically amplifies lock contention, causing widespread distributed deadlocks, thread pool starvation, and cascading outages under heavy load.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>B — Centralized Distributed Locking (Redlock / Redis)</h4>
+          </div>
+          <p>Funneling tens of thousands of checkouts per minute into a centralized Redis lock cluster creates a severe architectural bottleneck and single point of failure. Furthermore, distributed locks without strict global resource ordering do not eliminate circular wait deadlocks between multi-item transactions. Clock drift, GC pauses, and network hiccups also risk lock lease expiration while mutations are actively in flight.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚠️</span>
+            <h4>D — Asynchronous Saga with Compensating Actions</h4>
+          </div>
+          <p>While asynchronous sagas provide excellent availability and decoupled latency, permitting transient over-reservations directly violates the core requirement: <em>strictly minimizing the risk of overselling highly restricted items</em>. For scarce inventory, issuing post-checkout order cancellations and refunds degrades customer trust and triggers expensive customer support interventions.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Single-Writer-per-Shard with Local Optimistic Concurrency ✓</h4>
+          </div>
+          <p>Shard the products by SKU and implement a single-writer-per-shard model: direct all checkout actions for a specific SKU to the corresponding shard leader for sequential updating (or utilize a local ac</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Checkout Latency</th><th>Throughput Scalability</th><th>Deadlock Immunity</th><th>Oversell Prevention</th><th>Partition Resilience</th><th>Operational Simplicity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Distributed Transactions (2PC / XA)</td><td>High Latency ❌</td><td>Severely Limited ❌</td><td>Vulnerable to Deadlocks ❌</td><td>Guaranteed ✅</td><td>Brittle Across WAN ❌</td><td>Complex &amp; Heavy ❌</td></tr>
+            <tr><td class="tt-option">B — Centralized Distributed Locks (Redlock)</td><td>Moderate Latency ⚠</td><td>Bottlenecked at Redis ❌</td><td>Deadlocks Possible Without Strict Ordering ⚠</td><td>Guaranteed if Unexpired ⚠</td><td>Single Failure Domain ❌</td><td>Moderate ⚠</td></tr>
+            <tr><td class="tt-option">C — Sharded Single-Writer per SKU (OCC)</td><td>Sub-millisecond ✅</td><td>Massive Horizontal Scale ✅</td><td>Deadlock Free By Design ✅</td><td>Guaranteed ✅</td><td>High Local Availability ✅</td><td>Moderate ⚠</td></tr>
+            <tr><td class="tt-option">D — Asynchronous Saga with Compensations</td><td>Ultra-Low Initial Latency ✅</td><td>Very High Scale ✅</td><td>Deadlock Free By Design ✅</td><td>High Overselling Risk ❌</td><td>Resilient ✅</td><td>Complex Compensations ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Distributed Transactions (2PC / XA)</h4>
+          </div>
+          <p>Low-throughput, internal financial accounting systems within a single datacenter where absolute ACID atomicity is mandatory and latency is secondary.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Centralized Distributed Locks (Redlock)</h4>
+          </div>
+          <p>Coarse-grained task coordination (such as ensuring only one worker runs a nightly billing reconciliation job) where lock frequency is low.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Sharded Single-Writer per SKU (OCC)</h4>
+          </div>
+          <p>High-throughput e-commerce inventory, ticketing, and flash-sale platforms where concurrent contention on hot items causes distributed deadlocks.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Asynchronous Saga with Compensations</h4>
+          </div>
+          <p>E-commerce catalogs with virtually limitless inventory (e.g., print-on-demand books or digital licenses) where occasional cancellations carry negligible impact.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Deterministic Single-Writer SKU Partition Architecture</h3>
+        <p>Incoming checkout requests route through a deterministic SKU-hash router to dedicated shard leaders. Writes are serialized in-memory using local optimistic concurrency control, completely bypassing distributed locks.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    autonumber
+    participant Client as Checkout Client
+    participant Router as SKU Hash Router
+    participant Leader as Shard Leader (SKU-101)
+    participant DB as Shard Storage Engine
+    Client-&gt;&gt;Router: POST /checkout/reserve (SKU-101, Qty: 2)
+    Router-&gt;&gt;Leader: Dispatch to Shard Worker (In-Memory Queue)
+    Note over Leader: Local FIFO serialization eliminates cross-service locks
+    Leader-&gt;&gt;Leader: Validate Stock (Available: 15 &gt;= 2)
+    Leader-&gt;&gt;DB: Atomic CAS Update (available = available - 2, ver = ver + 1)
+    DB--&gt;&gt;Leader: Write Success (New Version: 42)
+    Leader--&gt;&gt;Router: Reservation Confirmed (TTL: 10m)
+    Router--&gt;&gt;Client: 200 OK (Reservation Token)">sequenceDiagram
+    autonumber
+    participant Client as Checkout Client
+    participant Router as SKU Hash Router
+    participant Leader as Shard Leader (SKU-101)
+    participant DB as Shard Storage Engine
+    Client-&gt;&gt;Router: POST /checkout/reserve (SKU-101, Qty: 2)
+    Router-&gt;&gt;Leader: Dispatch to Shard Worker (In-Memory Queue)
+    Note over Leader: Local FIFO serialization eliminates cross-service locks
+    Leader-&gt;&gt;Leader: Validate Stock (Available: 15 &gt;= 2)
+    Leader-&gt;&gt;DB: Atomic CAS Update (available = available - 2, ver = ver + 1)
+    DB--&gt;&gt;Leader: Write Success (New Version: 42)
+    Leader--&gt;&gt;Router: Reservation Confirmed (TTL: 10m)
+    Router--&gt;&gt;Client: 200 OK (Reservation Token)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Single-Writer SKU Reservation Worker with Atomic CAS</h3>
+        <p>An in-memory actor or shard worker processing sequential reservation requests with optimistic concurrency verification and lease generation.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> SKUInventoryShardActor:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, sku_id, db_client):</span>
+<span class="line">        self.sku_id <span class="tk-op">=</span> sku_id</span>
+<span class="line">        self.db <span class="tk-op">=</span> db_client</span>
+<span class="line">        self.cached_version <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">        self.available_stock <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">        self.fencing_token <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">initialize</span>(self, lease_token):</span>
+<span class="line">        self.fencing_token <span class="tk-op">=</span> lease_token</span>
+<span class="line">        record <span class="tk-op">=</span> self.db.<span class="tk-fn">load_inventory</span>(self.sku_id)</span>
+<span class="line">        self.available_stock <span class="tk-op">=</span> record.available</span>
+<span class="line">        self.cached_version <span class="tk-op">=</span> record.version</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">handle_reserve</span>(self, request):</span>
+<span class="line">        <span class="tk-com"># Assert current shard leader authority</span></span>
+<span class="line">        <span class="tk-kw">if</span> request.epoch <span class="tk-op">&lt;</span> self.fencing_token:</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">ReservationResult</span>(status<span class="tk-op">=</span>STALE_LEADER_REJECTED)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># Validate inventory availability locally in-memory</span></span>
+<span class="line">        <span class="tk-kw">if</span> self.available_stock <span class="tk-op">&lt;</span> request.quantity:</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">ReservationResult</span>(status<span class="tk-op">=</span>INSUFFICIENT_STOCK)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># Execute atomic compare-and-swap on underlying shard store</span></span>
+<span class="line">        new_version <span class="tk-op">=</span> self.cached_version <span class="tk-op">+</span> <span class="tk-num">1</span></span>
+<span class="line">        success <span class="tk-op">=</span> self.db.<span class="tk-fn">atomic_cas_update</span>(</span>
+<span class="line">            sku<span class="tk-op">=</span>self.sku_id,</span>
+<span class="line">            expected_version<span class="tk-op">=</span>self.cached_version,</span>
+<span class="line">            new_version<span class="tk-op">=</span>new_version,</span>
+<span class="line">            decrement<span class="tk-op">=</span>request.quantity,</span>
+<span class="line">            reservation_id<span class="tk-op">=</span>request.reservation_id,</span>
+<span class="line">            expires_at<span class="tk-op">=</span><span class="tk-fn">now</span>() <span class="tk-op">+</span> TTL_SECONDS</span>
+<span class="line">        )</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">if</span> success:</span>
+<span class="line">            self.available_stock <span class="tk-op">-</span><span class="tk-op">=</span> request.quantity</span>
+<span class="line">            self.cached_version <span class="tk-op">=</span> new_version</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">ReservationResult</span>(status<span class="tk-op">=</span>SUCCESS, reservation_id<span class="tk-op">=</span>request.reservation_id)</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            <span class="tk-com"># Reload and retry internally on optimistic mismatch</span></span>
+<span class="line">            self.<span class="tk-fn">reload_from_storage</span>()</span>
+<span class="line">            <span class="tk-kw">return</span> self.<span class="tk-fn">handle_reserve</span>(request)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Unbounded in-memory queues:</strong> Allowing backpressured SKU queues to grow without limits, leading to out-of-memory crashes during extreme traffic surges.</li>
+          <li><strong>Neglecting multi-SKU deadlock potential:</strong> Reserving multiple items in arbitrary order across shards instead of sorting SKU IDs deterministically before issuing reservations.</li>
+          <li><strong>Missing fencing tokens:</strong> Failing to reject reservation writes from an old shard leader that paused due to a long garbage collection sweep.</li>
+          <li><strong>Ignoring inventory fragmentation:</strong> Splitting stock across too many virtual buckets such that a customer ordering 5 units gets rejected even though 6 total units remain scattered across buckets.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>High-scale e-commerce architectures (such as Amazon, Shopify, and Taobao) decouple shopping cart aggregation from inventory decrement paths. For flash sales where thousands of buyers compete for hundreds of units, locking rows across multiple microservice databases is a recipe for catastrophic deadlock cascades.</p>
+        <ul>
+          <li><strong>Decompose multi-SKU carts:</strong> Break multi-item checkouts into deterministic, independent reservation requests sorted alphabetically by SKU ID to prevent cross-resource AB/BA locking cycles.</li>
+          <li><strong>Short-lived reservation leases:</strong> Use a two-step state machine: <code>RESERVED</code> (with an aggressive 10-minute TTL) followed by <code>COMMITTED</code> upon payment authorization, freeing inventory automatically if payment abandons.</li>
+          <li><strong>Inventory bucketing for hot items:</strong> Subdivide a single hot SKU's inventory into N virtual buckets (e.g., SKU_1001_B1, SKU_1001_B2) across multiple shards to scale write concurrency linearly.</li>
+          <li><strong>Actor-based concurrency:</strong> Leverage actor frameworks (like Akka or Microsoft Orleans) or dedicated Redis Lua scripts to process commands sequentially in-memory with sub-millisecond latency.</li>
+          <li><strong>Fencing tokens on writes:</strong> Ensure every inventory allocation payload includes a monotonically increasing epoch token to reject split-brain writes during leader failover.</li>
+        </ul>
+        <p>High-throughput inventory systems treat inventory updates as single-partition sequential events. Eliminate distributed locks, partition by SKU, and use optimistic validation to scale effortlessly.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Never hold distributed locks across services; <strong>shard state by partition key</strong> and serialize writes locally to make deadlocks mathematically impossible.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

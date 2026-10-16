@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kai&#x27;s Replication Dilemma: Balancing Accuracy and Latency for a Global Wallet — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">27 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Replication Models</span>
+      <span class="tag tag--green">Data Accuracy</span>
+      <span class="tag tag--amber">Latency</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Kai&#x27;s Replication Dilemma: Balancing Accuracy and Latency for a Global Wallet</h1>
+      <p class="q-scenario"><strong>Kai</strong> is a lead backend infrastructure architect designing a mission-critical <strong>global digital wallet platform</strong> supporting millions of worldwide users conducting real-time peer-to-peer payments, merchant checkouts, and high-frequency balance inquiries. Financial ledger integrity is non-negotiable: the architecture must <strong>absolutely prevent double-spending and balance errors</strong> under extreme concurrency, even during concurrent transactions initiated across continents. Simultaneously, the platform must deliver <strong>low-latency reads</strong> for a globally distributed user base, while surviving <strong>complete single-region data center outages</strong> with zero data loss (<code>RPO = 0</code>) and rapid automatic recovery (<code>RTO &lt; 5s</code>). Kai must select the ledger's consistency, sharding, and replication architecture that provides the optimal compromise between absolute data correctness, acceptable global response times, and manageable operational overhead.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A) Deploy a solitary global primary that enforces strict consistency by synchronously writing data to all regional replicas before confirming a successful transaction.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">B) Divide the ledger into distinct shards, assigning each a small consensus group (3-5 nodes using Paxos/Raft) with the leader positioned close to the primary traffic source. Direct all writes to this leader to guarantee correctness via consensus. Provide strongly consistent reads from the leader, only falling back to followers or local replicas when stale data is permissible, and dynamically relocate leaders to handle traffic shifts.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">C) Enable multi-master write capabilities locally in all regions, utilizing CRDTs or a last-writer-wins strategy for automatic conflict resolution. Rely on asynchronous replication, embracing eventual consistency while resolving any conflicts post-transaction.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">D) Maintain one primary node in a specific region using asynchronous primary-secondary replication. Channel all write operations there while leveraging read replicas globally for speed, relying on compensating actions or distributed transactions to maintain correctness if replicas fall behind.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Geo-Partitioned Shards with Consensus Groups (Raft/Paxos) and Dynamic Leader Leasing</h3>
+        <p>For a global financial wallet where preventing double-spending and balance errors is an uncompromising hard requirement, <strong>sharded consensus groups with localized leaders (Option B)</strong> represents the gold standard in distributed ledger architecture (the foundation of Google Spanner, CockroachDB, and modern core banking engines). By partitioning the ledger into localized shards managed by small Multi-Raft or Paxos groups (3–5 nodes), the platform eliminates cross-region coordination bottlenecks for localized accounts while guaranteeing linearizability and partition tolerance:</p>
+        <ul>
+          <li><strong>Mathematical Invariant Enforcement & Zero Double-Spending:</strong> Directing all balance-mutating writes (debits and credits) through a single authoritative Raft/Paxos leader for a given shard serializes state transitions. Replicating state changes across a majority quorum ($Q = \lfloor N/2 \rfloor + 1$) guarantees linearizability, eliminates split-brain anomalies, and prevents concurrent debits from executing simultaneously.</li>
+          <li><strong>Minimized Latency via Geographic Sharding:</strong> Accounts are partitioned geographically (e.g., by user residency, billing region, or national routing code). Positioning the shard leader in the primary user's home region allows local write quorums (e.g., 2 out of 3 replicas across local availability zones or nearby regional metro hubs) to complete in 10–30ms, avoiding cross-oceanic WAN round trips for the vast majority of consumer transactions.</li>
+          <li><strong>Tiered Read Optimization (Leader Leases & Safe Follower Reads):</strong> Pre-transaction balance checks utilize <em>leader leases</em> to return linearizable, strongly consistent reads directly from the leader's local state machine without executing a multi-node Raft network round trip. High-volume, non-critical reads (e.g., statement browsing or audit history) are offloaded to local follower replicas using bounded-staleness / safe-timestamp reads ($t \le t_{\text{safe}}$), delivering microsecond local edge performance.</li>
+          <li><strong>Resilient Single-Region Outage Survival (RPO = 0, RTO &lt; 5s):</strong> Distributing a shard's 3 or 5 consensus nodes across independent availability zones or regions guarantees that if an entire region suffers a catastrophic blackout, the remaining $N-1$ nodes retain majority quorum (2 of 3, or 3 of 5). The surviving nodes automatically elect a new leader and resume transaction processing with zero committed data loss.</li>
+          <li><strong>Dynamic Leader Relocation (Follow-the-Sun):</strong> When a user travels internationally or regional traffic patterns shift, the consensus group can dynamically transfer its leadership lease to a replica closer to the active traffic source, maintaining low latency without costly database re-partitioning.</li>
+        </ul>
+        <p>By combining <strong>localized shard-level consensus</strong>, <strong>majority quorums across independent failure domains</strong>, and <strong>lease-backed linearizable reads</strong>, Kai achieves the ideal balance of absolute financial correctness, low regional latency, and non-stop operational availability.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🐢</span>
+            <h4>A — Solitary Global Primary with Synchronous All-Replica Writes</h4>
+          </div>
+          <p>Synchronously replicating writes to every regional replica inflates write latency to the slowest network link on the planet (&gt;250ms cross-oceanic WAN RTT). Furthermore, requiring unanimous consensus across all replicas destroys availability: if a single regional replica or network link drops, the entire global payment platform halts. Additionally, a solitary global primary forms an extreme throughput bottleneck and a single point of failure (SPOF).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">💥</span>
+            <h4>C — Active-Active Multi-Master with CRDTs / Last-Writer-Wins</h4>
+          </div>
+          <p>Eventual consistency and CRDTs are fundamentally incapable of enforcing non-negative balance invariants across distributed regions without coordination. If a user with $100 concurrently initiates two $100 debit requests at nodes in different regions, both nodes approve the transaction locally. When asynchronous replication merges the state, the account is severely overdrawn (-$100), or Last-Writer-Wins silently drops a merchant's payment. Once funds are disbursed or transferred externally, post-hoc conflict resolution is impossible.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚠️</span>
+            <h4>D — Single Primary with Asynchronous Read Replicas &amp; Compensations</h4>
+          </div>
+          <p>Asynchronous replication introduces unpredictable replication lag, exposing read replicas to stale balances where users observe phantom funds and attempt to double-spend. Directing all writes to a single distant primary forces unacceptable WAN latency onto international users. Relying on 'compensating actions' (clawbacks) after double-spending has occurred is completely unacceptable in digital wallets: once funds are cashed out at an ATM or wired externally, money cannot be retracted, resulting in direct capital loss and regulatory non-compliance.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Geo-Partitioned Shards with Consensus Groups (Raft/Paxos) and Dynamic Leader Leasing ✓</h4>
+          </div>
+          <p>B) Divide the ledger into distinct shards, assigning each a small consensus group (3-5 nodes using Paxos/Raft) with the leader positioned close to the primary traffic source. Direct all writes to this</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Zero Double-Spending (Linearizability)</th><th>Single-Region Outage Resilience</th><th>Write Latency for Distributed Users</th><th>Read Scalability &amp; Local Latency</th><th>Operational &amp; Concurrency Overhead</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Solitary Primary + Sync All Replicas</td><td>✅ Absolute Strictness</td><td>❌ 0% Available on 1 Outage</td><td>❌ Sluggish (&gt;250ms WAN Tail)</td><td>⚠ Leader Contention</td><td>❌ Fragile &amp; High Blocking</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Sharded Consensus Groups (Raft/Paxos) ✓</td><td>✅ Absolute (Raft Quorum)</td><td>✅ Zero Loss (RPO=0, RTO&lt;5s)</td><td>✅ Low Local Quorum (10–30ms)</td><td>✅ High (Lease + Safe Follower)</td><td>✅ Scalable Multi-Raft</td></tr>
+            <tr><td class="tt-option">C — Multi-Master CRDTs / LWW</td><td>❌ Severe Double-Spending</td><td>✅ Autonomous Local Writes</td><td>✅ Ultra-Low Local (&lt;5ms)</td><td>✅ Ultra-Low Local (&lt;2ms)</td><td>❌ Unsolvable Invariant Drift</td></tr>
+            <tr><td class="tt-option">D — Async Primary-Secondary + Compensations</td><td>❌ Stale Read Race Conditions</td><td>❌ Data Loss Risk (RPO&gt;0)</td><td>❌ Global WAN to Single Primary</td><td>⚠ Stale Replicas / Lag</td><td>❌ Complex Compensating Actions</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Solitary Primary + Sync All Replicas</h4>
+          </div>
+          <p>Small-scale, regulatory-mandated audit registries or corporate configuration backbones with low write volume (<50 writes/sec) located in a single metro region, where zero replica lag is legally required and write pauses during node maintenance are acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Sharded Consensus Groups (Raft/Paxos)</h4>
+          </div>
+          <p>Mission-critical financial ledgers, digital payment wallets, core banking databases, and global distributed transactional platforms (e.g., Google Spanner, CockroachDB) requiring strict linearizability, zero double-spending, low regional latency, and automatic zero-loss failover during regional disasters.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Multi-Master CRDTs / LWW</h4>
+          </div>
+          <p>Collaborative text editors, social media reactions/likes, shopping cart item accumulation, distributed telemetry gathering, or offline-first mobile sync apps where high availability and local offline writes are paramount and semantic invariants are non-restrictive.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Async Primary-Secondary + Compensations</h4>
+          </div>
+          <p>Content management systems, product catalog browsing, analytics reporting systems, or low-stakes reservation platforms where reads vastly outnumber writes, slight replica lag is harmless, and occasional booking cancellations/refunds are routine business operations.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Sharded Ledger: Fast-Path Leader Lease Read &amp; Follower Fallback</h3>
+        <p>Demonstrates how client balance checks are served with zero-network overhead via Raft leader leases, while non-critical history queries leverage local follower replicas at safe timestamps.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    autonumber
+    participant Client as User Client (EU-West)
+    participant Gateway as Regional Edge Gateway
+    participant Leader as Shard 104 Leader (EU-West)
+    participant Follower as Shard 104 Follower (US-East)
+    participant Engine as Ledger State Machine
+
+    Note over Client, Gateway: Balance Check Before Payment (Strict Read)
+    Client-&gt;&gt;Gateway: 1. GET /wallet/balance (Account: Acc-889)
+    Gateway-&gt;&gt;Leader: 2. Route to Shard Leader (Acc-889)
+    Note over Leader: Check Raft Leader Lease (Valid for 450ms)
+    Leader-&gt;&gt;Engine: 3. Read Local State Machine (No Quorum RTT)
+    Engine--&gt;&gt;Leader: Current Balance: $450.00
+    Leader--&gt;&gt;Gateway: 4. Linearizable Response: $450.00
+    Gateway--&gt;&gt;Client: 5. 200 OK ($450.00) in &lt;15ms
+
+    Note over Client, Follower: Historical Audit Query (Permissible Bounded Staleness)
+    Client-&gt;&gt;Gateway: 6. GET /wallet/transactions/history
+    Gateway-&gt;&gt;Follower: 7. Route to Nearest Local Replica
+    Note over Follower: Verify Safe Timestamp (t_read &lt;= t_safe)
+    Follower--&gt;&gt;Engine: Read Historical Ledger Records
+    Engine--&gt;&gt;Follower: Audit Entries
+    Follower--&gt;&gt;Gateway: 8. Historical Ledger Records
+    Gateway--&gt;&gt;Client: 9. 200 OK (Local Follower Read in &lt;5ms)">sequenceDiagram
+    autonumber
+    participant Client as User Client (EU-West)
+    participant Gateway as Regional Edge Gateway
+    participant Leader as Shard 104 Leader (EU-West)
+    participant Follower as Shard 104 Follower (US-East)
+    participant Engine as Ledger State Machine
+
+    Note over Client, Gateway: Balance Check Before Payment (Strict Read)
+    Client-&gt;&gt;Gateway: 1. GET /wallet/balance (Account: Acc-889)
+    Gateway-&gt;&gt;Leader: 2. Route to Shard Leader (Acc-889)
+    Note over Leader: Check Raft Leader Lease (Valid for 450ms)
+    Leader-&gt;&gt;Engine: 3. Read Local State Machine (No Quorum RTT)
+    Engine--&gt;&gt;Leader: Current Balance: $450.00
+    Leader--&gt;&gt;Gateway: 4. Linearizable Response: $450.00
+    Gateway--&gt;&gt;Client: 5. 200 OK ($450.00) in &lt;15ms
+
+    Note over Client, Follower: Historical Audit Query (Permissible Bounded Staleness)
+    Client-&gt;&gt;Gateway: 6. GET /wallet/transactions/history
+    Gateway-&gt;&gt;Follower: 7. Route to Nearest Local Replica
+    Note over Follower: Verify Safe Timestamp (t_read &lt;= t_safe)
+    Follower--&gt;&gt;Engine: Read Historical Ledger Records
+    Engine--&gt;&gt;Follower: Audit Entries
+    Follower--&gt;&gt;Gateway: 8. Historical Ledger Records
+    Gateway--&gt;&gt;Client: 9. 200 OK (Local Follower Read in &lt;5ms)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Multi-Raft Sharded Ledger with Quorum Debits, Leader Leases, and Safe Follower Reads</h3>
+        <p>Python pseudocode demonstrating deterministic shard routing, majority quorum consensus writes, leader-lease linearizable reads, and follower safe-timestamp queries.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">python</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">import</span> time</span>
+<span class="line"><span class="tk-kw">import</span> threading</span>
+<span class="line"><span class="tk-kw">from</span> typing <span class="tk-kw">import</span> Dict, List, Optional, Tuple</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">class</span> <span class="tk-fn">TransactionError</span>(Exception):</span>
+<span class="line">    pass</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">class</span> LedgerEntry:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, index: int, term: int, account_id: str, amount: float, tx_type: str):</span>
+<span class="line">        self.index <span class="tk-op">=</span> index</span>
+<span class="line">        self.term <span class="tk-op">=</span> term</span>
+<span class="line">        self.account_id <span class="tk-op">=</span> account_id</span>
+<span class="line">        self.amount <span class="tk-op">=</span> amount  <span class="tk-com"># negative for debit, positive for credit</span></span>
+<span class="line">        self.tx_type <span class="tk-op">=</span> tx_type</span>
+<span class="line">        self.timestamp <span class="tk-op">=</span> time.<span class="tk-fn">time</span>()</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">class</span> RaftShardNode:</span>
+<span class="line">    <span class="tk-str">&#x27;&#x27;</span><span class="tk-str">&#x27;Represents a node in a 3-5 member Paxos/Raft consensus group for a ledger shard.&#x27;</span><span class="tk-str">&#x27;&#x27;</span></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, node_id: str, region: str, peers: Optional[List[<span class="tk-str">&#x27;RaftShardNode&#x27;</span>]] <span class="tk-op">=</span> <span class="tk-lit">None</span>):</span>
+<span class="line">        self.node_id <span class="tk-op">=</span> node_id</span>
+<span class="line">        self.region <span class="tk-op">=</span> region</span>
+<span class="line">        self.peers <span class="tk-op">=</span> peers <span class="tk-kw">or</span> []</span>
+<span class="line">        self.current_term <span class="tk-op">=</span> <span class="tk-num">1</span></span>
+<span class="line">        self.is_leader <span class="tk-op">=</span> <span class="tk-lit">False</span></span>
+<span class="line">        self.leader_lease_expiry <span class="tk-op">=</span> <span class="tk-num">0.0</span></span>
+<span class="line">        self.lease_duration <span class="tk-op">=</span> <span class="tk-num">0.5</span>  <span class="tk-com"># 500ms time-bounded lease</span></span>
+<span class="line">        </span>
+<span class="line">        <span class="tk-com"># State Machine &amp; In-Memory Balance Cache</span></span>
+<span class="line">        self.log: List[LedgerEntry] <span class="tk-op">=</span> []</span>
+<span class="line">        self.commit_index <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">        self.balances: Dict[str, float] <span class="tk-op">=</span> {}</span>
+<span class="line">        self.safe_timestamp <span class="tk-op">=</span> <span class="tk-num">0.0</span></span>
+<span class="line">        self.lock <span class="tk-op">=</span> threading.<span class="tk-fn">Lock</span>()</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">get_linearizable_balance</span>(self, account_id: str) <span class="tk-op">-&gt;</span> float:</span>
+<span class="line">        <span class="tk-str">&#x27;&#x27;</span><span class="tk-str">&#x27;Fast-path balance read via Leader Lease: zero network round-trip overhead.&#x27;</span><span class="tk-str">&#x27;&#x27;</span></span>
+<span class="line">        <span class="tk-kw">with</span> self.lock:</span>
+<span class="line">            <span class="tk-kw">if</span> <span class="tk-kw">not</span> self.is_leader:</span>
+<span class="line">                <span class="tk-kw">raise</span> <span class="tk-fn">TransactionError</span>(f<span class="tk-str">&#x27;Node {self.node_id} is not shard leader. Redirect.&#x27;</span>)</span>
+<span class="line">            </span>
+<span class="line">            <span class="tk-com"># Verify leader lease is strictly valid to guarantee no split-brain leader exists</span></span>
+<span class="line">            <span class="tk-kw">if</span> time.<span class="tk-fn">time</span>() <span class="tk-op">&gt;</span> self.leader_lease_expiry:</span>
+<span class="line">                <span class="tk-kw">raise</span> <span class="tk-fn">TransactionError</span>(<span class="tk-str">&#x27;Leader lease expired; renewing lease via quorum.&#x27;</span>)</span>
+<span class="line">            </span>
+<span class="line">            <span class="tk-kw">return</span> self.balances.<span class="tk-fn">get</span>(account_id, <span class="tk-num">0.0</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">get_follower_safe_read</span>(self, account_id: str, query_time: float) <span class="tk-op">-&gt;</span> Tuple[float, float]:</span>
+<span class="line">        <span class="tk-str">&#x27;&#x27;</span><span class="tk-str">&#x27;Local follower read using safe timestamp: zero leader contention for audit views.&#x27;</span><span class="tk-str">&#x27;&#x27;</span></span>
+<span class="line">        <span class="tk-kw">with</span> self.lock:</span>
+<span class="line">            <span class="tk-com"># Safe read requires query timestamp to be &lt;= node&#x27;s applied safe timestamp</span></span>
+<span class="line">            <span class="tk-kw">if</span> query_time <span class="tk-op">&gt;</span> self.safe_timestamp:</span>
+<span class="line">                <span class="tk-kw">raise</span> <span class="tk-fn">TransactionError</span>(<span class="tk-str">&#x27;Follower replica lagging behind requested timestamp.&#x27;</span>)</span>
+<span class="line">            <span class="tk-kw">return</span> self.balances.<span class="tk-fn">get</span>(account_id, <span class="tk-num">0.0</span>), self.safe_timestamp</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">execute_debit_transaction</span>(self, account_id: str, debit_amount: float) <span class="tk-op">-&gt;</span> dict:</span>
+<span class="line">        <span class="tk-str">&#x27;&#x27;</span><span class="tk-str">&#x27;Executes payment debit: validates invariant, replicates to quorum, and commits.&#x27;</span><span class="tk-str">&#x27;&#x27;</span></span>
+<span class="line">        <span class="tk-kw">with</span> self.lock:</span>
+<span class="line">            <span class="tk-kw">if</span> <span class="tk-kw">not</span> self.is_leader:</span>
+<span class="line">                <span class="tk-kw">raise</span> <span class="tk-fn">TransactionError</span>(<span class="tk-str">&#x27;Writes must be directed to shard Raft leader.&#x27;</span>)</span>
+<span class="line">            </span>
+<span class="line">            <span class="tk-com"># Step 1: Invariant Check on State Machine (Prevent Double-Spending)</span></span>
+<span class="line">            current_balance <span class="tk-op">=</span> self.balances.<span class="tk-fn">get</span>(account_id, <span class="tk-num">0.0</span>)</span>
+<span class="line">            <span class="tk-kw">if</span> current_balance <span class="tk-op">&lt;</span> debit_amount:</span>
+<span class="line">                <span class="tk-kw">raise</span> <span class="tk-fn">TransactionError</span>(f<span class="tk-str">&#x27;Insufficient funds: balance {current_balance} &lt; {debit_amount}&#x27;</span>)</span>
+<span class="line">            </span>
+<span class="line">            <span class="tk-com"># Step 2: Create Log Entry &amp; Append to Local Write-Ahead Log (WAL)</span></span>
+<span class="line">            new_index <span class="tk-op">=</span> <span class="tk-fn">len</span>(self.log) <span class="tk-op">+</span> <span class="tk-num">1</span></span>
+<span class="line">            entry <span class="tk-op">=</span> <span class="tk-fn">LedgerEntry</span>(new_index, self.current_term, account_id, <span class="tk-op">-</span>debit_amount, <span class="tk-str">&#x27;DEBIT&#x27;</span>)</span>
+<span class="line">            self.log.<span class="tk-fn">append</span>(entry)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># Step 3: Broadcast AppendEntries to peers in parallel for Majority Quorum</span></span>
+<span class="line">        acks <span class="tk-op">=</span> <span class="tk-num">1</span>  <span class="tk-com"># Local leader already appended</span></span>
+<span class="line">        quorum_required <span class="tk-op">=</span> (<span class="tk-fn">len</span>(self.peers) <span class="tk-op">+</span> <span class="tk-num">1</span>) <span class="tk-com">// 2 + 1</span></span>
+<span class="line">        </span>
+<span class="line">        <span class="tk-kw">for</span> peer <span class="tk-kw">in</span> self.peers:</span>
+<span class="line">            <span class="tk-kw">if</span> peer.<span class="tk-fn">replicate_entry</span>(entry):</span>
+<span class="line">                acks <span class="tk-op">+</span><span class="tk-op">=</span> <span class="tk-num">1</span></span>
+<span class="line">                <span class="tk-kw">if</span> acks <span class="tk-op">&gt;=</span> quorum_required:</span>
+<span class="line">                    <span class="tk-kw">break</span>  <span class="tk-com"># Majority quorum achieved! Commit without waiting for slowest node</span></span>
+<span class="line">        </span>
+<span class="line">        <span class="tk-kw">if</span> acks <span class="tk-op">&lt;</span> quorum_required:</span>
+<span class="line">            <span class="tk-kw">raise</span> <span class="tk-fn">TransactionError</span>(<span class="tk-str">&#x27;Quorum not reached. Transaction aborted.&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># Step 4: Commit and Apply to Ledger State Machine</span></span>
+<span class="line">        <span class="tk-kw">with</span> self.lock:</span>
+<span class="line">            self.commit_index <span class="tk-op">=</span> new_index</span>
+<span class="line">            self.balances[account_id] <span class="tk-op">=</span> current_balance <span class="tk-op">-</span> debit_amount</span>
+<span class="line">            self.safe_timestamp <span class="tk-op">=</span> time.<span class="tk-fn">time</span>()</span>
+<span class="line">            <span class="tk-com"># Renew leader lease upon successful majority quorum contact</span></span>
+<span class="line">            self.leader_lease_expiry <span class="tk-op">=</span> time.<span class="tk-fn">time</span>() <span class="tk-op">+</span> self.lease_duration</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">return</span> {</span>
+<span class="line">            <span class="tk-str">&#x27;status&#x27;</span>: <span class="tk-str">&#x27;COMMITTED&#x27;</span>,</span>
+<span class="line">            <span class="tk-str">&#x27;account_id&#x27;</span>: account_id,</span>
+<span class="line">            <span class="tk-str">&#x27;debited&#x27;</span>: debit_amount,</span>
+<span class="line">            <span class="tk-str">&#x27;new_balance&#x27;</span>: self.balances[account_id],</span>
+<span class="line">            <span class="tk-str">&#x27;commit_index&#x27;</span>: new_index,</span>
+<span class="line">            <span class="tk-str">&#x27;acks&#x27;</span>: acks</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">replicate_entry</span>(self, entry: LedgerEntry) <span class="tk-op">-&gt;</span> bool:</span>
+<span class="line">        <span class="tk-str">&#x27;&#x27;</span><span class="tk-str">&#x27;Peer replica appends entry to WAL and updates safe timestamp upon commit.&#x27;</span><span class="tk-str">&#x27;&#x27;</span></span>
+<span class="line">        <span class="tk-kw">with</span> self.lock:</span>
+<span class="line">            self.log.<span class="tk-fn">append</span>(entry)</span>
+<span class="line">            self.commit_index <span class="tk-op">=</span> entry.index</span>
+<span class="line">            curr <span class="tk-op">=</span> self.balances.<span class="tk-fn">get</span>(entry.account_id, <span class="tk-num">0.0</span>)</span>
+<span class="line">            self.balances[entry.account_id] <span class="tk-op">=</span> curr <span class="tk-op">+</span> entry.amount</span>
+<span class="line">            self.safe_timestamp <span class="tk-op">=</span> entry.timestamp</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-lit">True</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">class</span> GlobalWalletRouter:</span>
+<span class="line">    <span class="tk-str">&#x27;&#x27;</span><span class="tk-str">&#x27;Routes requests to the localized shard leader based on account partitioning.&#x27;</span><span class="tk-str">&#x27;&#x27;</span></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, shard_map: Dict[int, RaftShardNode]):</span>
+<span class="line">        self.shard_map <span class="tk-op">=</span> shard_map  <span class="tk-com"># Maps shard_id -&gt; active RaftShardNode leader</span></span>
+<span class="line">        self.num_shards <span class="tk-op">=</span> <span class="tk-fn">len</span>(shard_map)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">route_request</span>(self, account_id: str) <span class="tk-op">-&gt;</span> RaftShardNode:</span>
+<span class="line">        shard_id <span class="tk-op">=</span> <span class="tk-fn">hash</span>(account_id) <span class="tk-op">%</span> self.num_shards</span>
+<span class="line">        <span class="tk-kw">return</span> self.shard_map[shard_id]</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Neglecting Read Leases and Forcing Full Raft Rounds for Balance Checks:</strong> Routing every balance inquiry through a full Raft consensus round (requiring quorum network hops) severely degrades read throughput and spikes latency. High-performance ledgers utilize <em>leader leases</em>—a time-bounded contract where follower nodes guarantee they will not elect a new leader. This allows the current leader to serve linearizable reads directly from memory with zero network round trips.</li>
+          <li><strong>Neglecting Cross-Shard Atomicity for Multi-Account Transfers:</strong> Assuming that per-shard Raft consensus automatically protects transactions involving two separate accounts residing on different shards (e.g., Alice on Shard A transferring funds to Bob on Shard B). Cross-shard transfers require layering a distributed transaction protocol—such as <em>Two-Phase Commit (2PC) over Raft</em> or an idempotent <em>Saga pattern with reservation escrows</em>—to prevent funds from disappearing or duplicating during mid-flight node failures.</li>
+          <li><strong>Colocating Quorum Replicas Within a Single Failure Domain:</strong> Placing all 3 or 5 Raft replicas for a shard within the same data center or cloud availability zone to minimize inter-node network latency. If that specific data center or availability zone loses power or connectivity, the shard becomes entirely unavailable. Replicas must be distributed across at least three independent availability zones or metro regions so that losing any single zone leaves majority quorum ($N \ge 2/3$ or $3/5$) intact.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Modern distributed transactional databases and global payment engines (such as Google Spanner, CockroachDB, and Ant Group's OceanBase) execute financial transactions using a geo-partitioned consensus pipeline:</p>
+        <ul>
+          <li><strong>Step 1 — Shard-Aware Edge Routing:</strong> An incoming payment request hits the regional edge gateway. The gateway hashes the user account ID (or checks the global range directory) to identify the shard's active Raft leader and routes the request directly to that leader.</li>
+          <li><strong>Step 2 — Linearizable Balance Check via Leader Lease:</strong> The shard leader verifies the user's available balance against its local in-memory state machine. Because the leader holds a valid, time-bounded Raft leader lease, it guarantees linearizable read correctness locally without waiting for network consensus.</li>
+          <li><strong>Step 3 — Raft Quorum Write Proposal:</strong> If the balance is sufficient, the leader generates an atomic debit log entry, writes it to its local Write-Ahead Log (WAL), and dispatches <code>AppendEntries</code> RPCs in parallel to peer replicas across 3–5 availability zones/regions.</li>
+          <li><strong>Step 4 — Majority Quorum Ack & State Machine Commit:</strong> Once a majority quorum acknowledges the log entry (e.g., 2 out of 3 nodes: the local leader plus one nearby peer replica), the leader commits the entry, applies the debit to the ledger state machine, and returns an HTTP 200 success response in 10–30ms.</li>
+          <li><strong>Step 5 — Asynchronous Follower Catch-up & Safe-Time Projections:</strong> Distant regional replicas catch up with committed log indexes asynchronously. High-volume read-only queries for historical statements or transaction receipts are served locally by follower replicas at safe timestamps ($t \le t_{\text{safe}}$) with sub-millisecond latency.</li>
+        </ul>
+        <p>This pipeline decouples strict transactional correctness from worldwide WAN latency, allowing the platform to scale horizontally while maintaining rigorous ACID guarantees.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>To prevent double-spending in a global wallet, <strong>shard the ledger into localized Raft/Paxos consensus groups with majority quorum</strong>: serialize writes through a localized leader for strict correctness, and serve reads via leader leases and safe-timestamp follower projections to conquer global latency.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

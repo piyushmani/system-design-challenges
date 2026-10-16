@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>When the pipeline chokes: selecting an effective backpressure strategy — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">24 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Backpressure</span>
+      <span class="tag tag--green">System Bottlenecks</span>
+      <span class="tag tag--amber">Pipeline Design</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">When the pipeline chokes: selecting an effective backpressure strategy</h1>
+      <p class="q-scenario"><strong>Samir</strong>, a senior backend engineer on a payments analytics team, owns an <strong>ingestion API</strong> that receives spikes of up to <strong>50,000 requests per second</strong> from external partners. The downstream enrichment and ML scoring pipeline can only sustain <strong>5,000 requests per second</strong>. The design must <strong>avoid event loss</strong>, keep operational complexity manageable, and meet a business rule to <strong>acknowledge receipts quickly</strong> (ideally under 2 seconds). The producers are <strong>third-party partners whose systems are hard to change</strong>. He must choose a backpressure strategy that keeps the system <strong>available, observable, and resilient</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Synchronous backpressure: configure the ingestion API to immediately block or reject excess traffic. During high load, respond with HTTP 429 and Retry-After headers, or keep the TCP connection open until downstream capacity is available. Scale the ingestion layer horizontally but force callers to manage retries.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Durable, asynchronous buffering: ingest events into a persistent, partitioned message broker (like Kafka or Kinesis) utilizing bounded batching on the producer side, and issue a rapid acknowledgement. Scale consumer instances independently, track consumer lag, and deploy dead-letter queues alongside autoscaling or priority consumers to process the backlog.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">End-to-end reactive streams: employ streaming RPC protocols (such as gRPC or HTTP/2) featuring explicit backpressure signals and a bounded in-memory buffer for each upstream connection. Relay flow-control signals upstream so producers automatically decelerate when consumers reach capacity.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Client-side rate limiting with graceful degradation: deploy token-bucket rate limits within client SDKs, including fallback sampling and request prioritization. On the server side, ingest prioritized traffic into an in-memory queue, discarding low-priority events when queues overflow, and provide a control API for partners to tweak their transmission rates.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Durable Asynchronous Buffering</h3>
+        <p>Three constraints decide this: <strong>no event loss</strong>, <strong>fast acknowledgement</strong>, and <strong>producers you cannot change</strong>. Backpressure that depends on producers cooperating (429 handling, flow-control signals, client SDKs) is out of reach. The robust answer is to <strong>decouple ingestion from processing with a durable log</strong>: acknowledge once the event is safely persisted, then let consumers drain at their own pace. The bottleneck stops being a hard limit on the API and becomes a <strong>measurable backlog</strong> that you can monitor, scale against, and prioritize. Here is why it fits:</p>
+        <ul>
+          <li><strong>Meets the 2-second acknowledgement trivially:</strong> The API validates and appends to the broker with <code>acks=all</code>, usually in milliseconds, and returns <code>202 Accepted</code>. The acknowledgement means 'durably stored', not 'processed'.</li>
+          <li><strong>Absorbs the 10x spike:</strong> A partitioned log handles very high ingest rates cheaply, so the 50k/s burst is stored, not rejected. The 45k/s excess becomes lag instead of loss.</li>
+          <li><strong>Works with partners as they are:</strong> No change is needed on the partner side. They send normally and get a fast, reliable receipt.</li>
+          <li><strong>Independent scaling and isolation:</strong> Consumers scale on lag (up to the partition count and the ML scoring capacity) without touching the ingestion tier. A failure in scoring does not take ingestion down.</li>
+          <li><strong>Operability:</strong> Consumer lag, oldest-message age, and DLQ depth are direct health signals. Poison messages are quarantined to a dead-letter queue instead of blocking the pipeline, and the backlog can be replayed.</li>
+        </ul>
+        <p>Acknowledge only after a <strong>durable write</strong> (<code>acks=all</code>, idempotent producer), partition by a key that keeps ordering where needed, autoscale consumers on <strong>lag and message age</strong>, route poison messages to a <strong>DLQ</strong>, and set explicit <strong>retention and backlog-age SLOs</strong> with alerts and a documented shedding policy for extreme overload.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🚦</span>
+            <h4>A — Synchronous Reject / Block (429)</h4>
+          </div>
+          <p>It protects the pipeline but <strong>pushes the problem onto partners</strong> whose systems are hard to change. Many will not honor <code>Retry-After</code>, will retry aggressively and amplify the load, or will silently drop events, which violates 'avoid event loss'. Holding connections open until downstream has capacity exhausts connection pools and breaks the 2-second acknowledgement target. Use it as an emergency valve only.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌊</span>
+            <h4>C — End-to-End Reactive Streams</h4>
+          </div>
+          <p>Elegant when you control both ends, but it <strong>requires partners to speak a streaming protocol and respect flow-control signals</strong>, which they cannot be forced to do. Bounded in-memory buffers per connection also mean that when the pipeline is slow, the signal propagates to partners who may simply fail or time out. It fits internal service-to-service pipelines rather than an open partner-facing ingestion API.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🪣</span>
+            <h4>D — Client Rate Limiting + In-Memory Drop</h4>
+          </div>
+          <p>This depends on <strong>modifying partner SDKs</strong> (the stated constraint says that is difficult) and <strong>discards events by design</strong>. An in-memory server queue also loses everything on a crash or deploy. Priority-based dropping can be a legitimate last-resort policy, but making loss the primary mechanism contradicts the requirement to prevent event loss whenever possible.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Durable Asynchronous Buffering ✓</h4>
+          </div>
+          <p>Durable, asynchronous buffering: ingest events into a persistent, partitioned message broker (like Kafka or Kinesis) utilizing bounded batching on the producer side, and issue a rapid acknowledgement.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Event Loss Risk</th><th>Ack Latency</th><th>Partner Changes Required</th><th>Absorbs 10x Burst</th><th>Operational Complexity</th><th>Observability of Backlog</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Sync 429 / Block</td><td>High (partners may drop) ❌</td><td>Fast reject, slow if blocked ❌</td><td>Retry handling needed ⚠</td><td>No ❌</td><td>Low ✅</td><td>Limited ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Durable Async Buffer ✓</td><td>Very low ✅</td><td>Milliseconds ✅</td><td>None ✅</td><td>Yes (as lag) ✅</td><td>Medium ⚠</td><td>Excellent (lag, age) ✅</td></tr>
+            <tr><td class="tt-option">C — Reactive Streams</td><td>Depends on partners ⚠</td><td>Depends on flow control ⚠</td><td>Protocol change required ❌</td><td>Only if producers slow down ⚠</td><td>High ❌</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Client Limits + Drop</td><td>High (drops by design) ❌</td><td>Fast ✅</td><td>SDK changes required ❌</td><td>By dropping ❌</td><td>Medium ⚠</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sync 429 / Block</h4>
+          </div>
+          <p>Controlled clients that implement retries correctly, loss is acceptable or detectable by the client, and the goal is simple protection of a service. Also a final safety valve in front of any buffer.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Durable Async Buffer</h4>
+          </div>
+          <p>Bursty producers you do not control, a hard requirement not to lose events, fast acknowledgements, and consumers that can be scaled or drained over time.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Reactive Streams</h4>
+          </div>
+          <p>Internal pipelines where both producer and consumer implement the protocol and low in-flight memory with automatic flow control is the goal.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Client Limits + Drop</h4>
+          </div>
+          <p>Telemetry or metrics where losing low-priority samples is acceptable and you control the client SDKs.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Decoupled Ingestion and Processing</h3>
+        <p>Ingestion is acknowledged at the durable log. Consumers drain the backlog at the pipeline's pace and autoscale on lag:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    P[&quot;Partners (unchanged)&quot;] --&gt; LB[&quot;Load balancer&quot;]
+    LB --&gt; API[&quot;Stateless ingestion API: validate, 202 Accepted&quot;]
+    API --&gt; B[(&quot;Partitioned durable log (Kafka / Kinesis)&quot;)]
+    B --&gt; C1[&quot;Consumer group: enrich + ML score (5k/s capacity)&quot;]
+    C1 --&gt; S[(&quot;Results store / analytics&quot;)]
+    C1 -. &quot;poison or repeated failure&quot; .-&gt; DLQ[(&quot;Dead-letter queue&quot;)]
+    DLQ --&gt; RP[&quot;Replay tooling&quot;]
+    B -. &quot;lag and message age&quot; .-&gt; MON[&quot;Monitoring and autoscaler&quot;]
+    MON -. &quot;scale consumers (up to partitions)&quot; .-&gt; C1
+    API -. &quot;last-resort 503 + Retry-After when broker unhealthy&quot; .-&gt; P">flowchart LR
+    P[&quot;Partners (unchanged)&quot;] --&gt; LB[&quot;Load balancer&quot;]
+    LB --&gt; API[&quot;Stateless ingestion API: validate, 202 Accepted&quot;]
+    API --&gt; B[(&quot;Partitioned durable log (Kafka / Kinesis)&quot;)]
+    B --&gt; C1[&quot;Consumer group: enrich + ML score (5k/s capacity)&quot;]
+    C1 --&gt; S[(&quot;Results store / analytics&quot;)]
+    C1 -. &quot;poison or repeated failure&quot; .-&gt; DLQ[(&quot;Dead-letter queue&quot;)]
+    DLQ --&gt; RP[&quot;Replay tooling&quot;]
+    B -. &quot;lag and message age&quot; .-&gt; MON[&quot;Monitoring and autoscaler&quot;]
+    MON -. &quot;scale consumers (up to partitions)&quot; .-&gt; C1
+    API -. &quot;last-resort 503 + Retry-After when broker unhealthy&quot; .-&gt; P</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Ingest, Drain, and Autoscale on Lag</h3>
+        <p>A thin ingestion handler that acknowledges on durable write, an idempotent consumer with DLQ handling, and a lag-driven scaling and alerting loop:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Ingestion API: stateless, scales horizontally ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleEvent</span>(req):</span>
+<span class="line">    event <span class="tk-op">=</span> <span class="tk-fn">parseAndValidate</span>(req.body)                   <span class="tk-com">// cheap schema check only, no enrichment</span></span>
+<span class="line">    <span class="tk-kw">if</span> event is invalid: <span class="tk-kw">return</span> <span class="tk-num">400</span></span>
+<span class="line">    key <span class="tk-op">=</span> event.partnerId <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> event.accountId        <span class="tk-com">// preserves per-account ordering</span></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        broker.<span class="tk-fn">produce</span>(topic <span class="tk-op">=</span> <span class="tk-str">&#x27;payments.raw&#x27;</span>, key <span class="tk-op">=</span> key, value <span class="tk-op">=</span> event,</span>
+<span class="line">                       acks <span class="tk-op">=</span> <span class="tk-str">&#x27;all&#x27;</span>, idempotent <span class="tk-op">=</span> <span class="tk-lit">true</span>, timeout <span class="tk-op">=</span> <span class="tk-num">500</span> ms)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">202</span> Accepted                              <span class="tk-com">// receipt = durable write</span></span>
+<span class="line">    <span class="tk-kw">catch</span> BrokerUnavailable, Timeout:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-num">503</span> <span class="tk-kw">with</span> Retry<span class="tk-op">-</span>After                      <span class="tk-com">// last-resort valve, should be rare</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Consumer group: enrichment and scoring ----</span></span>
+<span class="line"><span class="tk-kw">loop</span>:</span>
+<span class="line">    batch <span class="tk-op">=</span> consumer.<span class="tk-fn">poll</span>(maxRecords <span class="tk-op">=</span> <span class="tk-num">500</span>)</span>
+<span class="line">    <span class="tk-kw">for</span> event <span class="tk-kw">in</span> batch:</span>
+<span class="line">        <span class="tk-kw">if</span> dedupe.<span class="tk-fn">seen</span>(event.eventId): <span class="tk-kw">continue</span>          <span class="tk-com">// partner retries and at-least-once delivery</span></span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            result <span class="tk-op">=</span> <span class="tk-fn">score</span>(<span class="tk-fn">enrich</span>(event))                <span class="tk-com">// bounded by ML throughput (about 5k/s in total)</span></span>
+<span class="line">            sink.<span class="tk-fn">write</span>(result, idempotencyKey <span class="tk-op">=</span> event.eventId)</span>
+<span class="line">            dedupe.<span class="tk-fn">mark</span>(event.eventId)</span>
+<span class="line">        <span class="tk-kw">catch</span> TransientError:</span>
+<span class="line">            <span class="tk-fn">retryWithBackoff</span>(event, maxAttempts <span class="tk-op">=</span> <span class="tk-num">5</span>)</span>
+<span class="line">        <span class="tk-kw">catch</span> PermanentError:</span>
+<span class="line">            dlq.<span class="tk-fn">send</span>(event, reason <span class="tk-op">=</span> error.message)      <span class="tk-com">// quarantine poison messages</span></span>
+<span class="line">    consumer.<span class="tk-fn">commitOffsets</span>(batch)                        <span class="tk-com">// commit only after the sink succeeded</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Autoscaler and alerting: runs every 30 s ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">controlLoop</span>():</span>
+<span class="line">    lag     <span class="tk-op">=</span> broker.<span class="tk-fn">endOffset</span>() <span class="tk-op">-</span> consumerGroup.<span class="tk-fn">committedOffset</span>()</span>
+<span class="line">    ageSec  <span class="tk-op">=</span> <span class="tk-fn">oldestUnprocessedEventAgeSeconds</span>()</span>
+<span class="line">    desired <span class="tk-op">=</span> <span class="tk-fn">min</span>(PARTITION_COUNT, <span class="tk-fn">ceil</span>(lag <span class="tk-op">/</span> TARGET_LAG_PER_CONSUMER))</span>
+<span class="line">    <span class="tk-fn">scaleConsumers</span>(desired)</span>
+<span class="line">    <span class="tk-kw">if</span> ageSec <span class="tk-op">&gt;</span> FRESHNESS_SLO_SECONDS:</span>
+<span class="line">        <span class="tk-fn">page</span>(<span class="tk-str">&#x27;backlog age above SLO&#x27;</span>)</span>
+<span class="line">        <span class="tk-fn">enablePriorityLane</span>()                             <span class="tk-com">// process high-value event types first</span></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">brokerStorageUsed</span>() <span class="tk-op">&gt;</span> <span class="tk-num">0.8</span>:</span>
+<span class="line">        <span class="tk-fn">enableShedPolicy</span>()                               <span class="tk-com">// documented last resort before retention is exceeded</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Treating the queue as infinite:</strong> Retention and disk are finite. Size for worst-case backlog and alert well before the limit.</li>
+          <li><strong>Acknowledging before the write is durable:</strong> Acking from memory or with <code>acks=1</code> reintroduces event loss on a broker failure. Ack after replicated persistence.</li>
+          <li><strong>Scaling consumers beyond what the bottleneck allows:</strong> More consumers than partitions do nothing, and more consumers than the ML service can serve just increase errors.</li>
+          <li><strong>No idempotency:</strong> Partner retries plus at-least-once delivery will create duplicate scores and double-counted analytics unless events have stable IDs and sinks are idempotent.</li>
+          <li><strong>One poison message blocks a partition:</strong> Without retry limits and a DLQ, a malformed event stalls processing indefinitely.</li>
+          <li><strong>No backlog-age SLO:</strong> If scoring results are time-sensitive, a two-hour backlog is a business failure even though nothing was lost. Measure and alert on age, not only on lag count.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Payment and event-ingestion platforms commonly follow a <strong>'accept fast, process steadily'</strong> pattern, with protective layers around it:</p>
+        <ul>
+          <li><strong>Step 0 — Size the problem:</strong> Estimate burst height, duration, and average inflow versus consumer capacity to compute backlog and drain time.</li>
+          <li><strong>Step 1 — Thin, stateless ingestion:</strong> Validate cheaply, assign an idempotency key, write to the broker, return 202. Do no enrichment on the request path.</li>
+          <li><strong>Step 2 — Partitioned durable log:</strong> Choose partition count for target consumer parallelism and set retention to cover the worst expected backlog plus recovery time.</li>
+          <li><strong>Step 3 — Scalable consumers:</strong> Autoscale on lag and oldest-message age, batch to the ML service, and isolate poison messages in a DLQ with replay tooling.</li>
+          <li><strong>Step 4 — Priority and shedding policy:</strong> Separate lanes for high-value event types, and a documented last-resort shed or 503 policy when SLOs are at risk.</li>
+          <li><strong>Step 5 — Observability:</strong> Dashboards for ingest rate, lag, backlog age, consumer throughput, DLQ rate, and end-to-end latency, with alerts tied to business SLOs.</li>
+        </ul>
+        <p>Convert an <strong>unpredictable spike</strong> into a <strong>predictable queue</strong>, and manage the queue with data.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When you cannot change the producers and cannot lose events, <strong>buffer durably and acknowledge on persistence</strong>. A partitioned log turns a throughput mismatch into measurable lag that consumers can drain, and the remaining risk (sustained overload) is handled explicitly with scaling, priorities, and a last-resort shed policy.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

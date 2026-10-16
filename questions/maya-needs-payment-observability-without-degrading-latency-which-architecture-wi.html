@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya needs payment observability without degrading latency; which architecture wins? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">25 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Observability</span>
+      <span class="tag tag--green">Performance Impact</span>
+      <span class="tag tag--amber">Payments System</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya needs payment observability without degrading latency; which architecture wins?</h1>
+      <p class="q-scenario"><strong>Maya</strong> leads backend engineering for a payment platform made of dozens of Kubernetes microservices handling about <strong>10k requests/s</strong>. The SLOs are <strong>99.9% availability</strong> and <strong>p95 end-to-end latency under 300 ms</strong>. The team needs <strong>end-to-end request tracing</strong> for fast root-cause analysis, <strong>30-day retention of failed-transaction logs</strong>, and a strict <strong>observability budget</strong>. Payment payloads contain sensitive data, and an outage of the observability backend must never affect payment processing. She must design a metrics, logging, and tracing architecture that balances <strong>cost, latency, fault tolerance, and data fidelity</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Instrument services to synchronously send full-span traces and logs to a central API from the request path, requiring a successful write before the request completes to guarantee zero data loss.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Emit structured logs locally with OpenTelemetry instrumentation and correlation IDs, forward telemetry asynchronously through a sidecar or DaemonSet to a central pipeline, sample traces adaptively, and use pull-based Prometheus metrics for alerting.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Rely on metrics and health checks scraped by Prometheus, skip distributed tracing, log only critical errors, and keep logs on each node for 30 days without centralizing them.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Record every span and complete request/response payload for all requests, write them directly to object storage APIs without local buffering, and index them later for search.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Async Telemetry Pipeline with Adaptive Sampling</h3>
+        <p>Telemetry must stay <strong>out of the critical path and bounded in cost</strong>. The right design treats observability as a best-effort, buffered, sampled data pipeline: services only write locally (or to a local agent), shipping happens asynchronously, and expensive signals such as traces and full logs are retained selectively, keeping every failed or slow transaction while sampling healthy ones. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Protects the latency SLO:</strong> Writing to stdout or a local agent takes microseconds and never blocks on the network. A slow or unavailable telemetry backend cannot add to payment latency or reduce availability.</li>
+          <li><strong>Fault tolerant:</strong> Agents buffer and retry with bounded queues. If the backend is down, telemetry is delayed or shed, not the payments. Losing some telemetry is acceptable; losing payments is not.</li>
+          <li><strong>Full traces where they matter:</strong> Tail-based adaptive sampling keeps 100% of error and slow traces (the ones used for root-cause analysis) and a small share of healthy ones. At 10k requests per second, tracing everything would mean hundreds of thousands of spans per second.</li>
+          <li><strong>Correlated signals:</strong> OpenTelemetry context propagation, a trace or correlation ID in every log line, and metric exemplars let engineers jump from an alert to the slow trace to the failed transaction's logs.</li>
+          <li><strong>Standard, cost-aware metrics:</strong> Pull-based Prometheus scraping gives reliable, low-cardinality SLO metrics and alerting, with push gateways limited to short-lived jobs that cannot be scraped.</li>
+        </ul>
+        <p>A well-run pipeline has <strong>OpenTelemetry SDKs</strong>, <strong>a node-level agent</strong>, <strong>a tail-sampling collector tier</strong>, <strong>PII redaction</strong>, <strong>tiered retention</strong>, <strong>SLO burn-rate alerts</strong>, and dashboards for <strong>dropped telemetry and pipeline lag</strong>. Review cost per million requests and the share of incidents solved with the traces you kept.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⛔</span>
+            <h4>A — Synchronous Telemetry</h4>
+          </div>
+          <p>Blocking each request on a network write to a central system <strong>adds telemetry latency to every payment</strong> and makes the payment path depend on the observability backend's availability, so an observability outage becomes a payment outage. With a 300 ms p95 budget and a 99.9% availability target, that coupling is unacceptable. Strict consistency is the wrong guarantee for telemetry; best-effort delivery is the right one.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📈</span>
+            <h4>C — Metrics-Only</h4>
+          </div>
+          <p>Metrics tell you <em>that</em> something is wrong, not <em>where</em>. Without distributed tracing, root-cause analysis across dozens of services is slow and manual. Logs kept only on nodes are lost when pods or nodes are replaced, cannot be searched across services, and will not reliably satisfy a 30-day retention requirement. It is cheap, but it misses the central requirement.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>D — Capture Everything to Object Storage</h4>
+          </div>
+          <p>Capturing all spans and full payloads is <strong>expensive</strong> and creates a <strong>security and compliance liability</strong> (sensitive payment data at rest). Writing directly to object storage without local buffering puts a remote call in the hot path and loses data when the storage API throttles. Eventually consistent indexing also makes incident investigation slow. Fidelity is not the same as usefulness.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Async Telemetry Pipeline with Adaptive Sampling ✓</h4>
+          </div>
+          <p>Emit structured logs locally with OpenTelemetry instrumentation and correlation IDs, forward telemetry asynchronously through a sidecar or DaemonSet to a central pipeline, sample traces adaptively, an</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Latency Impact on Requests</th><th>Fault Tolerance</th><th>Root-Cause Capability</th><th>Cost</th><th>Data Fidelity</th><th>Compliance Risk</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Synchronous Telemetry</td><td>High ❌</td><td>Poor ❌</td><td>High ✅</td><td>High ❌</td><td>Highest ✅</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Async Pipeline + Adaptive Sampling ✓</td><td>Negligible ✅</td><td>Strong ✅</td><td>High ✅</td><td>Controlled ✅</td><td>Selective ⚠</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">C — Metrics-Only</td><td>Negligible ✅</td><td>Strong ✅</td><td>Low ❌</td><td>Lowest ✅</td><td>Low ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">D — Capture Everything to Object Storage</td><td>Medium (blocking I/O) ❌</td><td>Weak (no buffer) ❌</td><td>Medium (slow search) ⚠</td><td>High ❌</td><td>Highest ✅</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous Telemetry</h4>
+          </div>
+          <p>Almost never on a latency-sensitive request path. Acceptable only for offline or batch jobs with an explicit audit requirement.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Async Pipeline + Adaptive Sampling</h4>
+          </div>
+          <p>High-throughput, latency-sensitive, multi-service systems that need traces and searchable logs within a cost budget.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Metrics-Only</h4>
+          </div>
+          <p>Small, simple systems with few services where metrics and local logs are enough to debug.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Capture Everything to Object Storage</h4>
+          </div>
+          <p>Short-lived debugging or compliance captures on narrow flows with strict data controls, never as the default design.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Asynchronous Telemetry Pipeline</h3>
+        <p>Services only write locally. Shipping, sampling, and storage happen asynchronously and can fail without affecting payments:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    S[Payment services with OpenTelemetry SDK] --&gt;|stdout logs| AG[Node agent DaemonSet]
+    S --&gt;|OTLP spans in async batches| AG
+    PM[Prometheus] --&gt;|scrapes metrics| S
+    AG --&gt;|bounded queue and retry| GW[Collector gateway with tail sampling]
+    GW --&gt;|errors, slow, 5 percent baseline| TR[Trace store]
+    GW --&gt;|failed transactions, 30 days| LG[Log store hot tier]
+    GW --&gt;|other logs, short retention| LC[Cheaper log tier]
+    PM --&gt; AL[Alertmanager burn-rate alerts]
+    AL --&gt; ON[On-call engineer]
+    TR -.-&gt;|trace ID in logs and exemplars| LG">flowchart LR
+    S[Payment services with OpenTelemetry SDK] --&gt;|stdout logs| AG[Node agent DaemonSet]
+    S --&gt;|OTLP spans in async batches| AG
+    PM[Prometheus] --&gt;|scrapes metrics| S
+    AG --&gt;|bounded queue and retry| GW[Collector gateway with tail sampling]
+    GW --&gt;|errors, slow, 5 percent baseline| TR[Trace store]
+    GW --&gt;|failed transactions, 30 days| LG[Log store hot tier]
+    GW --&gt;|other logs, short retention| LC[Cheaper log tier]
+    PM --&gt; AL[Alertmanager burn-rate alerts]
+    AL --&gt; ON[On-call engineer]
+    TR -.-&gt;|trace ID in logs and exemplars| LG</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> OpenTelemetry Collector: Redaction and Tail Sampling (Gateway Tier)</h3>
+        <p>A gateway collector config that bounds memory, strips sensitive attributes, keeps every error and slow trace plus a small baseline, and exports through a retrying queue. Agents on each node forward spans to this tier, routing by trace ID:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">yaml</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">receivers:</span>
+<span class="line">  otlp:</span>
+<span class="line">    protocols:</span>
+<span class="line">      grpc: {}</span>
+<span class="line"></span>
+<span class="line">processors:</span>
+<span class="line">  memory_limiter:                 <span class="tk-com"># protects the collector during backend outages</span></span>
+<span class="line">    check_interval: <span class="tk-num">1s</span></span>
+<span class="line">    limit_percentage: <span class="tk-num">75</span></span>
+<span class="line">    spike_limit_percentage: <span class="tk-num">20</span></span>
+<span class="line">  attributes<span class="tk-op">/</span>redact:              <span class="tk-com"># remove sensitive fields before anything is stored</span></span>
+<span class="line">    actions:</span>
+<span class="line">      <span class="tk-op">-</span> key: card.number</span>
+<span class="line">        action: delete</span>
+<span class="line">      <span class="tk-op">-</span> key: http.request.body</span>
+<span class="line">        action: delete</span>
+<span class="line">      <span class="tk-op">-</span> key: http.response.body</span>
+<span class="line">        action: delete</span>
+<span class="line">  tail_sampling:                  <span class="tk-com"># decisions are made on complete traces</span></span>
+<span class="line">    decision_wait: <span class="tk-num">10s</span></span>
+<span class="line">    num_traces: <span class="tk-num">500000</span></span>
+<span class="line">    policies:</span>
+<span class="line">      <span class="tk-op">-</span> name: keep<span class="tk-op">-</span>errors</span>
+<span class="line">        type: status_code</span>
+<span class="line">        status_code: { status_codes: [ERROR] }</span>
+<span class="line">      <span class="tk-op">-</span> name: keep<span class="tk-op">-</span>slow</span>
+<span class="line">        type: latency</span>
+<span class="line">        latency: { threshold_ms: <span class="tk-num">300</span> }</span>
+<span class="line">      <span class="tk-op">-</span> name: baseline</span>
+<span class="line">        type: probabilistic</span>
+<span class="line">        probabilistic: { sampling_percentage: <span class="tk-num">5</span> }</span>
+<span class="line">  batch:</span>
+<span class="line">    send_batch_size: <span class="tk-num">8192</span></span>
+<span class="line">    timeout: <span class="tk-num">5s</span></span>
+<span class="line"></span>
+<span class="line">exporters:</span>
+<span class="line">  otlp<span class="tk-op">/</span>tracestore:</span>
+<span class="line">    endpoint: tracestore.observability.svc:<span class="tk-num">4317</span></span>
+<span class="line">    sending_queue: { enabled: <span class="tk-lit">true</span>, queue_size: <span class="tk-num">5000</span> }     <span class="tk-com"># bounded buffer, drops when full</span></span>
+<span class="line">    retry_on_failure: { enabled: <span class="tk-lit">true</span>, max_elapsed_time: <span class="tk-num">120s</span> }</span>
+<span class="line"></span>
+<span class="line">service:</span>
+<span class="line">  pipelines:</span>
+<span class="line">    traces:</span>
+<span class="line">      receivers: [otlp]</span>
+<span class="line">      processors: [memory_limiter, attributes<span class="tk-op">/</span>redact, tail_sampling, batch]</span>
+<span class="line">      exporters: [otlp<span class="tk-op">/</span>tracestore]</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com"># Agent tier (DaemonSet): batch and forward with the loadbalancing exporter using routing_key: traceID,</span></span>
+<span class="line"><span class="tk-com"># so every span of a trace reaches the same gateway instance. Log retention (7 days hot, 30 days for</span></span>
+<span class="line"><span class="tk-com"># failed transactions) is configured in the log store, not in the services.</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Blocking on telemetry:</strong> Any synchronous call to a logging or tracing backend in the request path couples payment availability to that backend. Write locally and ship asynchronously.</li>
+          <li><strong>Head sampling only:</strong> A fixed percentage chosen at the start of a request drops most failing and slow traces. Use tail-based sampling to keep the traces you actually need.</li>
+          <li><strong>High-cardinality metric labels:</strong> User IDs, transaction IDs, or raw URLs as labels explode series counts and cost. Keep them in traces and logs.</li>
+          <li><strong>Logging sensitive payloads:</strong> Full request and response bodies can contain card data and personal data. Redact at the source and log only identifiers and outcomes.</li>
+          <li><strong>Unbounded buffers:</strong> Agents without memory limits or queue caps can crash nodes during backend outages. Set limits and a drop policy.</li>
+          <li><strong>No telemetry about telemetry:</strong> Without metrics on dropped spans, queue depth, and pipeline lag, you will not know when data is missing during an incident.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams <strong>start from the questions they must answer during incidents</strong> and collect only the data that answers them. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define the questions:</strong> Set SLIs and SLOs, list the top incident-debugging flows, and decide which data answers them.</li>
+          <li><strong>Step 1 — Standardize instrumentation:</strong> OpenTelemetry SDKs, W3C trace-context propagation, structured JSON logs carrying the trace ID, and redaction at the source.</li>
+          <li><strong>Step 2 — Node agents:</strong> A DaemonSet collector or log shipper with batching, bounded queues, and retries. Services never talk to the backend directly.</li>
+          <li><strong>Step 3 — Gateway tier:</strong> Tail-based sampling (keep errors and slow traces, sample the rest), a memory limiter, and routing by trace ID so whole traces land on the same collector.</li>
+          <li><strong>Step 4 — Metrics and alerts:</strong> Prometheus with multi-window burn-rate alerts, exemplars linking to traces, and cardinality guardrails.</li>
+          <li><strong>Step 5 — Tiering and budget:</strong> Hot indexed storage for recent data, 30-day retention for failed-transaction logs, cheap tiers for the rest, and cost dashboards to tune sampling.</li>
+        </ul>
+        <p>Keep telemetry best-effort and bounded, and spend your budget on the traces and logs that explain failures.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Observability must never sit on the payment critical path. Use <strong>local, asynchronous, bounded telemetry</strong> with correlation IDs, <strong>tail-based adaptive sampling</strong> to keep the traces that matter, <strong>pull-based metrics</strong> for alerting, and <strong>tiered retention</strong> with strict redaction for failed-transaction logs. Accept best-effort telemetry in exchange for payment latency and availability.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

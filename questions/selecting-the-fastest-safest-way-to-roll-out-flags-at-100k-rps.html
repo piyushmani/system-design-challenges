@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Selecting the fastest, safest way to roll out flags at 100k RPS — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">24 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Feature Flags</span>
+      <span class="tag tag--green">High RPS</span>
+      <span class="tag tag--amber">Rollout Safety</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Selecting the fastest, safest way to roll out flags at 100k RPS</h1>
+      <p class="q-scenario"><strong>Leah</strong>, a backend engineer, is building a <strong>feature-flag system</strong> for a microservice architecture handling roughly <strong>100,000 requests per second</strong> across many services and regions. Flag evaluation should be <strong>sub-millisecond</strong>, flags must be changeable for <strong>instant rollback</strong>, the system must survive <strong>regional outages</strong>, and engineers need <strong>audit logs and observability</strong> for every flag change. She must pick the architecture that gives <strong>minimal latency, high availability, fast propagation, and easy recovery</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Require every request to synchronously query a centralized flag service (via HTTP/gRPC) backed by a strongly consistent database. If the service fails, requests stall until a timeout or failover occurs. This ensures the most recent flag state is used for every request.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Implement a basic local in-memory cache within each service using a fixed Time-To-Live (e.g., 30 seconds). Services periodically poll the central database to update flags. Decisions are made locally using the cached data; if the cache is empty, a safe default is applied.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Deploy a lightweight SDK that determines flags locally from an in-memory cache, and distribute updates from a central flag management service to all microservices via a streaming pub/sub mechanism (such as gRPC streams, Kafka, or a managed push service). Incorporate safety features like local fallback defaults, versioned flag data, and audit trails for modifications. Supply metrics and change events to ensure observability.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Store feature flags in the primary relational database and utilize database triggers combined with Change Data Capture (CDC) to broadcast changes to a message broker. Each service subscribes to the broker to refresh its local cache. Services resolve flags locally via the cache, falling back to database queries if the data is missing.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Local SDK Evaluation with Streaming Push</h3>
+        <p>At 100k RPS the flag decision must be a <strong>local memory read</strong>: any network call per request is both a latency cost and a new failure dependency on the hottest path. The control plane (changing flags) and the data plane (evaluating flags) should therefore be separated. An <strong>SDK that evaluates locally</strong> from an in-memory snapshot, fed by a <strong>push stream</strong> for fast propagation, with <strong>versioned data, safe defaults, and an audit trail</strong>, gives microsecond evaluation, rollback in seconds, and independence from the flag service during outages. This is the model used by mature flag platforms:</p>
+        <ul>
+          <li><strong>Sub-millisecond evaluation:</strong> A flag decision is a hash-map lookup plus a rule evaluation, typically microseconds, with zero network I/O and zero added failure modes per request.</li>
+          <li><strong>Fast, safe rollback:</strong> A change is pushed to all connected SDKs within seconds, so a kill switch does not wait for a TTL. Versioning guarantees updates are applied in order and stale messages are ignored.</li>
+          <li><strong>Resilient to outages:</strong> If the flag service or a region is down, SDKs keep serving the last known good snapshot, and can start from a persisted local copy or compiled-in defaults.</li>
+          <li><strong>Auditable control plane:</strong> Every change is written with actor, before and after, and version in an append-only audit log, and a change event is published for dashboards and correlation with incidents.</li>
+          <li><strong>Observable:</strong> SDKs report evaluation counts (sampled), snapshot version, and last-update age, so you can detect services running stale flags.</li>
+        </ul>
+        <p>Treat flag changes like <strong>deployments</strong>: versioned, audited, staged (percentage rollouts by region or cohort), and monitored. Alert on <strong>snapshot age</strong>, stream disconnect rate, and the gap between the published version and the versions running in services.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">☎️</span>
+            <h4>A — Synchronous Central Flag Service</h4>
+          </div>
+          <p>Always the freshest value, but it adds a <strong>network hop and a failure dependency to every request</strong>. At 100k RPS the flag service becomes a critical, hot, tail-latency-sensitive dependency, and its outage stalls or fails user traffic. This is the wrong trade: instant freshness for each request is not required, while sub-millisecond evaluation and availability are.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>B — Local Cache with 30s TTL and DB Polling</h4>
+          </div>
+          <p>Local evaluation is correct, but <strong>30 seconds of propagation delay breaks 'instant rollback'</strong>: a bad release keeps running for up to half a minute per service, and lowering the TTL shifts load onto the database. Polling from every instance multiplies read load and, without versioning, offers no ordering guarantee or audit linkage. It is a decent baseline, not a safe rollout mechanism.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>D — Primary DB + Triggers + CDC</h4>
+          </div>
+          <p>Pushing changes through CDC works, but it <strong>couples flag config to the primary application database</strong> and adds trigger and replication-slot overhead for a tiny, low-write data set. The stated <strong>fallback to database queries on a cache miss</strong> is dangerous at 100k RPS: a cold or evicted cache turns into a stampede on the primary. It also lacks first-class versioning, defaults, and SDK semantics unless you build them.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Local SDK Evaluation with Streaming Push ✓</h4>
+          </div>
+          <p>Deploy a lightweight SDK that determines flags locally from an in-memory cache, and distribute updates from a central flag management service to all microservices via a streaming pub/sub mechanism (su</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Per-Request Latency</th><th>Rollback Speed</th><th>Availability if Flag Service Is Down</th><th>Load on Backing Store</th><th>Auditability</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Synchronous Central Service</td><td>Poor (network hop) ❌</td><td>Immediate ✅</td><td>Poor ❌</td><td>Very high ❌</td><td>Good ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Local Cache + 30s TTL Poll</td><td>Excellent ✅</td><td>Slow (up to TTL) ❌</td><td>Good ✅</td><td>Medium (polling) ⚠</td><td>Weak ⚠</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — SDK + Streaming Push ✓</td><td>Excellent ✅</td><td>Seconds ✅</td><td>Excellent ✅</td><td>Low ✅</td><td>Excellent ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — DB + CDC + Cache</td><td>Excellent on hit ✅</td><td>Seconds (CDC lag) ⚠</td><td>Good, risky on misses ⚠</td><td>Stampede risk on misses ❌</td><td>Medium ⚠</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Synchronous Central Service</h4>
+          </div>
+          <p>Low-traffic internal tools where a per-request network call is cheap and absolute freshness matters more than latency.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Local Cache + TTL Poll</h4>
+          </div>
+          <p>Small systems or non-critical flags where a delay of tens of seconds is acceptable and simplicity matters most.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — SDK + Streaming Push</h4>
+          </div>
+          <p>High-throughput, multi-region systems that need fast kill switches, resilience to flag-service outages, and a full audit trail.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — DB + CDC + Cache</h4>
+          </div>
+          <p>Organizations already running CDC infrastructure that want flags co-located with existing data and can protect the database from cache-miss storms.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Flag Distribution Architecture</h3>
+        <p>The control plane publishes versioned changes. SDKs evaluate locally and recover via snapshots when the stream is unavailable:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    ADM[&quot;Admin UI / API&quot;] --&gt; FS[&quot;Flag service (control plane)&quot;]
+    FS --&gt; DB[(&quot;Versioned flag store&quot;)]
+    FS --&gt; AUD[(&quot;Append-only audit log&quot;)]
+    FS --&gt; PS[&quot;Streaming layer (pub/sub, gRPC streams)&quot;]
+    FS --&gt; SNAP[&quot;Snapshot endpoint (CDN cached)&quot;]
+    PS --&gt; S1[&quot;Service A SDK: in-memory snapshot&quot;]
+    PS --&gt; S2[&quot;Service B SDK: in-memory snapshot&quot;]
+    SNAP -. &quot;bootstrap and periodic poll&quot; .-&gt; S1
+    SNAP -. &quot;bootstrap and periodic poll&quot; .-&gt; S2
+    S1 --&gt; L1[(&quot;Last known good snapshot on disk&quot;)]
+    S1 -. &quot;metrics: version, snapshot age&quot; .-&gt; OBS[&quot;Observability&quot;]
+    S2 -. &quot;metrics: version, snapshot age&quot; .-&gt; OBS">flowchart LR
+    ADM[&quot;Admin UI / API&quot;] --&gt; FS[&quot;Flag service (control plane)&quot;]
+    FS --&gt; DB[(&quot;Versioned flag store&quot;)]
+    FS --&gt; AUD[(&quot;Append-only audit log&quot;)]
+    FS --&gt; PS[&quot;Streaming layer (pub/sub, gRPC streams)&quot;]
+    FS --&gt; SNAP[&quot;Snapshot endpoint (CDN cached)&quot;]
+    PS --&gt; S1[&quot;Service A SDK: in-memory snapshot&quot;]
+    PS --&gt; S2[&quot;Service B SDK: in-memory snapshot&quot;]
+    SNAP -. &quot;bootstrap and periodic poll&quot; .-&gt; S1
+    SNAP -. &quot;bootstrap and periodic poll&quot; .-&gt; S2
+    S1 --&gt; L1[(&quot;Last known good snapshot on disk&quot;)]
+    S1 -. &quot;metrics: version, snapshot age&quot; .-&gt; OBS[&quot;Observability&quot;]
+    S2 -. &quot;metrics: version, snapshot age&quot; .-&gt; OBS</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Local-Evaluating Flag SDK</h3>
+        <p>Evaluation is a pure in-memory function. Updates are versioned, applied in order, and backed by polling, a persisted snapshot, and safe defaults:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- SDK lifecycle ----</span></span>
+<span class="line"><span class="tk-kw">class</span> FlagClient:</span>
+<span class="line">    snapshot <span class="tk-op">=</span> <span class="tk-fn">loadLastKnownGood</span>() <span class="tk-kw">or</span> EMBEDDED_DEFAULTS        <span class="tk-com">// never start empty</span></span>
+<span class="line">    version  <span class="tk-op">=</span> snapshot.version</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">start</span>():</span>
+<span class="line">        fresh <span class="tk-op">=</span> <span class="tk-fn">tryFetchSnapshot</span>(timeout <span class="tk-op">=</span> <span class="tk-num">2s</span>)                 <span class="tk-com">// bootstrap from snapshot endpoint or CDN</span></span>
+<span class="line">        <span class="tk-kw">if</span> fresh <span class="tk-op">!=</span> <span class="tk-lit">null</span>: <span class="tk-fn">install</span>(fresh)</span>
+<span class="line">        <span class="tk-fn">openStream</span>(sinceVersion <span class="tk-op">=</span> version, onMessage <span class="tk-op">=</span> onStreamMessage)</span>
+<span class="line">        <span class="tk-fn">schedule</span>(pollSnapshot, every <span class="tk-op">=</span> <span class="tk-num">60s</span> <span class="tk-op">+</span> <span class="tk-fn">jitter</span>())         <span class="tk-com">// safety net if the stream is silently down</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">onStreamMessage</span>(msg):</span>
+<span class="line">        <span class="tk-kw">if</span> msg.version <span class="tk-op">&lt;=</span> version: <span class="tk-kw">return</span>                      <span class="tk-com">// stale, duplicate, or out of order</span></span>
+<span class="line">        <span class="tk-kw">if</span> msg.version <span class="tk-op">==</span> version <span class="tk-op">+</span> <span class="tk-num">1</span>:</span>
+<span class="line">            snapshot <span class="tk-op">=</span> snapshot.<span class="tk-fn">apply</span>(msg.change)              <span class="tk-com">// in-order delta</span></span>
+<span class="line">            version  <span class="tk-op">=</span> msg.version</span>
+<span class="line">            <span class="tk-fn">persistLocal</span>(snapshot)</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            <span class="tk-fn">install</span>(<span class="tk-fn">fetchSnapshot</span>())                           <span class="tk-com">// gap detected: resync fully</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">install</span>(s):</span>
+<span class="line">        <span class="tk-kw">if</span> s.version <span class="tk-op">&gt;</span> version:</span>
+<span class="line">            snapshot <span class="tk-op">=</span> s; version <span class="tk-op">=</span> s.version; <span class="tk-fn">persistLocal</span>(s)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Evaluation: no I/O, no locks on the hot path ----</span></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">evaluate</span>(flagKey, ctx):</span>
+<span class="line">        flag <span class="tk-op">=</span> snapshot.flags.<span class="tk-fn">get</span>(flagKey)                     <span class="tk-com">// immutable snapshot, atomic reference swap</span></span>
+<span class="line">        <span class="tk-kw">if</span> flag <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> flag.killed:</span>
+<span class="line">            <span class="tk-kw">return</span> DEFAULTS[flagKey]                           <span class="tk-com">// deliberately chosen safe default</span></span>
+<span class="line">        <span class="tk-kw">for</span> rule <span class="tk-kw">in</span> flag.rules:</span>
+<span class="line">            <span class="tk-kw">if</span> rule.<span class="tk-fn">matches</span>(ctx): <span class="tk-kw">return</span> rule.value</span>
+<span class="line">        <span class="tk-kw">if</span> flag.rolloutPercent <span class="tk-op">&gt;</span> <span class="tk-num">0</span> <span class="tk-kw">and</span> <span class="tk-fn">hash</span>(ctx.userId <span class="tk-op">+</span> flag.salt) <span class="tk-op">%</span> <span class="tk-num">100</span> <span class="tk-op">&lt;</span> flag.rolloutPercent:</span>
+<span class="line">            <span class="tk-kw">return</span> flag.onValue                                <span class="tk-com">// deterministic, sticky percentage rollout</span></span>
+<span class="line">        <span class="tk-kw">return</span> flag.offValue</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">metrics</span>():</span>
+<span class="line">        <span class="tk-fn">gauge</span>(<span class="tk-str">&#x27;flag.snapshot.version&#x27;</span>, version)</span>
+<span class="line">        <span class="tk-fn">gauge</span>(<span class="tk-str">&#x27;flag.snapshot.age_seconds&#x27;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> snapshot.updatedAt)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Control plane: commit, audit, then publish ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">updateFlag</span>(flagKey, change, actor):</span>
+<span class="line">    tx.<span class="tk-kw">begin</span></span>
+<span class="line">    newVersion <span class="tk-op">=</span> store.<span class="tk-fn">nextVersion</span>(environment)</span>
+<span class="line">    before     <span class="tk-op">=</span> store.<span class="tk-fn">get</span>(flagKey)</span>
+<span class="line">    store.<span class="tk-fn">put</span>(flagKey, change, newVersion)</span>
+<span class="line">    audit.<span class="tk-fn">append</span>(actor, flagKey, before, change, newVersion, <span class="tk-fn">now</span>())</span>
+<span class="line">    tx.commit</span>
+<span class="line">    stream.<span class="tk-fn">publish</span>(<span class="tk-fn">FlagChanged</span>(flagKey, change, newVersion))   <span class="tk-com">// publish only after the commit succeeds</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Starting with an empty cache:</strong> If an SDK has no snapshot and no defaults, flags evaluate to undefined. Always bootstrap from a persisted snapshot or compiled-in defaults.</li>
+          <li><strong>No versioning:</strong> Without a monotonic version, out-of-order or duplicate stream messages can roll a flag back to an older value.</li>
+          <li><strong>Relying on push alone:</strong> Streams drop silently. Add periodic snapshot polling and alert on snapshot age.</li>
+          <li><strong>Unjittered reconnects and polls:</strong> Thousands of instances reconnecting simultaneously overload the flag service. Add jitter and a cacheable snapshot endpoint.</li>
+          <li><strong>Unsafe defaults:</strong> Defaulting a risky new feature to on when the flag system is unavailable turns an outage of the flag service into a production incident.</li>
+          <li><strong>Inconsistent evaluation in one request chain:</strong> Different services seeing different flag states mid-request causes confusing partial behavior. Propagate the decision when consistency matters.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Platforms such as LaunchDarkly, Unleash, and Flagsmith, and in-house systems at large companies, share a common architecture:</p>
+        <ul>
+          <li><strong>Step 0 — Separate planes:</strong> Control plane (admin UI, API, audit) and data plane (SDK evaluation) are distinct systems with distinct SLOs.</li>
+          <li><strong>Step 1 — Versioned snapshot store:</strong> Flags live in a small store with a monotonically increasing version per environment, plus an append-only audit log.</li>
+          <li><strong>Step 2 — Streaming and polling:</strong> SDKs bootstrap from a snapshot, subscribe to a stream for deltas, and poll periodically as a fallback.</li>
+          <li><strong>Step 3 — Local resilience:</strong> SDKs persist the last known good snapshot locally and ship with compiled-in defaults.</li>
+          <li><strong>Step 4 — Staged rollout:</strong> Percentage and cohort rollouts use deterministic hashing so the same user gets a stable result, with fast kill switches.</li>
+          <li><strong>Step 5 — Observability and hygiene:</strong> Track snapshot age, evaluation sampling, and flag change events, and remove stale flags regularly.</li>
+        </ul>
+        <p>The flag service should be able to go <strong>completely down</strong> without a single user-visible request failing.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Keep <strong>evaluation local</strong> and <strong>distribution asynchronous</strong>: in-memory SDK reads for speed, a push stream plus polling for freshness, <strong>versioning and defaults for safety</strong>, and an audit log for accountability. Never put a network call on the per-request path for something that changes a few times a day.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

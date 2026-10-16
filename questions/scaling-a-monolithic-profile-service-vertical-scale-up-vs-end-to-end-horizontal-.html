@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scaling a Monolithic Profile Service: Vertical Scale-Up vs. End-to-End Horizontal Scale-Out — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">23 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Scaling Out vs Up</span>
+      <span class="tag tag--green">Architecture</span>
+      <span class="tag tag--amber">Capacity Planning</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Scaling a Monolithic Profile Service: Vertical Scale-Up vs. End-to-End Horizontal Scale-Out</h1>
+      <p class="q-scenario"><strong>Liam</strong>, a backend engineer at a social networking app, runs the profile service as a <strong>monolithic JVM process</strong> backed by <strong>one large database</strong>. Traffic arrives in <strong>bursts</strong>, profile and photo updates create a <strong>high write load</strong>, and users far from the primary region see <strong>slow reads</strong>. Profiling shows that the primary's <strong>write throughput and storage growth</strong>, not a missing index, are the limiting factors, and every vertical resize causes <strong>downtime</strong> and is becoming cost-prohibitive. Reads must be fast and profile changes should become visible quickly, but <strong>cross-region linearizability is not required</strong>, and availability during spikes matters most. He must choose the architecture that scales the platform while balancing cost, operational complexity, availability, and latency.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep the single database and scale up: a bigger instance with faster storage and a larger application host. Minimal code change and few components, but everything depends on one machine.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Make the application tier stateless and scale it horizontally, keep a single unsharded primary, and add a few read replicas plus a shared cache for hot objects.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Scale out end to end: stateless services, shard the primary by user or tenant ID, add read replicas and a regional cache per shard, automate partition management and health checks, and keep cross-shard operations rare.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Move to asynchronous writes with a durable event log and CQRS: append writes to the log, build read models asynchronously, and accept eventual consistency on reads.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: End-to-End Horizontal Scale-Out</h3>
+        <p>Liam's bottlenecks sit in three different places: bursty compute, a <strong>single-writer database</strong> that cannot absorb growing write volume, and the <strong>distance</strong> between users and their data. Only an end-to-end scale-out addresses all three: stateless services scale with load, sharding by user ID spreads writes and storage across nodes, and replicas plus regional caches bring reads close to users. Because the product accepts bounded cross-region staleness, the design avoids the cost and complexity of global strong consistency. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Removes the single-writer ceiling:</strong> Sharding by user ID splits write throughput and storage across several primaries, so growth means adding shards instead of buying a bigger machine. Replicas and caches alone (option B) never raise the write limit.</li>
+          <li><strong>Natural partition key:</strong> Profile access is overwhelmingly by user ID, so most requests touch exactly one shard and need no cross-shard joins or transactions.</li>
+          <li><strong>Low regional read latency:</strong> Read replicas and per-region caches serve most reads locally, which matches the requirement for fast reads with seconds of tolerated lag.</li>
+          <li><strong>Availability and burst handling:</strong> Stateless instances autoscale behind a load balancer, a failing shard affects only its slice of users, and capacity changes no longer require downtime.</li>
+          <li><strong>Strong consistency where it matters:</strong> Writes and read-your-writes reads go to the shard's primary, so a single user's profile stays consistent while other regions may lag slightly.</li>
+        </ul>
+        <p>Treat this as a <strong>staged migration</strong>, not a big bang: make services stateless, move photos to <strong>object storage plus a CDN</strong>, add caching and replicas, then introduce sharding behind a routing layer with <strong>logical shards</strong> so rebalancing does not require re-keying. Track per-shard write rate, replica lag, cache hit rate, and p99 latency by region.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⬆️</span>
+            <h4>A — Vertical Scale-Up</h4>
+          </div>
+          <p>Bigger machines are the fastest change, but they hit a hard ceiling, cost grows faster than capacity at the high end, and resizing often means downtime. The single instance also remains a single point of failure for every user and does nothing for users far from the region. <strong>Caveat:</strong> it is a sensible stopgap while load is modest or while a real migration is being prepared.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>B — Stateless App + Replicas + Cache (Single Primary)</h4>
+          </div>
+          <p>This is the right <em>first stage</em>: it fixes bursty compute and absorbs reads. But all writes (profile and photo metadata) still funnel into one primary, so the write ceiling and storage growth remain, and replicas in distant regions still pay replication lag. <strong>Caveat:</strong> if profiling shows the system is read-bound, this may be enough and far cheaper than sharding.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📜</span>
+            <h4>D — Async Writes with CQRS and an Event Log</h4>
+          </div>
+          <p>CQRS with an event log scales read models independently and tolerates bursts, but it is a major redesign: event schemas, projection rebuilds, idempotent consumers, and tooling for reasoning about eventual consistency. Users also expect to see their own edit immediately, which CQRS complicates. The write side still needs a scalable, partitioned store, so it does not remove the need to partition data. <strong>Caveat:</strong> a strong fit when you need an audit trail, many independent read models, or complex downstream fan-out.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — End-to-End Horizontal Scale-Out ✓</h4>
+          </div>
+          <p>Scale out end to end: stateless services, shard the primary by user or tenant ID, add read replicas and a regional cache per shard, automate partition management and health checks, and keep cross-shar</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Scalability</th><th>Read Latency (Global)</th><th>Availability / Blast Radius</th><th>Cost at Scale</th><th>Implementation Complexity</th><th>Migration Risk</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Vertical Scale-Up</td><td>Capped ❌</td><td>Poor for remote users ❌</td><td>Single point of failure ❌</td><td>Rises steeply ❌</td><td>Low ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Stateless App + Replicas + Cache</td><td>Capped (single primary) ❌</td><td>Good with caches and replicas ✅</td><td>Primary is still a single point of failure ⚠</td><td>Moderate ✅</td><td>Medium ⚠</td><td>Low–Medium ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Full Scale-Out ✓</td><td>High (add shards) ✅</td><td>Good (local replicas and caches) ✅</td><td>Per-shard failure domains ✅</td><td>Roughly linear, pay as you grow ✅</td><td>High ❌</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">D — CQRS + Event Log</td><td>High on the write side if the log scales ✅</td><td>Good (separate read stores) ✅</td><td>Good (decoupled) ✅</td><td>Moderate, more components ⚠</td><td>Very high ❌</td><td>Very high ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Vertical Scale-Up</h4>
+          </div>
+          <p>Early-stage or modest traffic, a need to buy time, or a database that is not yet near its limits and can tolerate a short maintenance window.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Stateless App + Replicas + Cache</h4>
+          </div>
+          <p>Read-heavy workloads where compute bursts and reads dominate, writes fit comfortably on one primary, and one or a few regions are acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Full Scale-Out</h4>
+          </div>
+          <p>Write throughput or dataset size exceeds what one node can handle, access is keyed by user or tenant, users are globally distributed, and the team can run a partitioned system.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — CQRS + Event Log</h4>
+          </div>
+          <p>Audit and replay requirements, several independent read models, or complex downstream fan-out, with teams ready for eventual consistency and projection management.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Horizontally Scaled Profile Service</h3>
+        <p>Stateless instances route each request to the user's shard, while regional caches and replicas serve most reads locally:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TB
+    U[Users by region] --&gt; LB[Load balancer]
+    LB --&gt; APP[Stateless profile service instances with autoscaling]
+    APP --&gt; RC[Regional cache]
+    APP --&gt; R{Shard router by user ID}
+    R --&gt; S1[(Shard 1 primary)]
+    R --&gt; S2[(Shard 2 primary)]
+    S1 -.-&gt;|async replication| S1R[(Shard 1 regional replicas)]
+    S2 -.-&gt;|async replication| S2R[(Shard 2 regional replicas)]
+    APP --&gt; OBJ[Object storage plus CDN for photos]">flowchart TB
+    U[Users by region] --&gt; LB[Load balancer]
+    LB --&gt; APP[Stateless profile service instances with autoscaling]
+    APP --&gt; RC[Regional cache]
+    APP --&gt; R{Shard router by user ID}
+    R --&gt; S1[(Shard 1 primary)]
+    R --&gt; S2[(Shard 2 primary)]
+    S1 -.-&gt;|async replication| S1R[(Shard 1 regional replicas)]
+    S2 -.-&gt;|async replication| S2R[(Shard 2 regional replicas)]
+    APP --&gt; OBJ[Object storage plus CDN for photos]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Shard Routing with Read-Your-Writes</h3>
+        <p>A router maps user IDs to logical shards and sends writes to the shard primary. For a short window after a write, the user's reads are pinned to the primary so lagging replicas never show old data:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">LOGICAL_SHARDS <span class="tk-op">=</span> <span class="tk-num">1024</span>                                      <span class="tk-com">// many logical shards, few physical nodes</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">shardFor</span>(userId):</span>
+<span class="line">    logical <span class="tk-op">=</span> <span class="tk-fn">hash</span>(userId) <span class="tk-op">%</span> LOGICAL_SHARDS</span>
+<span class="line">    <span class="tk-kw">return</span> shardDirectory.<span class="tk-fn">lookup</span>(logical)                  <span class="tk-com">// directory maps logical -&gt; physical shard</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getProfile</span>(userId, region):</span>
+<span class="line">    shard <span class="tk-op">=</span> <span class="tk-fn">shardFor</span>(userId)</span>
+<span class="line">    <span class="tk-kw">if</span> recentWriteMarker.<span class="tk-fn">exists</span>(<span class="tk-str">&#x27;w:&#x27;</span> <span class="tk-op">+</span> userId):            <span class="tk-com">// short-TTL marker set on write</span></span>
+<span class="line">        <span class="tk-kw">return</span> shard.primary.<span class="tk-fn">read</span>(userId)                  <span class="tk-com">// read-your-writes</span></span>
+<span class="line">    cached <span class="tk-op">=</span> <span class="tk-fn">regionCache</span>(region).<span class="tk-fn">get</span>(<span class="tk-str">&#x27;profile:&#x27;</span> <span class="tk-op">+</span> userId)</span>
+<span class="line">    <span class="tk-kw">if</span> cached <span class="tk-op">!=</span> <span class="tk-lit">null</span>: <span class="tk-kw">return</span> cached</span>
+<span class="line">    row <span class="tk-op">=</span> shard.<span class="tk-fn">replicaIn</span>(region).<span class="tk-fn">read</span>(userId)             <span class="tk-com">// local replica, bounded lag</span></span>
+<span class="line">    <span class="tk-fn">regionCache</span>(region).<span class="tk-fn">set</span>(<span class="tk-str">&#x27;profile:&#x27;</span> <span class="tk-op">+</span> userId, row, ttl <span class="tk-op">=</span> <span class="tk-num">30s</span> <span class="tk-op">+</span> jitter)</span>
+<span class="line">    <span class="tk-kw">return</span> row</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">updateProfile</span>(userId, data):</span>
+<span class="line">    shard <span class="tk-op">=</span> <span class="tk-fn">shardFor</span>(userId)</span>
+<span class="line">    shard.primary.<span class="tk-fn">write</span>(userId, data)                      <span class="tk-com">// strong consistency within the shard</span></span>
+<span class="line">    recentWriteMarker.<span class="tk-fn">set</span>(<span class="tk-str">&#x27;w:&#x27;</span> <span class="tk-op">+</span> userId, ttl <span class="tk-op">=</span> <span class="tk-num">10s</span>)</span>
+<span class="line">    <span class="tk-fn">publish</span>(<span class="tk-fn">ProfileChanged</span>(userId, version))               <span class="tk-com">// invalidates regional caches, feeds search index</span></span>
+<span class="line">    <span class="tk-com">// photos: upload bytes to object storage, store only the object key in the shard</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Sharding before measuring:</strong> If the system is read-bound, caching and replicas deliver most of the benefit at a fraction of the complexity.</li>
+          <li><strong>Choosing a poor shard key:</strong> A key that does not match access patterns causes cross-shard fan-out, and a skewed key (a region or a very large tenant) creates hot shards.</li>
+          <li><strong>Mapping keys directly to physical nodes:</strong> Without logical shards or a directory, adding a node forces a mass data migration. Use many logical shards mapped onto fewer nodes.</li>
+          <li><strong>Ignoring read-your-writes with replicas:</strong> Users who edit a profile and still see the old version file bugs. Pin post-write reads to the primary or use version tokens.</li>
+          <li><strong>Leaving photos in the database:</strong> Large blobs inflate storage and replication. Use object storage plus a CDN and keep only references in the database.</li>
+          <li><strong>Running stateful instances behind autoscaling:</strong> Local caches of mutable state or sticky sessions break scale-out and rolling deploys.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams rarely jump straight to sharding. They <strong>remove the cheapest bottlenecks first</strong> and shard once write throughput or storage proves to be the limit. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 — Measure:</strong> Break down p99 latency by region and record write rate, storage growth, and the share of reads that could be cached.</li>
+          <li><strong>Step 1 — Make the service stateless:</strong> Move sessions and local state out, add autoscaling and health checks (this also removes downtime during deploys).</li>
+          <li><strong>Step 2 — Offload media:</strong> Store photos in object storage behind a CDN so only metadata reaches the database.</li>
+          <li><strong>Step 3 — Cache and replicate reads:</strong> Add a regional cache and read replicas, with read-your-writes handling after profile edits.</li>
+          <li><strong>Step 4 — Shard by user ID:</strong> Introduce a routing layer with many logical shards and migrate gradually using CDC or dual writes with verification.</li>
+          <li><strong>Step 5 — Add event-driven read models selectively:</strong> Use asynchronous pipelines for search, feeds, and analytics rather than for the primary profile path.</li>
+        </ul>
+        <p>Scale the layer that is actually saturated, and keep the number of moving parts proportional to the problem.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When the <strong>write path and storage</strong> reach the limit of a single machine, bigger boxes only delay the problem. Scale out every tier: stateless compute, a partitioned database keyed by user, and replicas plus caches near users, while limiting cross-shard operations and handling read-your-writes explicitly.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

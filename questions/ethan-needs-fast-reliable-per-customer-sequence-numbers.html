@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ethan needs fast, reliable per-customer sequence numbers — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">29 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Sequence Numbers</span>
+      <span class="tag tag--green">Distributed ID Generation</span>
+      <span class="tag tag--amber">Architecture</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Ethan needs fast, reliable per-customer sequence numbers</h1>
+      <p class="q-scenario"><strong>Ethan</strong> is an infrastructure engineer building an order-processing and billing engine for a global SaaS enterprise. The platform must issue strictly ascending, monotonically increasing sequence numbers partitioned per individual customer (e.g., <code>invoice_seq</code> tied to a specific <code>customer_id</code>). The engine runs across hundreds of distributed stateless application worker nodes. Ethan must satisfy rigorous operational SLAs: assignment latency must remain strictly under <code>10ms</code> (p99), aggregate throughput must comfortably exceed <code>tens of thousands of allocations per second</code>, availability must remain high without central lock bottlenecks, and duplicate sequence numbers are <em>categorically prohibited</em>. The business rules explicitly permit minor numeric gaps in the sequence following an unexpected application node failure or restart.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Centralized single-host allocator: Execute a dedicated leader process maintaining an in-memory counter for every customer.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Distributed locking for a shared counter: Employ Redis RedLock or SETNX to grab a customer-specific lock, fetch and increment a central counter.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Atomic database operations: Maintain a dedicated counter row for each customer within the primary relational database. Execute an atomic SELECT FOR UPDATE or UPDATE ... RETURNING.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Sharded range pre-allocation: Distribute customers among application server shard owners using lease-based assignment or consistent hashing. Each designated owner requests a block of sequence numbers from a centralized database or allocator service. The servers then dispense numbers from their local cache without requiring locks.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Sharded Range Pre-Allocation (Hi/Lo Block Allocation Pattern)</h3>
+        <p>Generating monotonically increasing per-customer sequence numbers at tens of thousands of requests per second across hundreds of application nodes cannot rely on synchronous per-number database writes or distributed locks without violating the sub-10ms latency SLA. <strong>Sharded range pre-allocation</strong> (an evolution of the classic <em>Hi/Lo algorithm</em>) amortizes centralized coordination over large batches of allocations. By hashing or assigning customer affinity to shard nodes, each node claims a reserved numeric block (e.g., 100 sequence numbers) from the central backing store using a single atomic compare-and-swap or <code>UPDATE ... RETURNING</code> statement. Once claimed, the application node dispenses sequence numbers directly from its local in-memory counter (e.g., <code>AtomicLong</code>) in <strong>sub-microsecond time (&lt;0.05ms)</strong> with zero network round-trips. Because the central allocator increments the global high-water mark atomically before granting a block, two nodes never receive overlapping ranges, guaranteeing <strong>absolute prevention of duplicates</strong>. When a node exhausts its block, it fetches the next block; if a node crashes, the unallocated numbers in its current in-memory block are simply discarded, creating minor numeric gaps—which the business requirements explicitly permit.</p>
+        <ul>
+          <li><strong>Sub-millisecond local allocation:</strong> Dispensing numbers directly from local memory variables bypasses network I/O, reducing p99 allocation latency from 15-50ms to less than 1ms.</li>
+          <li><strong>Amortized database IOPS:</strong> Requesting blocks of size $N$ (e.g., $N=100$) reduces database write traffic by a factor of $100\times$, allowing a modest relational database or KV store to support 50,000+ allocations/sec.</li>
+          <li><strong>Absolute duplicate immunity:</strong> The central allocation table uses atomic increments to grant non-overlapping intervals ($[1..100]$, $[101..200]$), making duplicate sequences mathematically impossible across the entire cluster.</li>
+          <li><strong>Perfect tolerance for node failure:</strong> Discarding the remainder of an in-memory block upon process termination causes minor sequence gaps, perfectly aligning with business tolerance while avoiding complex two-phase rollback protocols.</li>
+          <li><strong>Horizontal scalability via affinity:</strong> Using consistent hashing (e.g., Maglev or Ketama) to route customer requests to owning application instances maximizes cache hit rates and eliminates cross-worker block thrashing.</li>
+        </ul>
+        <p>Decoupling high-frequency in-memory sequence assignment from low-frequency durable block allocation delivers sub-millisecond latency and massive throughput while maintaining unbreakable protection against duplicate identifiers.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>A — Centralized Single-Host Allocator</h4>
+          </div>
+          <p>Hosting all in-memory customer counters on a single dedicated leader process creates a fragile Single Point of Failure (SPOF) and an unscalable network bottleneck. Handling tens of thousands of network RPCs per second on a single host leads to thread starvation, and if the leader crashes, state synchronization or failover recovery risks losing counter state or causing prolonged cluster downtime.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>B — Distributed Locking with Redis (RedLock / SETNX)</h4>
+          </div>
+          <p>Acquiring a distributed lock via Redis RedLock or SETNX for every single sequence allocation incurs multiple network round-trips (lock acquisition, counter read, counter increment, lock release). Network jitter, lock contention under bursty customer load, and Redis master-replica async failover easily breach the 10ms p99 SLA and risk duplicate number generation upon split-brain re-elections.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚠️</span>
+            <h4>C — Atomic Database Operations (SELECT FOR UPDATE / RETURNING)</h4>
+          </div>
+          <p>Executing a synchronous SQL <code>UPDATE customer_sequences SET counter = counter + 1 WHERE customer_id = :id RETURNING counter</code> for every sequence allocation serializes writes against the database transaction log (WAL). At tens of thousands of operations per second across hundreds of application workers, row lock contention and disk I/O saturation quickly drive p99 latencies past 50-100ms.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Sharded Range Pre-Allocation (Hi/Lo Block Allocation Pattern) ✓</h4>
+          </div>
+          <p>Sharded range pre-allocation: Distribute customers among application server shard owners using lease-based assignment or consistent hashing. Each designated owner requests a block of sequence numbers</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Assignment Latency (p99)</th><th>Cluster Throughput Scalability</th><th>Duplicate Prevention Guarantee</th><th>Database Contention Overhead</th><th>Resilience to Node Crash</th><th>Operational Simplicity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Single-Host Central Allocator</td><td>Moderate Network Latency ⚠</td><td>Bottlenecked on Single Node ❌</td><td>Vulnerable on Failover ⚠</td><td>Zero DB Contention ✅</td><td>Fragile Single Point of Failure ❌</td><td>Moderate ⚠</td></tr>
+            <tr><td class="tt-option">B — Distributed Locking with Redis</td><td>High Latency (&gt;15ms) ❌</td><td>Contention Bottleneck ❌</td><td>Duplicate Risk on Failover ⚠</td><td>Moderate Redis Load ⚠</td><td>Complex Lock Leases ❌</td><td>Complex ❌</td></tr>
+            <tr><td class="tt-option">C — Synchronous Atomic SQL Update</td><td>High Latency (&gt;30ms) ❌</td><td>Severely Bottlenecked by WAL ❌</td><td>Guaranteed Absolute ✅</td><td>Extreme DB Saturation ❌</td><td>Safe but Slow ✅</td><td>High Simplicity ✅</td></tr>
+            <tr><td class="tt-option">D — Sharded Range Pre-Allocation (Hi/Lo)</td><td>Sub-millisecond (&lt;1ms) ✅</td><td>Tens of Thousands/sec ✅</td><td>Guaranteed Absolute ✅</td><td>Amortized by 100x ✅</td><td>Permissible Gaps Only ✅</td><td>High Simplicity ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single-Host Central Allocator</h4>
+          </div>
+          <p>Low-scale internal developer tools or ephemeral lab environments where throughput is under 100 QPS and high availability is unnecessary.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Distributed Locking with Redis</h4>
+          </div>
+          <p>Coarse-grained distributed task coordination where locks are held for seconds and operations do not require low-latency monotonic numbering.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Synchronous Atomic SQL Update</h4>
+          </div>
+          <p>Low-volume enterprise invoicing (<10 orders per minute) where immediate continuous numbering without any gaps is legally enforced by strict local regulations.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Sharded Range Pre-Allocation (Hi/Lo)</h4>
+          </div>
+          <p>High-volume distributed billing, order processing, and telemetry ingestion platforms requiring sub-10ms latency, high throughput, and duplicate-free monotonic IDs.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Hi/Lo Sharded Block Pre-Allocation Architecture</h3>
+        <p>Application worker acquires a block of 100 sequence numbers from the central database in a single atomic update. Subsequent requests are dispensed locally from memory in sub-microsecond time with zero network overhead.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    autonumber
+    participant Client as Order Service Thread
+    participant Node as App Worker (Local Memory Cache)
+    participant DB as Central Sequence Database
+    Note over Node,DB: Step 1: Claim Block of 100 Numbers (Amortized Round-trip)
+    Node-&gt;&gt;DB: UPDATE sequences SET max_val = max_val + 100 WHERE cust_id = &#x27;C-101&#x27; RETURNING max_val - 100 + 1, max_val
+    DB--&gt;&gt;Node: Granted Block [Range: 501 to 600]
+    Note over Node: Local Range: next_val=501, max_val=600
+    Note over Client,Node: Step 2: High-Frequency Local In-Memory Allocations
+    Client-&gt;&gt;Node: get_next_sequence(&#x27;C-101&#x27;)
+    Node-&gt;&gt;Node: AtomicLong.getAndIncrement() -&gt; 501
+    Node--&gt;&gt;Client: Return Sequence 501 (Latency: 0.02ms)
+    Client-&gt;&gt;Node: get_next_sequence(&#x27;C-101&#x27;)
+    Node-&gt;&gt;Node: AtomicLong.getAndIncrement() -&gt; 502
+    Node--&gt;&gt;Client: Return Sequence 502 (Latency: 0.02ms)
+    Note over Node: 98 more allocations served locally with zero network I/O...
+    Note over Node,DB: Step 3: Asynchronous Pre-fetch on Low Watermark (e.g. 580 reached)
+    Node-&gt;&gt;DB: Pre-fetch Next Block [601 to 700] asynchronously">sequenceDiagram
+    autonumber
+    participant Client as Order Service Thread
+    participant Node as App Worker (Local Memory Cache)
+    participant DB as Central Sequence Database
+    Note over Node,DB: Step 1: Claim Block of 100 Numbers (Amortized Round-trip)
+    Node-&gt;&gt;DB: UPDATE sequences SET max_val = max_val + 100 WHERE cust_id = &#x27;C-101&#x27; RETURNING max_val - 100 + 1, max_val
+    DB--&gt;&gt;Node: Granted Block [Range: 501 to 600]
+    Note over Node: Local Range: next_val=501, max_val=600
+    Note over Client,Node: Step 2: High-Frequency Local In-Memory Allocations
+    Client-&gt;&gt;Node: get_next_sequence(&#x27;C-101&#x27;)
+    Node-&gt;&gt;Node: AtomicLong.getAndIncrement() -&gt; 501
+    Node--&gt;&gt;Client: Return Sequence 501 (Latency: 0.02ms)
+    Client-&gt;&gt;Node: get_next_sequence(&#x27;C-101&#x27;)
+    Node-&gt;&gt;Node: AtomicLong.getAndIncrement() -&gt; 502
+    Node--&gt;&gt;Client: Return Sequence 502 (Latency: 0.02ms)
+    Note over Node: 98 more allocations served locally with zero network I/O...
+    Note over Node,DB: Step 3: Asynchronous Pre-fetch on Low Watermark (e.g. 580 reached)
+    Node-&gt;&gt;DB: Pre-fetch Next Block [601 to 700] asynchronously</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Thread-Safe In-Memory Range Sequence Allocator</h3>
+        <p>Local high-performance allocator maintaining an active sequence block, dispensing via atomic primitives, and asynchronously replenishing blocks.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> CustomerSequenceBlockAllocator:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, customer_id, db_client, block_size<span class="tk-op">=</span><span class="tk-num">100</span>):</span>
+<span class="line">        self.customer_id <span class="tk-op">=</span> customer_id</span>
+<span class="line">        self.db <span class="tk-op">=</span> db_client</span>
+<span class="line">        self.block_size <span class="tk-op">=</span> block_size</span>
+<span class="line">        self.current_val <span class="tk-op">=</span> <span class="tk-fn">AtomicLong</span>(<span class="tk-num">0</span>)</span>
+<span class="line">        self.max_val <span class="tk-op">=</span> <span class="tk-num">0</span></span>
+<span class="line">        self.lock <span class="tk-op">=</span> <span class="tk-fn">ReentrantLock</span>()</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">next_sequence</span>(self):</span>
+<span class="line">        <span class="tk-kw">while</span> <span class="tk-lit">True</span>:</span>
+<span class="line">            <span class="tk-com"># Attempt atomic increment within the currently claimed block</span></span>
+<span class="line">            val <span class="tk-op">=</span> self.current_val.<span class="tk-fn">incrementAndGet</span>()</span>
+<span class="line">            <span class="tk-kw">if</span> val <span class="tk-op">&lt;=</span> self.max_val:</span>
+<span class="line">                <span class="tk-com"># Successfully allocated from memory in &lt;0.05ms</span></span>
+<span class="line">                <span class="tk-kw">return</span> val</span>
+<span class="line"></span>
+<span class="line">            <span class="tk-com"># Block exhausted: acquire lock to claim the next block</span></span>
+<span class="line">            <span class="tk-kw">with</span> self.lock:</span>
+<span class="line">                <span class="tk-com"># Double-check condition after acquiring lock</span></span>
+<span class="line">                <span class="tk-kw">if</span> self.current_val.<span class="tk-fn">get</span>() <span class="tk-op">&lt;=</span> self.max_val:</span>
+<span class="line">                    <span class="tk-kw">continue</span></span>
+<span class="line"></span>
+<span class="line">                <span class="tk-com"># Atomically claim new range from central database</span></span>
+<span class="line">                range_start, range_end <span class="tk-op">=</span> self.<span class="tk-fn">claim_next_block_from_db</span>()</span>
+<span class="line">                self.max_val <span class="tk-op">=</span> range_end</span>
+<span class="line">                self.current_val.<span class="tk-fn">set</span>(range_start)</span>
+<span class="line">                <span class="tk-kw">return</span> range_start</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">claim_next_block_from_db</span>(self):</span>
+<span class="line">        <span class="tk-com"># Single atomic SQL operation guarantees non-overlapping blocks across all nodes</span></span>
+<span class="line">        row <span class="tk-op">=</span> self.db.<span class="tk-fn">query_one</span>(<span class="tk-str">&#x27;&#x27;</span>&#x27;</span>
+<span class="line">            UPDATE customer_sequences</span>
+<span class="line">            SET high_water_mark <span class="tk-op">=</span> high_water_mark <span class="tk-op">+</span> :block_size</span>
+<span class="line">            WHERE customer_id <span class="tk-op">=</span> :cid</span>
+<span class="line">            RETURNING high_water_mark <span class="tk-op">-</span> :block_size <span class="tk-op">+</span> <span class="tk-num">1</span> AS range_start, high_water_mark AS range_end</span>
+<span class="line">        <span class="tk-str">&#x27;&#x27;</span><span class="tk-str">&#x27;, {&#x27;</span>block_size<span class="tk-str">&#x27;: self.block_size, &#x27;</span>cid&#x27;: self.customer_id})</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> row:</span>
+<span class="line">            <span class="tk-com"># Initialize customer sequence row if first order</span></span>
+<span class="line">            self.db.<span class="tk-fn">execute</span>(<span class="tk-str">&#x27;&#x27;</span>&#x27;</span>
+<span class="line">                INSERT INTO <span class="tk-fn">customer_sequences</span> (customer_id, high_water_mark)</span>
+<span class="line">                <span class="tk-fn">VALUES</span> (:cid, :block_size) ON CONFLICT DO NOTHING</span>
+<span class="line">            <span class="tk-str">&#x27;&#x27;</span><span class="tk-str">&#x27;, {&#x27;</span>cid<span class="tk-str">&#x27;: self.customer_id, &#x27;</span>block_size&#x27;: self.block_size})</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-num">1</span>, self.block_size</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">return</span> row.range_start, row.range_end</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Allocating oversized blocks to inactive customers:</strong> Granting a block of 10,000 numbers to a customer who generates 1 invoice per month, causing giant numeric gaps when nodes cycle.</li>
+          <li><strong>Synchronous blocking on block exhaustion:</strong> Failing to asynchronously pre-fetch the next block when the current block is nearly depleted, causing periodic 50ms latency spikes.</li>
+          <li><strong>Non-thread-safe local counters:</strong> Using standard primitive integers without atomic operations (like Java <code>AtomicLong</code> or Go <code>sync/atomic</code>) for local block increments, leading to race conditions across worker threads.</li>
+          <li><strong>Persisting local range state across restarts:</strong> Attempting to persist local unallocated blocks to local disk caches without distributed coordination, risking duplicate reuse across redeployments.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>High-throughput identifier generation systems (such as Snowflake IDs, Flickr's ticket servers, and Hibernate's pooled-lo optimizer) universally use block pre-allocation. In production billing and invoice generation, database round-trips for every sequential number cannot scale under load.</p>
+        <ul>
+          <li><strong>Dynamic block sizing by customer tier:</strong> Allocate small blocks ($N=10$) for low-frequency retail customers and larger blocks ($N=500$) for enterprise accounts with massive batch invoice generation.</li>
+          <li><strong>Asynchronous background block pre-fetching:</strong> When an in-memory block drops below 20% remaining capacity, trigger an asynchronous background worker to pre-allocate the next block, ensuring client threads never wait on network I/O.</li>
+          <li><strong>Atomic SQL block allocation:</strong> Use an atomic reservation query: <code>UPDATE customer_sequences SET last_allocated = last_allocated + :block_size WHERE customer_id = :cid RETURNING last_allocated - :block_size + 1 AS range_start, last_allocated AS range_end</code>.</li>
+          <li><strong>Graceful shutdown drain:</strong> Register a SIGTERM signal hook that attempts to update the database high-water mark backwards to trim unused numbers during controlled deployments.</li>
+          <li><strong>Cryptographic audit logging:</strong> Pair each dispensed sequence number with an HMAC signature or UUID in the finalized order record to provide tamper-proof provenance during audits.</li>
+        </ul>
+        <p>When ultra-low latency and high throughput are required for sequential identifiers, pre-allocate blocks durably and dispense locally in memory. It is the gold standard for distributed sequence generation.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Never make a synchronous database or lock round-trip for every ID; <strong>pre-allocate ranges in blocks and dispense from memory</strong> to achieve sub-millisecond p99 latency.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

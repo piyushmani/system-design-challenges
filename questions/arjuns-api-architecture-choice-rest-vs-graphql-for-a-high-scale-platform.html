@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arjun&#x27;s API Architecture Choice: REST vs GraphQL for a High-Scale Platform — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">27 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">API Design</span>
+      <span class="tag tag--green">REST vs GraphQL</span>
+      <span class="tag tag--amber">High Scale</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Arjun&#x27;s API Architecture Choice: REST vs GraphQL for a High-Scale Platform</h1>
+      <p class="q-scenario"><strong>Arjun</strong>, an engineering manager, is architecting the public API tier for a rapidly growing social platform supporting <strong>5 million daily active users (DAU)</strong> across native mobile applications (iOS and Android) and responsive web clients. The backend infrastructure is decoupled into domain microservices managed by independent teams, including <code>users</code>, <code>posts</code>, <code>comments</code>, <code>reactions</code>, and <code>media</code>. Client application views frequently demand deeply nested, relational object graphs—such as a single post rendering its author profile, paginated comments, nested commenter identities, reaction tallies, and media metadata. Conversely, bandwidth-constrained mobile devices on cellular networks require compact payloads containing only critical display attributes. Arjun's core architectural objectives include: <strong>minimizing p99 tail read latency</strong>, guaranteeing <strong>high availability</strong>, maintaining <strong>strictly predictable infrastructure costs</strong>, enforcing <strong>fine-grained observability and tracing</strong> across microservices, and <strong>safeguarding the platform against runaway or malicious client queries</strong>. Critical write mutations (e.g., publishing posts, liking content) require immediate write consistency, whereas high-volume read paths can tolerate bounded eventual consistency. Arjun must select the API architecture that best resolves these conflicting constraints.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A) A unified REST monolith: design domain-specific endpoints (like /posts, /users). Ensure strict consistency by sending read requests to the main database post-write. Depend on HTTP caching and CDNs for listing responses, leaving it up to the clients to make multiple network calls for relational data.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">B) A GraphQL API gateway positioned ahead of microservices: allow client requests but mandate persisted queries and schema verification. Implement server-side caching and batching (using DataLoader patterns and limits on query depth/cost), distribute deterministic read models to edge CDNs, and fulfill the majority of reads from eventually consistent replicas or caches. Maintain synchronous writes to the main DB for critical actions and trigger cache invalidations via events.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">C) BFFs utilizing REST and CQRS: create a distinct Backend-For-Frontend for each client variant offering customized REST paths. Use CQRS to manage asynchronously updated, denormalized read models via events for extremely fast retrieval from materialized views. Process writes synchronously and dispatch events to refresh read stores, accepting the resulting operational overhead.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">D) A lightweight GraphQL proxy: take any client-provided GraphQL query and pass it synchronously to the respective microservices without server-side batching or caching. Consistently read from the master database to ensure strict read consistency, relying on client-side rate limiting to prevent heavy queries.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: GraphQL Gateway with Persisted Queries, DataLoader Batching, and Edge CDN Caching</h3>
+        <p>For a high-scale social platform serving 5M DAU across diverse web and mobile clients, a <strong>GraphQL API Gateway with Persisted Queries and Server-Side Batching (Option B)</strong> represents the optimal architectural sweet spot. It reconciles the tension between client-driven flexible nested data fetching and backend operational governance. By combining <em>Automated Persisted Queries (APQ)</em>, <em>DataLoader request batching</em>, and <em>edge CDN caching</em>, Arjun satisfies sub-second tail latencies and predictable compute costs while insulating downstream microservices from query explosions:</p>
+        <ul>
+          <li><strong>Elimination of Waterfall Round-Trips & Over-Fetching:</strong> Mobile clients retrieve deeply nested graphs (post, author, top comments, commenter profiles, and aggregated reactions) in a <em>single network round trip</em>, tailoring the selection set to only the visible UI fields. This conserves mobile radio power and cellular data usage while slashing p99 read latency.</li>
+          <li><strong>Persisted Queries (APQ / Trusted Documents) for Predictable Cost & Security:</strong> Mandating persisted queries shifts GraphQL from open-ended ad-hoc querying to an explicit whitelist of pre-compiled, pre-hashed queries (e.g., SHA-256 hashes). The gateway rejects unregistered arbitrary queries, completely eliminating malicious deep recursion DoS attacks, preventing runaway multi-join compute spikes, and stabilizing infrastructure costs.</li>
+          <li><strong>HTTP GET CDN Caching at the Edge:</strong> Because persisted queries map deterministic query hashes and variables to standard HTTP GET requests, responses can leverage standard edge CDNs (e.g., Fastly, Cloudflare) with <code>Cache-Control</code> headers. This offloads up to 80% of read traffic from the gateway and backend microservices.</li>
+          <li><strong>DataLoader Batching & De-duplication (Solving N+1):</strong> The gateway resolvers employ the DataLoader pattern to coalesce individual lookups (e.g., fetching 20 comment authors across 5 distinct user IDs) into a single batched gRPC or HTTP call (<code>getUsersByIds([1, 4, 7, 12, 19])</code>). In-flight request deduplication prevents redundant downstream RPCs within the same tick of the event loop.</li>
+          <li><strong>Pragmatic Consistency Segregation:</strong> High-volume read paths hit eventually consistent read replicas and distributed Redis caches to guarantee massive read throughput. Critical writes (posts, likes, comments) execute synchronously against authoritative primary databases, immediately emitting change events (via Kafka/Redis streams) to trigger targeted cache invalidations.</li>
+        </ul>
+        <p>By establishing a <strong>persisted-query GraphQL gateway</strong> with <strong>DataLoader batching</strong> and <strong>edge CDN caching</strong>, Arjun achieves optimal mobile network efficiency, deterministic query cost control, and microsecond-level resolver batching without incurring the staggering maintenance burden of bespoke BFFs.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🐢</span>
+            <h4>A — Unified REST Monolith with Client-Side Orchestration</h4>
+          </div>
+          <p>A traditional REST monolith forces mobile clients to execute sequential <strong>network round-trip waterfalls</strong> (fetching <code>/posts/{id}</code>, then <code>/users/{authorId}</code>, then <code>/posts/{id}/comments</code>, then multiple <code>/users/{commenterId}</code> calls). On variable 4G/5G mobile connections, cumulative TCP handshakes and radio wake-locks severely degrade p99 latency. Furthermore, fixed REST representations lead to chronic over-fetching, while routing post-write reads to the master database overwhelms the primary database cluster at 5M DAU scale.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏗️</span>
+            <h4>C — Client-Specific BFFs with REST and CQRS</h4>
+          </div>
+          <p>Deploying individual Backends-for-Frontends (BFF) per client platform alongside Command Query Responsibility Segregation (CQRS) provides extreme read optimization via denormalized materialized views. However, it introduces <strong>immense operational overhead</strong>: each client platform (iOS, Android, Web) requires a dedicated backend service, doubling or tripling deployment pipelines, schema maintenance, and team staffing. Asynchronously maintaining materialized views across 5 rapidly evolving microservices via Kafka events creates severe projection lag, edge-case sync bugs, and complex replay mechanisms that are unnecessary for a 5M DAU platform.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">💥</span>
+            <h4>D — Lightweight GraphQL Proxy without Batching</h4>
+          </div>
+          <p>A naive, passthrough GraphQL proxy that executes arbitrary queries directly against downstream services triggers the catastrophic <strong>N+1 network problem</strong>: rendering 50 comments on a post results in 50 distinct synchronous HTTP calls to the User service, instantly crushing backend microservices. Allowing arbitrary queries opens severe Denial of Service (DoS) vectors through deeply nested cyclic queries, and relying on client-side rate limiting is completely futile against malicious actors who can easily bypass client controls to flood the primary database with un-cached reads.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — GraphQL Gateway with Persisted Queries, DataLoader Batching, and Edge CDN Caching ✓</h4>
+          </div>
+          <p>B) A GraphQL API gateway positioned ahead of microservices: allow client requests but mandate persisted queries and schema verification. Implement server-side caching and batching (using DataLoader pa</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Tail Read Latency (p99)</th><th>Mobile Bandwidth Efficiency</th><th>Query Cost &amp; DoS Resilience</th><th>Backend / DB Load Isolation</th><th>Operational &amp; Team Simplicity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Unified REST Monolith</td><td>❌ High (Waterfall RTTs)</td><td>❌ Poor (Over-fetching)</td><td>✅ Predictable Endpoints</td><td>❌ Master DB Bottleneck</td><td>✅ Familiar / Simple</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — GraphQL Gateway + APQ ✓</td><td>✅ Low (Single RTT + CDN)</td><td>✅ Optimal (Field Selection)</td><td>✅ Pre-Approved Hashes</td><td>✅ DataLoader + Replicas</td><td>⚠️ Moderate (Schema Governance)</td></tr>
+            <tr><td class="tt-option">C — BFFs + REST + CQRS</td><td>✅ Ultra-Low (Materialized Views)</td><td>✅ Tailored Payloads</td><td>✅ Predictable Endpoints</td><td>✅ Segregated CQRS Stores</td><td>❌ Extremely Complex Overhead</td></tr>
+            <tr><td class="tt-option">D — Lightweight GraphQL Proxy</td><td>❌ Catastrophic (N+1 RPCs)</td><td>✅ Optimal Field Selection</td><td>❌ Unbounded (Ad-hoc DoS)</td><td>❌ Crushes Master DB</td><td>⚠️ Easy Setup, Disastrous Run</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Unified REST Monolith</h4>
+          </div>
+          <p>CRUD-centric applications with flat domain models, minimal relational nesting, and homogenous web clients where team velocity benefits from standard HTTP semantics and simple tooling.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — GraphQL Gateway with Persisted Queries</h4>
+          </div>
+          <p>High-traffic platforms with diverse clients (mobile vs. web), complex nested relational data graphs, multi-team microservices, and strict p99 latency and query cost predictability requirements.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — BFFs with REST and CQRS</h4>
+          </div>
+          <p>Hyper-scale enterprises with hundreds of specialized client platforms (e.g., Smart TVs, IoT wearables, native apps) having radically divergent data needs, supported by dedicated platform engineering teams capable of managing CQRS complexity.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Lightweight GraphQL Proxy</h4>
+          </div>
+          <p>Internal developer prototypes, hackathons, or low-traffic internal admin tooling where developer agility is prioritized and N+1 query overhead or malicious traffic is not a concern.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Nested Read Request via Persisted Query, Edge CDN, and DataLoader Batching</h3>
+        <p>Mobile client issues a single GET request with a query hash; CDN serves cached graphs, while misses resolve via DataLoader-batched gRPC calls to microservice read replicas.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant M as Mobile Client
+    participant CDN as Edge CDN (Cloudflare/Fastly)
+    participant GW as GraphQL Gateway (Apollo Router)
+    participant DL as DataLoader Batcher
+    participant PS as Post Microservice (Replica)
+    participant US as User Microservice (Replica)
+    participant CS as Comment Microservice (Replica)
+    M-&gt;&gt;CDN: 1. GET /graphql?hash=sha256_feed&amp;vars={postId:101}
+    alt CDN Cache Hit
+        CDN--&gt;&gt;M: 200 OK (Cached JSON Graph, &lt;15ms)
+    else CDN Cache Miss
+        CDN-&gt;&gt;GW: 2. Forward Hash &amp; Variables
+        GW-&gt;&gt;GW: 3. Verify Hash in Persisted Query Manifest
+        GW-&gt;&gt;PS: 4. gRPC: GetPost(id: 101)
+        PS--&gt;&gt;GW: Post Data (authorId: 42, commentIds: [201, 202, 203])
+        GW-&gt;&gt;DL: 5. Queue User(42) and Comments([201, 202, 203])
+        DL-&gt;&gt;US: 6. Batched gRPC: GetUsersByIds([42])
+        DL-&gt;&gt;CS: 7. Batched gRPC: GetCommentsByIds([201, 202, 203])
+        US--&gt;&gt;DL: Author Profile
+        CS--&gt;&gt;DL: Comments Data (Commenters: [88, 95])
+        GW-&gt;&gt;DL: 8. Queue Commenters([88, 95])
+        DL-&gt;&gt;US: 9. Batched gRPC: GetUsersByIds([88, 95])
+        US--&gt;&gt;DL: Commenter Profiles
+        GW-&gt;&gt;GW: 10. Assemble Filtered Compact JSON Graph
+        GW--&gt;&gt;CDN: 11. 200 OK + Cache-Control: max-age=60, s-maxage=300
+        CDN--&gt;&gt;M: 12. Single Nested Response Delivered
+    end">sequenceDiagram
+    participant M as Mobile Client
+    participant CDN as Edge CDN (Cloudflare/Fastly)
+    participant GW as GraphQL Gateway (Apollo Router)
+    participant DL as DataLoader Batcher
+    participant PS as Post Microservice (Replica)
+    participant US as User Microservice (Replica)
+    participant CS as Comment Microservice (Replica)
+    M-&gt;&gt;CDN: 1. GET /graphql?hash=sha256_feed&amp;vars={postId:101}
+    alt CDN Cache Hit
+        CDN--&gt;&gt;M: 200 OK (Cached JSON Graph, &lt;15ms)
+    else CDN Cache Miss
+        CDN-&gt;&gt;GW: 2. Forward Hash &amp; Variables
+        GW-&gt;&gt;GW: 3. Verify Hash in Persisted Query Manifest
+        GW-&gt;&gt;PS: 4. gRPC: GetPost(id: 101)
+        PS--&gt;&gt;GW: Post Data (authorId: 42, commentIds: [201, 202, 203])
+        GW-&gt;&gt;DL: 5. Queue User(42) and Comments([201, 202, 203])
+        DL-&gt;&gt;US: 6. Batched gRPC: GetUsersByIds([42])
+        DL-&gt;&gt;CS: 7. Batched gRPC: GetCommentsByIds([201, 202, 203])
+        US--&gt;&gt;DL: Author Profile
+        CS--&gt;&gt;DL: Comments Data (Commenters: [88, 95])
+        GW-&gt;&gt;DL: 8. Queue Commenters([88, 95])
+        DL-&gt;&gt;US: 9. Batched gRPC: GetUsersByIds([88, 95])
+        US--&gt;&gt;DL: Commenter Profiles
+        GW-&gt;&gt;GW: 10. Assemble Filtered Compact JSON Graph
+        GW--&gt;&gt;CDN: 11. 200 OK + Cache-Control: max-age=60, s-maxage=300
+        CDN--&gt;&gt;M: 12. Single Nested Response Delivered
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Production GraphQL Gateway with Persisted Queries, DataLoader, and Write Invalidation</h3>
+        <p>Python pseudocode illustrating persisted query validation, DataLoader batching for N+1 prevention, replica read routing, and synchronous mutation event emission.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">python</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">import</span> hashlib</span>
+<span class="line"><span class="tk-kw">import</span> asyncio</span>
+<span class="line"><span class="tk-kw">from</span> typing <span class="tk-kw">import</span> Any, Dict, List, Optional</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">class</span> PersistedQueryRegistry:</span>
+<span class="line">    <span class="tk-str">&quot;&quot;</span><span class="tk-str">&quot;Pre-compiled manifest of client queries approved for production.&quot;</span><span class="tk-str">&quot;&quot;</span></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self):</span>
+<span class="line">        self._registered_queries: Dict[str, str] <span class="tk-op">=</span> {</span>
+<span class="line">            <span class="tk-str">&quot;e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855&quot;</span>:</span>
+<span class="line">                <span class="tk-str">&quot;query GetPostFeed($postId: ID!) { post(id: $postId) { id title author { name avatar } comments { text commenter { name } } } }&quot;</span></span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">get_query</span>(self, query_hash: str) <span class="tk-op">-&gt;</span> Optional[str]:</span>
+<span class="line">        <span class="tk-kw">return</span> self._registered_queries.<span class="tk-fn">get</span>(query_hash)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">class</span> UserDataLoader:</span>
+<span class="line">    <span class="tk-str">&quot;&quot;</span><span class="tk-str">&quot;Batches individual user lookups across GraphQL execution ticks.&quot;</span><span class="tk-str">&quot;&quot;</span></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, user_service_client):</span>
+<span class="line">        self.user_service <span class="tk-op">=</span> user_service_client</span>
+<span class="line">        self.queue: set <span class="tk-op">=</span> <span class="tk-fn">set</span>()</span>
+<span class="line">        self.futures: Dict[int, asyncio.Future] <span class="tk-op">=</span> {}</span>
+<span class="line">        self._batch_task: Optional[asyncio.Task] <span class="tk-op">=</span> <span class="tk-lit">None</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">async</span> <span class="tk-kw">def</span> <span class="tk-fn">load</span>(self, user_id: int) <span class="tk-op">-&gt;</span> Dict[str, Any]:</span>
+<span class="line">        <span class="tk-kw">if</span> user_id <span class="tk-kw">in</span> self.futures:</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-kw">await</span> self.futures[user_id]</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">loop</span> <span class="tk-op">=</span> asyncio.<span class="tk-fn">get_running_loop</span>()</span>
+<span class="line">        fut <span class="tk-op">=</span> <span class="tk-kw">loop</span>.<span class="tk-fn">create_future</span>()</span>
+<span class="line">        self.futures[user_id] <span class="tk-op">=</span> fut</span>
+<span class="line">        self.queue.<span class="tk-fn">add</span>(user_id)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> self._batch_task:</span>
+<span class="line">            self._batch_task <span class="tk-op">=</span> asyncio.<span class="tk-fn">create_task</span>(self.<span class="tk-fn">_dispatch_batch</span>())</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-kw">await</span> fut</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">async</span> <span class="tk-kw">def</span> <span class="tk-fn">_dispatch_batch</span>(self):</span>
+<span class="line">        <span class="tk-kw">await</span> asyncio.<span class="tk-fn">sleep</span>(<span class="tk-num">0.005</span>)  <span class="tk-com"># 5ms window to coalesce ticks</span></span>
+<span class="line">        current_batch <span class="tk-op">=</span> <span class="tk-fn">list</span>(self.queue)</span>
+<span class="line">        self.queue.<span class="tk-fn">clear</span>()</span>
+<span class="line">        self._batch_task <span class="tk-op">=</span> <span class="tk-lit">None</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># Single bulk gRPC call to User Microservice read replica</span></span>
+<span class="line">        users_data <span class="tk-op">=</span> <span class="tk-kw">await</span> self.user_service.<span class="tk-fn">get_users_batch</span>(current_batch)</span>
+<span class="line">        <span class="tk-kw">for</span> user_id <span class="tk-kw">in</span> current_batch:</span>
+<span class="line">            <span class="tk-kw">if</span> user_id <span class="tk-kw">in</span> users_data:</span>
+<span class="line">                self.futures[user_id].<span class="tk-fn">set_result</span>(users_data[user_id])</span>
+<span class="line">            <span class="tk-kw">else</span>:</span>
+<span class="line">                self.futures[user_id].<span class="tk-fn">set_exception</span>(<span class="tk-fn">Exception</span>(<span class="tk-str">&quot;User not found&quot;</span>))</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">class</span> GraphQLGateway:</span>
+<span class="line">    <span class="tk-str">&quot;&quot;</span><span class="tk-str">&quot;GraphQL API Gateway coordinating client requests, batching, and mutations.&quot;</span><span class="tk-str">&quot;&quot;</span></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, registry: PersistedQueryRegistry, user_service, post_service, event_bus):</span>
+<span class="line">        self.registry <span class="tk-op">=</span> registry</span>
+<span class="line">        self.user_service <span class="tk-op">=</span> user_service</span>
+<span class="line">        self.post_service <span class="tk-op">=</span> post_service</span>
+<span class="line">        self.event_bus <span class="tk-op">=</span> event_bus</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">async</span> <span class="tk-kw">def</span> <span class="tk-fn">handle_read_request</span>(self, query_hash: str, variables: Dict[str, Any]) <span class="tk-op">-&gt;</span> Dict[str, Any]:</span>
+<span class="line">        <span class="tk-com"># 1. Enforce Persisted Queries: reject ad-hoc / malicious arbitrary queries</span></span>
+<span class="line">        query_str <span class="tk-op">=</span> self.registry.<span class="tk-fn">get_query</span>(query_hash)</span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> query_str:</span>
+<span class="line">            <span class="tk-kw">raise</span> <span class="tk-fn">PermissionError</span>(<span class="tk-str">&quot;PERSISTED_QUERY_NOT_FOUND: Arbitrary queries forbidden&quot;</span>)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># 2. Instantiate request-scoped DataLoaders to batch nested resolvers</span></span>
+<span class="line">        user_loader <span class="tk-op">=</span> <span class="tk-fn">UserDataLoader</span>(self.user_service)</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># 3. Resolve Post from read replica / cache</span></span>
+<span class="line">        post <span class="tk-op">=</span> <span class="tk-kw">await</span> self.post_service.<span class="tk-fn">get_post_replica</span>(variables[<span class="tk-str">&quot;postId&quot;</span>])</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># 4. Resolve Author &amp; Comments concurrently using DataLoaders</span></span>
+<span class="line">        author_task <span class="tk-op">=</span> user_loader.<span class="tk-fn">load</span>(post[<span class="tk-str">&quot;author_id&quot;</span>])</span>
+<span class="line">        commenter_tasks <span class="tk-op">=</span> [user_loader.<span class="tk-fn">load</span>(c[<span class="tk-str">&quot;commenter_id&quot;</span>]) <span class="tk-kw">for</span> c <span class="tk-kw">in</span> post.<span class="tk-fn">get</span>(<span class="tk-str">&quot;comments&quot;</span>, [])]</span>
+<span class="line"></span>
+<span class="line">        author, commenters <span class="tk-op">=</span> <span class="tk-kw">await</span> asyncio.<span class="tk-fn">gather</span>(author_task, asyncio.<span class="tk-fn">gather</span>(<span class="tk-op">*</span>commenter_tasks))</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># 5. Assemble exact GraphQL response payload</span></span>
+<span class="line">        <span class="tk-kw">return</span> {</span>
+<span class="line">            <span class="tk-str">&quot;data&quot;</span>: {</span>
+<span class="line">                <span class="tk-str">&quot;post&quot;</span>: {</span>
+<span class="line">                    <span class="tk-str">&quot;id&quot;</span>: post[<span class="tk-str">&quot;id&quot;</span>],</span>
+<span class="line">                    <span class="tk-str">&quot;title&quot;</span>: post[<span class="tk-str">&quot;title&quot;</span>],</span>
+<span class="line">                    <span class="tk-str">&quot;author&quot;</span>: {<span class="tk-str">&quot;name&quot;</span>: author[<span class="tk-str">&quot;name&quot;</span>], <span class="tk-str">&quot;avatar&quot;</span>: author[<span class="tk-str">&quot;avatar&quot;</span>]},</span>
+<span class="line">                    <span class="tk-str">&quot;comments&quot;</span>: [</span>
+<span class="line">                        {<span class="tk-str">&quot;text&quot;</span>: c[<span class="tk-str">&quot;text&quot;</span>], <span class="tk-str">&quot;commenter&quot;</span>: {<span class="tk-str">&quot;name&quot;</span>: cm[<span class="tk-str">&quot;name&quot;</span>]}}</span>
+<span class="line">                        <span class="tk-kw">for</span> c, cm <span class="tk-kw">in</span> <span class="tk-fn">zip</span>(post.<span class="tk-fn">get</span>(<span class="tk-str">&quot;comments&quot;</span>, []), commenters)</span>
+<span class="line">                    ]</span>
+<span class="line">                }</span>
+<span class="line">            }</span>
+<span class="line">        }</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">async</span> <span class="tk-kw">def</span> <span class="tk-fn">handle_write_mutation</span>(self, mutation_type: str, payload: Dict[str, Any]) <span class="tk-op">-&gt;</span> Dict[str, Any]:</span>
+<span class="line">        <span class="tk-com"># Synchronous write to primary DB for immediate consistency</span></span>
+<span class="line">        <span class="tk-kw">if</span> mutation_type <span class="tk-op">==</span> <span class="tk-str">&quot;AddReaction&quot;</span>:</span>
+<span class="line">            result <span class="tk-op">=</span> <span class="tk-kw">await</span> self.post_service.<span class="tk-fn">add_reaction_primary</span>(</span>
+<span class="line">                post_id<span class="tk-op">=</span>payload[<span class="tk-str">&quot;postId&quot;</span>], user_id<span class="tk-op">=</span>payload[<span class="tk-str">&quot;userId&quot;</span>], reaction<span class="tk-op">=</span>payload[<span class="tk-str">&quot;type&quot;</span>]</span>
+<span class="line">            )</span>
+<span class="line">            <span class="tk-com"># Asynchronously emit CDC event to purge CDN and Redis cache keys</span></span>
+<span class="line">            <span class="tk-kw">await</span> self.event_bus.<span class="tk-fn">publish</span>(<span class="tk-str">&quot;post_invalidations&quot;</span>, {</span>
+<span class="line">                <span class="tk-str">&quot;action&quot;</span>: <span class="tk-str">&quot;PURGE_TAG&quot;</span>,</span>
+<span class="line">                <span class="tk-str">&quot;cache_tag&quot;</span>: f<span class="tk-str">&quot;post-{payload[&#x27;postId&#x27;]}&quot;</span></span>
+<span class="line">            })</span>
+<span class="line">            <span class="tk-kw">return</span> {<span class="tk-str">&quot;data&quot;</span>: {<span class="tk-str">&quot;addReaction&quot;</span>: {<span class="tk-str">&quot;success&quot;</span>: <span class="tk-lit">True</span>, <span class="tk-str">&quot;totalReactions&quot;</span>: result[<span class="tk-str">&quot;total&quot;</span>]}}}</span>
+<span class="line">        <span class="tk-kw">raise</span> <span class="tk-fn">ValueError</span>(<span class="tk-str">&quot;Unsupported mutation&quot;</span>)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Exposing Open, Ad-Hoc GraphQL Endpoints in Production:</strong> Permitting clients to construct arbitrary queries allows malicious actors or bug-ridden frontends to submit deeply recursive queries (e.g., <code>user { posts { author { posts { ... } } } }</code>) or Cartesian-product joins that starve backend CPU, memory, and database connections. Production gateways must mandate Automated Persisted Queries (APQ) or strict Query Cost/Depth limiters.</li>
+          <li><strong>Omitting DataLoader Batching in Resolvers:</strong> Writing naive field resolvers that execute an isolated database or gRPC query per item in a collection causes severe N+1 latency amplification. Fetching a feed of 20 posts with 10 comments each will trigger 200+ distinct microservice network requests instead of 2 batched bulk requests.</li>
+          <li><strong>Issuing GraphQL Queries Exclusively via HTTP POST:</strong> Defaulting to HTTP POST for all GraphQL interactions breaks HTTP-level edge caching. Using Automated Persisted Queries (APQ) allows client GET requests with query hashes, enabling standard edge CDNs to cache and serve responses with sub-20ms latencies.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Leading consumer-scale platforms (including Meta, Netflix, GitHub, and Airbnb) scale their public and internal graph APIs through a layered architecture combining edge acceleration, trusted query hashing, and batched orchestration:</p>
+        <ul>
+          <li><strong>Step 1 — Edge Ingress & APQ Lookup:</strong> The client app issues an HTTP <code>GET /graphql?hash={sha256}&variables={...}</code> request. The CDN (e.g., Cloudflare or Fastly) evaluates the SHA-256 query hash. If cached, the CDN serves the JSON response from edge memory in under 15ms without touching origin infrastructure.</li>
+          <li><strong>Step 2 — Gateway Validation & Whitelist Enforcement:</strong> On a CDN cache miss, the request arrives at the GraphQL Gateway (Envoy/Rust/Apollo Router). The gateway verifies the SHA-256 hash against a pre-compiled manifest of persisted queries. If an unknown arbitrary query is received, it is immediately rejected with <code>PERSISTED_QUERY_NOT_FOUND</code>, eliminating ad-hoc query execution.</li>
+          <li><strong>Step 3 — Resolution with DataLoader Batching:</strong> The gateway executes resolvers concurrently. As fields resolve <code>Post.author</code> and <code>Comment.author</code>, DataLoader collectors intercept the individual user ID lookups within the execution tick, deduplicate redundant IDs, and dispatch a single batched gRPC request (<code>UserService.GetUsersBatch(ids)</code>) to the User microservice.</li>
+          <li><strong>Step 4 — Routed Read Tiering:</strong> Read requests are serviced from distributed Redis cluster caches and read-only replica databases. High-velocity counters (such as post reaction counts) are fetched from Redis HyperLogLog / atomic counter caches with short TTLs to maintain high throughput.</li>
+          <li><strong>Step 5 — Synchronous Mutations & Event Invalidation:</strong> When a user likes a post or submits a comment, the client issues a GraphQL mutation. The gateway routes this directly to the primary database of the Reaction or Comment microservice for immediate ACID consistency, returning the updated state in the mutation response while publishing a CDC/Kafka event to evict stale CDN and Redis cache tags.</li>
+        </ul>
+        <p>By restricting production GraphQL traffic to pre-hashed persisted queries and batching backend microservice lookups with DataLoaders, engineering teams capture the ergonomic and bandwidth benefits of GraphQL while matching the caching and security characteristics of static REST endpoints.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For high-scale multi-client platforms, combine <strong>GraphQL with Persisted Queries (APQ)</strong> and <strong>DataLoader batching</strong>: you gain single-request nested client efficiency and edge CDN cacheability, while completely eliminating N+1 microservice storms and arbitrary query vulnerabilities.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mateo must pick the right testing strategy for a microservices maze — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">25 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Testing Strategy</span>
+      <span class="tag tag--green">Microservices</span>
+      <span class="tag tag--amber">System Complexity</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Mateo must pick the right testing strategy for a microservices maze</h1>
+      <p class="q-scenario"><strong>Mateo</strong>, a backend developer, manages several customer-facing <strong>notification and payment microservices</strong> with substantial traffic and strict SLAs. The team ships <strong>multiple times a day</strong> and needs fast CI feedback, but the pipeline has become <strong>slow</strong>, and <strong>flaky end-to-end tests</strong> keep blocking merges and delaying releases. Mateo wants a strategy that gives <strong>high confidence</strong> (catching regressions and broken service contracts), <strong>shortens the pipeline</strong>, and <strong>minimizes flakiness</strong>, without putting production latency or availability at risk.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Run full-stack end-to-end tests on every pull request in a shared pre-production environment, hitting real databases, external payment gateways, and downstream services before any merge.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Follow the testing pyramid: many unit and component tests, consumer-driven contract tests at service boundaries, isolated integration tests with test harnesses or service virtualization, a small fast E2E suite for critical journeys, and runtime validation with feature flags and canaries.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Centralize verification in one production-like staging environment where every change is deployed and tested against real services and sanitized production data before promotion.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Cut pre-deployment testing to a basic sanity suite and test mainly in production using progressive rollouts, feature flags, chaos engineering, and alerting, relying on fast rollbacks and hotfixes for safety.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Layered Testing Pyramid with Contract Tests</h3>
+        <p>The pipeline's symptoms (slow, flaky, merge-blocking) come from <strong>putting the most expensive and least deterministic tests at the center</strong>. The most effective strategy inverts that: verify most behavior with fast, deterministic tests, verify <em>service boundaries</em> with contract tests instead of live integration, keep a thin E2E layer for essential journeys, and use progressive delivery as the final safety net. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Fast, deterministic feedback:</strong> Unit and component tests run in seconds to minutes, in isolation, with no shared state or network. Most regressions are caught here, and a failure points to one place.</li>
+          <li><strong>Contract tests replace most integration E2E:</strong> Consumer-driven contracts (for example, Pact) verify that each provider still satisfies what its consumers actually use, per service and in parallel, without deploying the whole system. A broken contract fails the provider's own build.</li>
+          <li><strong>Flakiness shrinks structurally:</strong> Flakiness comes from shared environments, real third-party gateways, timing, and data collisions. Test harnesses such as Testcontainers and service virtualization remove those variables from the pull-request path.</li>
+          <li><strong>Independent deployability:</strong> With contracts as the gate (a can-i-deploy check), teams release services independently, which is what multiple deployments per day require.</li>
+          <li><strong>Defense in depth for production:</strong> A minimal E2E smoke suite covers essential journeys (such as capture a payment and send a receipt), then feature flags and canary releases with automatic rollback on SLO burn validate changes against real traffic without exposing everyone to a bad release.</li>
+        </ul>
+        <p>A mature setup tracks <strong>pull-request pipeline duration</strong>, <strong>flaky-test rate</strong>, <strong>change failure rate</strong>, and <strong>time to restore</strong>. When a defect escapes, add a test at the lowest layer that would have caught it rather than adding more E2E.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧪</span>
+            <h4>A — E2E on Every Pull Request</h4>
+          </div>
+          <p>End-to-end tests are valuable but <strong>slow, expensive, and non-deterministic</strong>, and the scenario's pain is exactly that. Running them on every pull request against real gateways and shared environments multiplies flakiness (network issues, data collisions, third-party outages), serializes merges behind a scarce environment, and makes failures hard to diagnose. <strong>Caveat:</strong> a handful of critical-journey E2E tests are still worth having, just not as the primary gate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏗️</span>
+            <h4>C — Shared Staging Gate</h4>
+          </div>
+          <p>A single staging environment becomes a <strong>bottleneck and a source of drift</strong>: changes queue to deploy, tests from different teams interfere, data goes stale, and passing in staging still does not guarantee production behavior. Sanitized production data adds privacy and refresh overhead. It adds a slow, shared gate when the goal is faster, independent releases.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🚀</span>
+            <h4>D — Test in Production Only</h4>
+          </div>
+          <p>Progressive delivery and observability are excellent <em>complements</em>, but removing pre-merge testing for <strong>payment flows</strong> is risky: duplicate charges and lost notifications have real-money and customer-trust consequences that a rollback does not undo. Strict SLAs leave little room to learn from live incidents, and rolling back code does not repair data written by a bad version.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Layered Testing Pyramid with Contract Tests ✓</h4>
+          </div>
+          <p>Follow the testing pyramid: many unit and component tests, consumer-driven contract tests at service boundaries, isolated integration tests with test harnesses or service virtualization, a small fast</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Feedback Speed</th><th>Flakiness Risk</th><th>Regression Confidence</th><th>Contract Breakage Detection</th><th>Infrastructure Cost</th><th>Production Risk</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — E2E on Every PR</td><td>Slow ❌</td><td>High ❌</td><td>High ✅</td><td>Late and indirect ⚠</td><td>High ❌</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Testing Pyramid + Contracts ✓</td><td>Fast ✅</td><td>Low ✅</td><td>High (layered) ✅</td><td>Early and precise ✅</td><td>Medium ⚠</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">C — Shared Staging Gate</td><td>Slow ❌</td><td>Medium–High ❌</td><td>Medium–High ⚠</td><td>Late ⚠</td><td>High ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">D — Test in Production Only</td><td>Fast ✅</td><td>Low ✅</td><td>Low before release ❌</td><td>Found in production ❌</td><td>Medium (observability) ⚠</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — E2E on Every PR</h4>
+          </div>
+          <p>Small systems with few services, or a thin suite of critical-journey tests run after merge or before release rather than on every change.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Testing Pyramid + Contracts</h4>
+          </div>
+          <p>Many independently deployed services, frequent releases, and a need for fast, reliable CI feedback with protection against broken service contracts.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Shared Staging Gate</h4>
+          </div>
+          <p>Pre-release rehearsals such as performance tests, migrations, or disaster-recovery drills that truly need a production-like environment, not a per-PR gate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Test in Production Only</h4>
+          </div>
+          <p>Mature organizations with strong observability, automatic rollback, and low-blast-radius changes, used in addition to pre-merge testing.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Delivery Pipeline: Fast Feedback to Progressive Rollout</h3>
+        <p>Cheap, deterministic checks gate every pull request, contracts gate deployability, and production exposure is progressive and automatically reversible:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    PR[Pull request] --&gt; U[Unit and component tests]
+    U --&gt; CT[Consumer contract tests and provider verification]
+    CT --&gt; IT[Isolated integration tests with virtualized dependencies]
+    IT --&gt; M[Merge and build image]
+    M --&gt; G{Can-i-deploy contract gate}
+    G --&gt;|Fails| B[Block and notify owning team]
+    G --&gt;|Passes| S[Minimal E2E smoke on critical journeys]
+    S --&gt; C[Canary behind feature flag at 5 percent]
+    C --&gt; H{SLOs healthy?}
+    H --&gt;|Yes| F[Progressive rollout to 100 percent]
+    H --&gt;|No| RB[Automatic rollback and flag off]">flowchart LR
+    PR[Pull request] --&gt; U[Unit and component tests]
+    U --&gt; CT[Consumer contract tests and provider verification]
+    CT --&gt; IT[Isolated integration tests with virtualized dependencies]
+    IT --&gt; M[Merge and build image]
+    M --&gt; G{Can-i-deploy contract gate}
+    G --&gt;|Fails| B[Block and notify owning team]
+    G --&gt;|Passes| S[Minimal E2E smoke on critical journeys]
+    S --&gt; C[Canary behind feature flag at 5 percent]
+    C --&gt; H{SLOs healthy?}
+    H --&gt;|Yes| F[Progressive rollout to 100 percent]
+    H --&gt;|No| RB[Automatic rollback and flag off]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Consumer Contract and Pipeline Gate (Pact-style)</h3>
+        <p>The consumer declares what it needs from the provider, tests against a mock instead of the real service, and the pipeline uses the published contract to gate deployment:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// 1) Consumer (Notification service) declares what it needs from the Payment service</span></span>
+<span class="line">contract <span class="tk-op">=</span> <span class="tk-fn">Pact</span>(consumer <span class="tk-op">=</span> <span class="tk-str">&#x27;notification-service&#x27;</span>, provider <span class="tk-op">=</span> <span class="tk-str">&#x27;payment-service&#x27;</span>)</span>
+<span class="line">contract.<span class="tk-fn">given</span>(<span class="tk-str">&#x27;payment 42 is captured&#x27;</span>)</span>
+<span class="line">        .<span class="tk-fn">uponReceiving</span>(<span class="tk-str">&#x27;a request for payment status&#x27;</span>)</span>
+<span class="line">        .<span class="tk-fn">withRequest</span>(GET, <span class="tk-str">&#x27;/payments/42&#x27;</span>)</span>
+<span class="line">        .<span class="tk-fn">willRespondWith</span>(status <span class="tk-op">=</span> <span class="tk-num">200</span>, body <span class="tk-op">=</span> {id: <span class="tk-num">42</span>, status: <span class="tk-str">&#x27;CAPTURED&#x27;</span>, amount: Integer, currency: String})</span>
+<span class="line"></span>
+<span class="line"><span class="tk-fn">test</span>(<span class="tk-str">&#x27;receipt notification is built from payment status&#x27;</span>):</span>
+<span class="line">    <span class="tk-fn">withMockProvider</span>(contract):                    <span class="tk-com">// no real Payment service, no network flakiness</span></span>
+<span class="line">        result <span class="tk-op">=</span> notificationService.<span class="tk-fn">buildReceipt</span>(paymentId <span class="tk-op">=</span> <span class="tk-num">42</span>)</span>
+<span class="line">        assert result.subject contains <span class="tk-str">&#x27;Payment received&#x27;</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// 2) Consumer CI publishes the contract, Provider CI verifies it on every build</span></span>
+<span class="line">pipeline pull_request:</span>
+<span class="line">    stage unit_and_component:   run <span class="tk-kw">in</span> parallel, target under <span class="tk-num">5</span> minutes</span>
+<span class="line">    stage contract:</span>
+<span class="line">        consumer: publish pact to broker <span class="tk-kw">with</span> git sha <span class="tk-kw">and</span> branch</span>
+<span class="line">        provider: verify all pacts <span class="tk-kw">of</span> deployed <span class="tk-kw">and</span> main consumer versions</span>
+<span class="line">    stage integration:          <span class="tk-fn">Testcontainers</span> (database, broker) <span class="tk-kw">and</span> a virtualized payment gateway</span>
+<span class="line"></span>
+<span class="line">pipeline <span class="tk-fn">main</span> (after merge):</span>
+<span class="line">    build image</span>
+<span class="line">    gate: can<span class="tk-op">-</span>i<span class="tk-op">-</span><span class="tk-fn">deploy</span>(service, version, environment <span class="tk-op">=</span> <span class="tk-str">&#x27;production&#x27;</span>)    <span class="tk-com">// fails if any consumer contract would break</span></span>
+<span class="line">    smoke: run <span class="tk-num">3</span> to <span class="tk-num">5</span> critical<span class="tk-op">-</span>journey E2E tests against the canary</span>
+<span class="line">    rollout: canary <span class="tk-num">5</span><span class="tk-op">%</span> behind a feature flag <span class="tk-op">-&gt;</span> promote, <span class="tk-kw">or</span> auto<span class="tk-op">-</span>rollback on SLO <span class="tk-fn">burn</span> (error rate, p95 latency)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>The ice-cream cone:</strong> Too many E2E and manual tests on top of too few unit and component tests. Failures are slow to find and expensive to fix.</li>
+          <li><strong>Hand-written mocks of other services:</strong> Stubs that nobody verifies drift away from the real provider. Generate them from contracts and verify them in the provider's CI.</li>
+          <li><strong>Contracts that nobody enforces:</strong> Publishing pacts without a provider verification step or a deploy gate gives paperwork, not safety.</li>
+          <li><strong>Retrying flaky tests until green:</strong> It hides real race conditions and trains the team to ignore failures. Quarantine, track, and fix them.</li>
+          <li><strong>Calling real payment gateways from CI:</strong> It introduces rate limits, outages, and side effects. Use sandboxes or virtualized gateways, and reserve live checks for monitored synthetic transactions.</li>
+          <li><strong>Canaries without automatic rollback criteria:</strong> A canary only protects you if SLO-based thresholds decide, automatically, when to stop or revert.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams <strong>measure the pipeline</strong> and rebalance it step by step. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Measure the pipeline:</strong> Find the slowest stages and the flakiest tests, separate real failures from noise, and quarantine the worst offenders.</li>
+          <li><strong>Step 1 — Strengthen the base:</strong> Fast unit and component tests with Testcontainers, run in parallel, failing fast.</li>
+          <li><strong>Step 2 — Add contracts at service boundaries:</strong> A broker, provider verification in CI, and a can-i-deploy gate before release.</li>
+          <li><strong>Step 3 — Replace PR-time E2E:</strong> Use integration tests with virtualized dependencies on pull requests, and keep a few real journeys for post-merge smoke runs.</li>
+          <li><strong>Step 4 — Progressive delivery:</strong> Feature flags and canary rollouts with automatic rollback on SLO burn (error rate and p95 latency).</li>
+          <li><strong>Step 5 — Keep rebalancing:</strong> For every escaped defect, add a test at the lowest effective level and retire redundant higher-level tests.</li>
+        </ul>
+        <p>Optimize for fast, reliable signals at the lowest layer that can provide them.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Confidence in microservices comes from <strong>many fast, isolated tests plus contract tests at the boundaries</strong>, not from running the whole system on every commit. Keep E2E minimal, virtualize unreliable dependencies, and validate in production safely with flags and canaries. Treat production testing as an additional safety net, never a replacement for pre-merge checks on payment flows.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

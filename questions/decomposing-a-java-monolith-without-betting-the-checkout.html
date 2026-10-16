@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Decomposing a Java Monolith Without Betting the Checkout — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">21 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Monolith Decomposition</span>
+      <span class="tag tag--green">Modular Monolith</span>
+      <span class="tag tag--amber">Refactoring</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Decomposing a Java Monolith Without Betting the Checkout</h1>
+      <p class="q-scenario"><strong>Alex</strong> is a backend engineer at a <strong>mid-sized e-commerce company</strong> running a single <strong>Java monolith</strong> that contains the catalog, search, user profiles, cart, checkout, and payments. During promotions the app shows <strong>high CPU usage and long garbage-collection pauses</strong>, and the team wants <strong>faster, more independent deployments</strong>. Checkout and payments must stay <strong>correct (no double charges) and low-latency</strong>. The operations team is <strong>small</strong> and cannot absorb a sudden jump in operational surface area (dozens of services, a service mesh, per-service pipelines and on-call rotations). Alex needs a <strong>safe, incremental migration path</strong> that improves scalability and delivery speed without betting the business on a big-bang rewrite. Which approach fits best?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Immediately decompose the monolith into independent microservices: assign one service per domain, each with its own database. Utilize event-driven asynchronous communication for the majority of flows, accepting eventual consistency between services. Deploy these services independently within containers and integrate a service mesh for traffic management and observability.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Retain the monolithic architecture and scale it both vertically and horizontally: provision additional CPU and memory, increase replica counts, route high-traffic paths through caches and read-replicas, and optimize JVM/GC settings to minimize pauses. Postpone the extraction of microservices until the engineering team expands.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Isolate only the checkout and payment functionalities into distinct services, but continue sharing the existing monolith database to maintain simplicity. Employ synchronous REST API calls from the monolith to these newly extracted services to ensure straightforward transactions and strong data consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Currently refactor the application into a modular monolith: establish distinct modules based on bounded contexts with clear interfaces. Implement asynchronous message queues between modules where eventual consistency is tolerable, while strictly isolating the checkout/payment module internally to enforce strong consistency. Later, apply the strangler fig pattern to gradually transition modules into standalone microservices as the development and operations teams mature.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Modular Monolith, Then Strangler Fig</h3>
+        <p>The real problem is twofold: <strong>unclear boundaries</strong> inside the code (which slows teams and makes extraction risky) and <strong>resource hot spots</strong> (CPU and GC under promotional load). A modular monolith attacks the first without adding network failure modes or operational load, and it creates the seams that make a later, evidence-driven extraction cheap. Strong consistency for checkout and payments stays inside one process and one transaction boundary. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Boundaries first, network later:</strong> Modules aligned to bounded contexts (catalog, search, profile, cart, checkout, payments) with explicit public interfaces and no cross-module table access make the code understandable and the dependency graph enforceable, for example with Spring Modulith, ArchUnit, or separate Gradle or Maven modules.</li>
+          <li><strong>Keeps the money path simple:</strong> Checkout and payments remain in-process, so local ACID transactions plus an idempotency key on charge requests deliver exactly-once effects without distributed sagas or 2PC.</li>
+          <li><strong>Fits the team:</strong> One deployable, one pipeline, one runtime to observe. There is no service mesh, no per-service database estate, and no distributed-tracing prerequisite just to get started.</li>
+          <li><strong>Async where it is safe:</strong> Domain events between modules (an in-process event bus, backed by an outbox) decouple flows such as catalog-to-search or order-to-notification where eventual consistency is acceptable, and prepare them for a real broker later.</li>
+          <li><strong>Reversible, evidence-driven extraction:</strong> The strangler fig pattern routes traffic for one capability at a time to a new service behind a facade, with rollback by flipping a route. Extract what hurts first (often search or catalog reads), using the module boundary as the contract.</li>
+        </ul>
+        <p>A good execution plan has <strong>module boundaries enforced in CI</strong>, <strong>one schema owner per module</strong>, <strong>idempotent payment calls</strong>, <strong>in-process events with an outbox</strong> for async flows, and a <strong>strangler facade</strong> with percentage-based routing for each extraction. Track deploy frequency, change failure rate, GC pause p99, and per-module latency to prove each step paid off.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">💥</span>
+            <h4>A — Big-Bang Microservices</h4>
+          </div>
+          <p>Splitting everything at once converts every in-process call into a network call, multiplies failure modes, and forces <strong>eventual consistency</strong> into flows (cart, checkout, payment) that need correctness. A small operations team would suddenly own many services, databases, pipelines, a service mesh, and distributed debugging, all before the domain boundaries have been proven. <strong>Caveat:</strong> a full microservice estate can be right for large organizations with platform teams, clear domains, and independent scaling needs.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏋️</span>
+            <h4>B — Scale the Monolith Only</h4>
+          </div>
+          <p>Vertical and horizontal scaling, caching, read replicas, and GC tuning are worthwhile and cheap, so do them anyway. As the <em>whole</em> strategy, though, it leaves the root cause (tangled code and a single deployment unit) untouched: feature velocity stays slow and the codebase gets harder to split later. Deferring structural work until the team grows usually makes the eventual migration more expensive.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>C — Extract Checkout/Payments with a Shared Database</h4>
+          </div>
+          <p>Sharing the monolith's database turns the new services into a <strong>distributed monolith</strong>: schema changes still need coordinated releases, two codebases can write the same tables, and synchronous REST calls make checkout availability depend on a network hop. A timeout on the charge call also creates the classic double-charge ambiguity (did it succeed or not?) that the monolith's local transaction used to hide. Extracting the most correctness-sensitive path first is the riskiest possible starting point.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Modular Monolith, Then Strangler Fig ✓</h4>
+          </div>
+          <p>Currently refactor the application into a modular monolith: establish distinct modules based on bounded contexts with clear interfaces. Implement asynchronous message queues between modules where even</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Scalability Gain</th><th>Consistency for Checkout/Payments</th><th>Operational Overhead</th><th>Migration Risk</th><th>Delivery Speed Improvement</th><th>Reversibility</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Big-Bang Microservices</td><td>High ✅ (per-service scaling)</td><td>Weak ❌ (eventual across services)</td><td>Very high ❌</td><td>Very high ❌ (big bang)</td><td>High ⚠ (after the pain)</td><td>Hard ❌</td></tr>
+            <tr><td class="tt-option">B — Scale the Monolith</td><td>Limited ⚠ (whole app scales together)</td><td>Strong ✅</td><td>Low ✅</td><td>Low ✅</td><td>None ❌</td><td>Easy ✅</td></tr>
+            <tr><td class="tt-option">C — Extract Checkout, Shared DB</td><td>Limited ⚠</td><td>Medium ⚠ (network hop, shared tables)</td><td>Medium ⚠</td><td>High ❌ (riskiest path first)</td><td>Low ⚠ (schema still shared)</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Modular Monolith + Strangler Fig ✓</td><td>Medium–High ✅ (selective extraction)</td><td>Strong ✅ (in-process money path)</td><td>Low–Medium ✅</td><td>Low ✅ (incremental)</td><td>Medium–High ✅</td><td>Easy ✅ (flip routes)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Big-Bang Microservices</h4>
+          </div>
+          <p>Large organizations with a platform team, well-understood domains, independent scaling needs, and the tooling (CI/CD, observability, on-call) to run many services.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Scale the Monolith</h4>
+          </div>
+          <p>Short-term stabilization during a promotion window, or when the monolith is fundamentally healthy and only needs capacity headroom.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Extract Checkout, Shared DB</h4>
+          </div>
+          <p>Rarely. Possibly as a very short-lived transitional step while data is being split, with a dated plan to give the service its own store.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Modular Monolith + Strangler Fig</h4>
+          </div>
+          <p>Mid-sized teams with a tangled monolith, a small ops team, and critical consistency requirements who need an incremental, reversible path to selective extraction.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Modular Monolith with Enforced Boundaries</h3>
+        <p>One deployable application, but modules interact only through public interfaces and events, and each module owns its data:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TB
+    subgraph APP[Single deployable Java application]
+        CAT[Catalog module]
+        SRCH[Search module]
+        PROF[Profile module]
+        CART[Cart module]
+        CHK[Checkout module]
+        PAY[Payments module]
+        BUS[In-process event bus with outbox]
+    end
+    CAT --&gt;|ProductChanged event| BUS
+    BUS --&gt; SRCH
+    CART --&gt;|public interface| CHK
+    CHK --&gt;|public interface with idempotency key| PAY
+    CAT --- DB1[(Catalog schema)]
+    CHK --- DB2[(Orders schema)]
+    PAY --- DB3[(Payments schema)]">flowchart TB
+    subgraph APP[Single deployable Java application]
+        CAT[Catalog module]
+        SRCH[Search module]
+        PROF[Profile module]
+        CART[Cart module]
+        CHK[Checkout module]
+        PAY[Payments module]
+        BUS[In-process event bus with outbox]
+    end
+    CAT --&gt;|ProductChanged event| BUS
+    BUS --&gt; SRCH
+    CART --&gt;|public interface| CHK
+    CHK --&gt;|public interface with idempotency key| PAY
+    CAT --- DB1[(Catalog schema)]
+    CHK --- DB2[(Orders schema)]
+    PAY --- DB3[(Payments schema)]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Module Boundary, Idempotent Charge, and Strangler Routing</h3>
+        <p>Checkout talks to payments only through a public interface with an idempotency key, no database transaction is held open across the charge, and a facade shifts traffic to an extracted service gradually:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// 1. Public contract of the payments module (the only way in)</span></span>
+<span class="line">interface PaymentsApi:</span>
+<span class="line">    <span class="tk-fn">charge</span>(orderId, amount, currency, idempotencyKey) <span class="tk-op">-&gt;</span> ChargeResult</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// 2. Checkout: no database transaction is held open across the external charge</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">checkout</span>(cart, user):</span>
+<span class="line">    order <span class="tk-op">=</span> ordersModule.<span class="tk-fn">createPending</span>(cart, user)               <span class="tk-com">// local transaction 1 (commits)</span></span>
+<span class="line">    result <span class="tk-op">=</span> paymentsApi.<span class="tk-fn">charge</span>(order.id, order.total, order.currency, idempotencyKey <span class="tk-op">=</span> <span class="tk-str">&#x27;order-&#x27;</span> <span class="tk-op">+</span> order.id)</span>
+<span class="line"></span>
+<span class="line">    tx <span class="tk-op">=</span> db.<span class="tk-kw">begin</span>()                                              <span class="tk-com">// local transaction 2</span></span>
+<span class="line">    <span class="tk-kw">if</span> result.status <span class="tk-op">==</span> SUCCEEDED:</span>
+<span class="line">        ordersModule.<span class="tk-fn">markPaid</span>(order.id, tx)</span>
+<span class="line">        outbox.<span class="tk-fn">add</span>(<span class="tk-fn">OrderPaid</span>(order.id), tx)                      <span class="tk-com">// consumers: shipping, email, analytics (eventually consistent)</span></span>
+<span class="line">    <span class="tk-kw">else</span>:</span>
+<span class="line">        ordersModule.<span class="tk-fn">markPaymentFailed</span>(order.id, tx)</span>
+<span class="line">    tx.<span class="tk-fn">commit</span>()</span>
+<span class="line">    <span class="tk-kw">return</span> result</span>
+<span class="line">    <span class="tk-com">// if the process dies after the charge, a reconciliation job finds PENDING orders with a succeeded charge</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// 3. Payments module: safe under retries and later extraction</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">charge</span>(orderId, amount, currency, idempotencyKey):</span>
+<span class="line">    existing <span class="tk-op">=</span> chargesTable.<span class="tk-fn">find</span>(idempotencyKey)</span>
+<span class="line">    <span class="tk-kw">if</span> existing <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> existing.result                                   <span class="tk-com">// a retry returns the same result</span></span>
+<span class="line">    result <span class="tk-op">=</span> gateway.<span class="tk-fn">createCharge</span>(amount, currency, idempotencyKey)   <span class="tk-com">// the provider also dedupes on the key</span></span>
+<span class="line">    chargesTable.<span class="tk-fn">insert</span>(idempotencyKey, orderId, result)</span>
+<span class="line">    <span class="tk-kw">return</span> result</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// 4. Strangler facade for a module being extracted</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">routeSearch</span>(request):</span>
+<span class="line">    bucket <span class="tk-op">=</span> <span class="tk-fn">hash</span>(request.userId) mod <span class="tk-num">100</span></span>
+<span class="line">    <span class="tk-kw">if</span> bucket <span class="tk-op">&lt;</span> rolloutPercent:                                  <span class="tk-com">// raised gradually: 1, 10, 50, 100</span></span>
+<span class="line">        response <span class="tk-op">=</span> searchService.<span class="tk-fn">query</span>(request)</span>
+<span class="line">        <span class="tk-kw">if</span> response.failed:</span>
+<span class="line">            <span class="tk-kw">return</span> monolithSearch.<span class="tk-fn">query</span>(request)                 <span class="tk-com">// fallback while confidence builds</span></span>
+<span class="line">        <span class="tk-kw">return</span> response</span>
+<span class="line">    <span class="tk-kw">return</span> monolithSearch.<span class="tk-fn">query</span>(request)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Modules in name only:</strong> Packages that freely import each other's internals. Enforce boundaries with architecture tests and visibility rules, and fail the build on violations.</li>
+          <li><strong>Shared tables across modules:</strong> Cross-module joins and writes recreate the coupling you are trying to remove and block later extraction. Give each module owned data and expose it through an API or events.</li>
+          <li><strong>Skipping quick wins:</strong> Leaving hot queries, missing caches, and GC settings unfixed, then blaming the architecture for the CPU spikes.</li>
+          <li><strong>Extracting without a facade or rollback:</strong> A hard cutover has no escape hatch. Route through a gateway or adapter with a feature flag so you can shift 1 percent, 10 percent, 100 percent and go back.</li>
+          <li><strong>Event-izing everything:</strong> Using async events for flows that need an immediate, consistent answer (such as a stock check at checkout) creates new correctness bugs. Keep synchronous in-process calls where consistency matters.</li>
+          <li><strong>No idempotency on payments:</strong> When payments are eventually extracted, retries and timeouts will otherwise cause double charges. Use idempotency keys from the start.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Teams that migrate successfully <strong>earn each extraction</strong> with data instead of starting from a target diagram:</p>
+        <ul>
+          <li><strong>Step 0 — Baseline and quick wins:</strong> Profile CPU and GC under load, add caching and read replicas for hot read paths, and tune the JVM. Measure again before restructuring anything.</li>
+          <li><strong>Step 1 — Find the seams:</strong> Use domain modelling (for example event storming) and dependency analysis to define bounded contexts, and map who calls whom and which tables each area touches.</li>
+          <li><strong>Step 2 — Modularize in place:</strong> Introduce module interfaces, forbid cross-module table access, enforce with architecture tests, and give each module its own schema or table prefix.</li>
+          <li><strong>Step 3 — Decouple with events:</strong> Replace direct calls with in-process domain events where eventual consistency is fine, using an outbox so events survive crashes.</li>
+          <li><strong>Step 4 — Strangle the first candidate:</strong> Pick a module that is read-heavy or resource-hungry and loosely coupled (often search or catalog), put a facade in front, shift traffic gradually, and compare metrics.</li>
+          <li><strong>Step 5 — Extract payments last, deliberately:</strong> Only when there is a clear need (compliance isolation, independent scaling), and with idempotency keys, a saga or orchestrator, and reconciliation in place.</li>
+        </ul>
+        <p>Move the boundaries first, the processes later, and the money last.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p><strong>Structure before distribution.</strong> A modular monolith gives most of the organizational benefit of microservices at a fraction of the operational cost, keeps checkout and payments strongly consistent, and creates the seams for a reversible strangler-fig migration. Distribute only the parts that have proven they need it.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

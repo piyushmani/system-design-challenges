@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aiden&#x27;s denormalization dilemma: fast reads versus strict correctness — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">24 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Denormalization</span>
+      <span class="tag tag--green">Read Performance</span>
+      <span class="tag tag--amber">Data Correctness</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Aiden&#x27;s denormalization dilemma: fast reads versus strict correctness</h1>
+      <p class="q-scenario"><strong>Aiden</strong>, a backend engineer, owns the <strong>user profile and activity feed</strong> service of a fast-growing social app. The workload is <strong>read-heavy (10,000 RPS)</strong> with a <strong>tail latency target under 50 ms</strong> and <strong>99.99% read availability</strong>. Writes are light (<strong>200/s</strong>) but some of them touch <strong>critical data</strong> (account balances, subscription tiers) that must be <strong>strictly accurate</strong> for billing and authorization. Today the data is normalized, and reads execute multiple joins across user, preference, and aggregate tables, which raises latency and loads the database. He needs fast, highly available reads <strong>without sacrificing correctness for the critical fields</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Maintain the normalized relational database structure and scale the primary database (using read replicas, sharding, and connection pooling). Execute joins during read operations and utilize caching exclusively for complete responses. Emphasize strong consistency by directing read queries to replicas that offer read-after-write guarantees whenever feasible.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Transition to synchronous denormalization: copy the required read data into a read-optimized table or materialized view, updating these copies within the identical write transaction to ensure reads are perpetually strongly consistent. Accept the trade-off of increased write latency and more intricate transaction management.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Implement full asynchronous denormalization: generate events for every write operation and update a distinct read database (like NoSQL or a search index) using stream processors. Read queries become exceptionally fast and highly available but rely on eventual consistency; accept that certain read operations might return outdated information, even for crucial data.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Utilize a hybrid strategy: maintain strict consistency for crucial data (such as account balances and subscription tiers) through synchronous updates or a dedicated transactional service, while asynchronously denormalizing non-essential display and profile information into a read-optimized database (employing an outbox pattern/CDC -&gt; Kafka -&gt; stream processors). Incorporate reconciliation processes, idempotent consumers, version tracking, and comprehensive monitoring.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Hybrid: Strict Core, Async Read Model</h3>
+        <p>The data is not uniform, so the consistency model should not be uniform either. <strong>Most reads are for display data</strong> (names, avatars, preferences, feed aggregates) where a few seconds of staleness is invisible, while a <strong>small set of fields</strong> (tier, balance) drives billing and authorization and must be exact. A <strong>hybrid</strong> design splits the paths: critical fields stay in an authoritative, strongly consistent store and are read from it; display data is denormalized asynchronously into a read-optimized store through a <strong>transactional outbox and CDC</strong>, which provides the join-free, highly available reads. It is the only option that satisfies both the performance and the correctness requirements:</p>
+        <ul>
+          <li><strong>Meets the latency and availability targets:</strong> Display reads become a single key lookup in a store built for 10k+ RPS and replicated for 99.99% availability, with no joins and no load on the primary.</li>
+          <li><strong>Keeps correctness where it matters:</strong> Billing and authorization decisions read the authoritative store (or a dedicated transactional service), so a stale read model can never grant access or mischarge a user.</li>
+          <li><strong>No dual-write inconsistency:</strong> The outbox row is written in the <em>same database transaction</em> as the business change, so an event exists if and only if the change committed. CDC or a relay then publishes it reliably.</li>
+          <li><strong>Right-sized cost:</strong> Only critical writes pay the strict-path cost. At 200 writes per second the extra outbox insert is negligible, and the read path scales independently of the write path.</li>
+          <li><strong>Failure containment:</strong> If the stream or read store lags, users see slightly old display data, but billing, authorization, and writes continue to work.</li>
+        </ul>
+        <p>Run a <strong>reconciliation job</strong> that samples or scans primary vs read model by version and repairs drift, alert on <strong>replication lag and version gaps</strong>, and define an <strong>SLO for read-model freshness</strong>. Never let authorization or billing logic depend on the denormalized copy.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>A — Normalized DB + Replicas + Caching</h4>
+          </div>
+          <p>It does not address the root cause: the <strong>multi-join read cost is still paid</strong>, just on more machines. Read replicas add replication lag, so 'read-after-write guarantees' on replicas are hard to deliver in practice, and sharding a normalized relational model complicates the very joins that hurt. Caching full responses helps, but invalidation across user, preference, and aggregate tables is complex, and it still ties 99.99% read availability to the primary database ecosystem.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>B — Synchronous Denormalization</h4>
+          </div>
+          <p>Strong consistency is attractive, and at 200 writes per second the write latency cost is affordable. The weakness is that the <strong>read-optimized copy still lives in the same transactional database</strong> (or must be updated in the same transaction), so reads remain bound to that database's capacity and availability, and every denormalized view becomes more work inside every write transaction. It is a good tool for the critical fields, and a poor fit as the single strategy for all read data at 99.99% availability.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">💨</span>
+            <h4>C — Full Asynchronous Denormalization</h4>
+          </div>
+          <p>Excellent for speed and availability, but it explicitly accepts stale reads <strong>even for balances and subscription tiers</strong>. Stale authorization data means a downgraded user keeps premium access, or a charge is computed on an old tier. That is a correctness and security failure, not a trade-off. It is the right approach for display data and the wrong one for the critical data in this scenario.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Hybrid: Strict Core, Async Read Model ✓</h4>
+          </div>
+          <p>Utilize a hybrid strategy: maintain strict consistency for crucial data (such as account balances and subscription tiers) through synchronous updates or a dedicated transactional service, while asynch</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read Latency (p99)</th><th>Read Availability</th><th>Correctness of Critical Data</th><th>Write Latency Impact</th><th>Operational Complexity</th><th>Scales Read Independently</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Normalized + Replicas + Cache</td><td>Medium (joins remain) ⚠</td><td>Medium ⚠</td><td>Good on primary, replica lag risk ⚠</td><td>None ✅</td><td>Medium ⚠</td><td>Partly ⚠</td></tr>
+            <tr><td class="tt-option">B — Sync Denormalization</td><td>Good ✅</td><td>Bound to primary DB ⚠</td><td>Strong ✅</td><td>Higher ❌</td><td>Medium ⚠</td><td>Limited ❌</td></tr>
+            <tr><td class="tt-option">C — Full Async Denormalization</td><td>Excellent ✅</td><td>Excellent ✅</td><td>Stale for critical data ❌</td><td>None ✅</td><td>High ❌</td><td>Yes ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Hybrid ✓</td><td>Excellent (display path) ✅</td><td>Excellent (display path) ✅</td><td>Strong for critical fields ✅</td><td>Minimal (one outbox insert) ✅</td><td>High ❌</td><td>Yes ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Normalized + Replicas + Cache</h4>
+          </div>
+          <p>Moderate read load where query tuning and caching remove the bottleneck, and the added complexity of a second data store is not yet justified.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Sync Denormalization</h4>
+          </div>
+          <p>Small, high-value derived data that must always match the source (counters, balances summaries) and where the extra write cost and same-database reads are acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Full Async Denormalization</h4>
+          </div>
+          <p>Feeds, search, and analytics views where bounded staleness is acceptable for all fields and there is no billing or authorization dependency.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Hybrid</h4>
+          </div>
+          <p>Mixed data where a small critical subset needs strict correctness while the bulk of read traffic can be served from a scalable, eventually consistent read model.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Split Read Paths by Consistency Class</h3>
+        <p>Display data comes from the denormalized read store. Critical fields always come from the authoritative store:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TD
+    C[&quot;Client&quot;] --&gt; API[&quot;Profile API&quot;]
+    API --&gt;|&quot;display data (name, avatar, prefs, feed counts)&quot;| RS[(&quot;Read store: key per user, no joins&quot;)]
+    API --&gt;|&quot;critical data (tier, balance)&quot;| AS[(&quot;Authoritative DB / transactional service&quot;)]
+    RS -. &quot;version behind session min version&quot; .-&gt; AS
+    AZ[&quot;Authorization and billing&quot;] --&gt; AS
+    REC[&quot;Reconciliation job&quot;] -. &quot;compare versions, repair drift&quot; .-&gt; RS
+    REC -.-&gt; AS">flowchart TD
+    C[&quot;Client&quot;] --&gt; API[&quot;Profile API&quot;]
+    API --&gt;|&quot;display data (name, avatar, prefs, feed counts)&quot;| RS[(&quot;Read store: key per user, no joins&quot;)]
+    API --&gt;|&quot;critical data (tier, balance)&quot;| AS[(&quot;Authoritative DB / transactional service&quot;)]
+    RS -. &quot;version behind session min version&quot; .-&gt; AS
+    AZ[&quot;Authorization and billing&quot;] --&gt; AS
+    REC[&quot;Reconciliation job&quot;] -. &quot;compare versions, repair drift&quot; .-&gt; RS
+    REC -.-&gt; AS</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Outbox, Idempotent Projection, and Split Reads</h3>
+        <p>Atomic write plus outbox, a version-checked projection consumer, a read path with read-your-writes fallback, and authorization against the authoritative store only:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Write path: one local transaction, no dual write ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">updateSubscriptionTier</span>(userId, newTier):</span>
+<span class="line">    tx.<span class="tk-kw">begin</span></span>
+<span class="line">    row <span class="tk-op">=</span> db.<span class="tk-fn">update</span>(<span class="tk-str">&#x27;subscriptions&#x27;</span>, where <span class="tk-op">=</span> userId, set <span class="tk-op">=</span> {tier: newTier, version: version <span class="tk-op">+</span> <span class="tk-num">1</span>})</span>
+<span class="line">    db.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;outbox&#x27;</span>, {eventId: <span class="tk-fn">uuid</span>(), type: <span class="tk-str">&#x27;TierChanged&#x27;</span>, userId: userId,</span>
+<span class="line">                         version: row.version, payload: {tier: newTier}})</span>
+<span class="line">    tx.commit                                            <span class="tk-com">// critical data and its event commit atomically</span></span>
+<span class="line">    <span class="tk-kw">return</span> row.version</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">updateDisplayName</span>(userId, name):</span>
+<span class="line">    tx.<span class="tk-kw">begin</span></span>
+<span class="line">    row <span class="tk-op">=</span> db.<span class="tk-fn">update</span>(<span class="tk-str">&#x27;profiles&#x27;</span>, where <span class="tk-op">=</span> userId, set <span class="tk-op">=</span> {name: name, version: version <span class="tk-op">+</span> <span class="tk-num">1</span>})</span>
+<span class="line">    db.<span class="tk-fn">insert</span>(<span class="tk-str">&#x27;outbox&#x27;</span>, {eventId: <span class="tk-fn">uuid</span>(), type: <span class="tk-str">&#x27;ProfileChanged&#x27;</span>, userId: userId,</span>
+<span class="line">                         version: row.version, payload: {name: name}})</span>
+<span class="line">    tx.commit</span>
+<span class="line">    session.<span class="tk-fn">setMinVersion</span>(userId, row.version)           <span class="tk-com">// read-your-writes hint for the editing user</span></span>
+<span class="line">    <span class="tk-kw">return</span> row.version</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Relay: log-based CDC (for example Debezium) tails the outbox table and publishes to Kafka ----</span></span>
+<span class="line"><span class="tk-com">// topic &#x27;user-events&#x27;, key = userId (preserves per-user ordering)</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Projection consumer: idempotent and version-checked ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onEvent</span>(e):</span>
+<span class="line">    current <span class="tk-op">=</span> readStore.<span class="tk-fn">get</span>(e.userId)</span>
+<span class="line">    <span class="tk-kw">if</span> current <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> current.version <span class="tk-op">&gt;=</span> e.version:</span>
+<span class="line">        <span class="tk-kw">return</span>                                           <span class="tk-com">// duplicate or out-of-order event, ignore</span></span>
+<span class="line">    readStore.<span class="tk-fn">put</span>(e.userId, <span class="tk-fn">merge</span>(current, e.payload), version <span class="tk-op">=</span> e.version)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Read path ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getProfileView</span>(userId):</span>
+<span class="line">    view <span class="tk-op">=</span> readStore.<span class="tk-fn">get</span>(userId)                         <span class="tk-com">// single key lookup, no joins</span></span>
+<span class="line">    <span class="tk-kw">if</span> view <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> view.version <span class="tk-op">&lt;</span> session.<span class="tk-fn">minVersion</span>(userId):</span>
+<span class="line">        view <span class="tk-op">=</span> <span class="tk-fn">rebuildFromPrimary</span>(userId)                <span class="tk-com">// rare: read model is behind the user&#x27;s own write</span></span>
+<span class="line">        readStore.<span class="tk-fn">put</span>(userId, view, version <span class="tk-op">=</span> view.version)</span>
+<span class="line">    <span class="tk-kw">return</span> view</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">authorize</span>(userId, feature):</span>
+<span class="line">    tier <span class="tk-op">=</span> authoritativeStore.<span class="tk-fn">getTier</span>(userId)            <span class="tk-com">// never from the read model</span></span>
+<span class="line">    <span class="tk-kw">return</span> tier.<span class="tk-fn">allows</span>(feature)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Reconciliation: runs continuously on a sample, fully on a schedule ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reconcile</span>(userIds):</span>
+<span class="line">    <span class="tk-kw">for</span> id <span class="tk-kw">in</span> userIds:</span>
+<span class="line">        src <span class="tk-op">=</span> primary.<span class="tk-fn">getVersion</span>(id)</span>
+<span class="line">        dst <span class="tk-op">=</span> readStore.<span class="tk-fn">getVersion</span>(id)</span>
+<span class="line">        <span class="tk-kw">if</span> dst <span class="tk-op">&lt;</span> src:</span>
+<span class="line">            metrics.<span class="tk-fn">increment</span>(<span class="tk-str">&#x27;readmodel.drift&#x27;</span>)</span>
+<span class="line">            readStore.<span class="tk-fn">put</span>(id, <span class="tk-fn">rebuildFromPrimary</span>(id), version <span class="tk-op">=</span> src)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Dual writes instead of an outbox:</strong> Writing to the database and then publishing to Kafka from application code can lose or invent events when one step fails. Use a transactional outbox plus CDC.</li>
+          <li><strong>Non-idempotent consumers:</strong> At-least-once delivery will replay events. Without version checks, replays and out-of-order events overwrite newer data with older data.</li>
+          <li><strong>Authorizing from the read model:</strong> Letting entitlement checks read the denormalized store reintroduces the exact correctness bug the split was designed to prevent.</li>
+          <li><strong>Ignoring read-your-writes:</strong> A user who updates a setting and sees the old value will assume the product is broken. Provide a version token or a fallback to the primary.</li>
+          <li><strong>No reconciliation:</strong> Bugs, replays, and manual fixes cause drift over time. Without a drift detector and rebuild path, the read model slowly diverges.</li>
+          <li><strong>Unbounded read model schema coupling:</strong> Shaping the read model to mirror tables recreates joins in the application. Shape it to the API response.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Mature systems almost always <strong>classify data by consistency needs</strong> and then pick mechanisms per class:</p>
+        <ul>
+          <li><strong>Step 0 — Classify fields:</strong> Mark each field as <em>critical</em> (strong consistency) or <em>display</em> (bounded staleness), with owners and an agreed freshness SLO for display data.</li>
+          <li><strong>Step 1 — Fix the cheapest bottleneck first:</strong> Index and query-tune the existing joins, and cache selectively. Denormalize only if measurements show it is still needed.</li>
+          <li><strong>Step 2 — Transactional outbox:</strong> Write an outbox row in the same transaction as each profile or preference change, and publish via CDC (for example Debezium) or a relay.</li>
+          <li><strong>Step 3 — Read model:</strong> Build projections in a key-value or document store, keyed by user ID, shaped exactly as the API returns it.</li>
+          <li><strong>Step 4 — Consistency controls:</strong> Version every record, make consumers idempotent, and add a read-your-writes mechanism for the editing user.</li>
+          <li><strong>Step 5 — Reconcile and observe:</strong> Continuous drift detection, lag dashboards, DLQ monitoring, and a rebuild-from-source procedure for the read model.</li>
+        </ul>
+        <p>Choose consistency <strong>per field</strong>, not per system.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Do not pay strong-consistency costs for data that can be a few seconds stale, and never accept staleness for data that drives money or access. <strong>Split critical from display data</strong>: keep critical fields authoritative and transactional, and denormalize everything else asynchronously through an <strong>outbox, idempotent consumers, and versioning</strong>.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

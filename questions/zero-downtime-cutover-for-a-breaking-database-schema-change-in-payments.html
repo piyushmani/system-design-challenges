@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zero-Downtime Cutover for a Breaking Database Schema Change in Payments — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">22 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Blue-Green Deployment</span>
+      <span class="tag tag--green">Zero Downtime</span>
+      <span class="tag tag--amber">Release Strategies</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Zero-Downtime Cutover for a Breaking Database Schema Change in Payments</h1>
+      <p class="q-scenario"><strong>Ethan</strong> is an architect on a <strong>payments platform</strong> preparing a release that includes a <strong>breaking database schema change</strong> to transaction storage. The platform must hold <strong>99.99% uptime</strong> and low latency, and it must support <strong>fast rollback</strong>. The team already uses <strong>blue-green deployments</strong> for stateless components, but this release also involves <strong>cache warming</strong>, <strong>session stickiness</strong>, and a <strong>schema migration</strong> that cannot interrupt live traffic. Transactions are written continuously, so any second copy of the data starts going stale immediately, and the team is free to spread the migration over several releases if that is safer. He needs the deployment strategy that is safest for live transactions and keeps rollback lossless.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Do a classic blue-green cutover: build a green environment with the new app and schema, run a full migration that locks tables on the green side (breaking write-read sync during the process), warm caches, switch traffic at the load balancer, and roll back by routing to blue and restoring the database from an older snapshot.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Use dual schemas or table versioning: create v2 tables next to v1, copy data to v2 asynchronously before cutover, have the green app read and write only v2 while blue stays on v1, then shift traffic and keep v1 intact temporarily as the rollback path.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Dual-write during a blue-green phase: deploy green to receive shadowed or mirrored traffic and write to both old and new schemas, backfill history, verify consistency, then move live traffic to green, using feature toggles to control the new storage path.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Skip a big blue-green cutover for this change: make the schema change backward compatible (add new or nullable columns, keep the old ones), roll out code with feature flags and canaries, backfill online in the background, flip a flag to activate the new logic, and drop the old fields in a later release.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Expand/Contract (Parallel Change) With Feature Flags</h3>
+        <p>Blue-green is a pattern for <strong>replacing stateless compute</strong>, not state. Blue and green can run side by side because they are interchangeable, but the moment a release changes how <em>data</em> is stored, every version of the application depends on one shared, continuously changing database. For a payments system the question stops being how to switch traffic and becomes how to keep <strong>every version of the code compatible with the schema at all times</strong> while keeping rollback from losing transactions. The standard answer is <strong>expand/contract (parallel change)</strong>: break one breaking change into a sequence of backward-compatible steps, each independently deployable and reversible. Blue-green or canary can still deploy the code; the schema simply never forces a big-bang cutover. Here's why it stands out:</p>
+        <ul>
+          <li><strong>No moment where the system is incompatible:</strong> Every step (add nullable columns, dual-write, backfill, switch reads, drop old fields) works with both the old and new application versions, so rolling deploys with mixed versions are safe. That also removes the need for special routing or session stickiness.</li>
+          <li><strong>Rollback is a flag flip, not a restore:</strong> Until the final contract step, the old columns hold complete, current data, so turning a flag off returns to the old path instantly. Restoring an older snapshot would discard every payment written since it was taken.</li>
+          <li><strong>Small, observable steps:</strong> Canary and percentage rollouts surface problems on a small fraction of traffic, and each step is verified with data-comparison jobs before the next begins.</li>
+          <li><strong>The database never takes a long lock:</strong> Additive changes (nullable columns, concurrent index builds) are online operations on modern databases, and the backfill runs in throttled batches instead of a table-locking migration.</li>
+          <li><strong>Caches and sessions warm gradually:</strong> As traffic shifts through flags, caches fill progressively instead of being cold at a single cutover moment. Version cache keys when the cached object shape changes so old and new code never read each other's entries.</li>
+        </ul>
+        <p>A well-run migration has <strong>explicit phases</strong> (expand, dual-write, backfill, verify, switch reads, contract), <strong>dual writes inside one transaction</strong>, <strong>throttled and idempotent backfills</strong>, <strong>automated old-versus-new comparison</strong>, and <strong>flag-based rollback</strong> at every stage. Track the mismatch count between old and new representations, replication lag during backfill, p99 latency, and error rate at each canary step, and do not advance a phase until the mismatch count has stayed at zero for the agreed bake time.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Classic Blue-Green With Locking Migration</h4>
+          </div>
+          <p>This option stacks the worst properties together. Locking tables during migration blocks writes in a payments system with a 99.99% target, and a separately migrated copy of the data goes stale the moment live traffic continues, so the cutover must either pause writes or lose them. Rolling back by restoring an older snapshot discards every transaction since the snapshot, which is unacceptable for payments. <strong>Caveat:</strong> blue-green remains a good strategy for the stateless application tier, and for database changes that are trivially compatible.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🗂️</span>
+            <h4>B — Dual Schemas With Async Copy and Cutover</h4>
+          </div>
+          <p>Table versioning is on the right track, but the weak point is <strong>synchronization at the cutover and rollback boundaries</strong>. An asynchronous copy leaves a gap between the last copied row and the moment traffic moves, and after cutover writes land only in v2, so a rollback to v1 silently loses every transaction made on green. Making this safe requires continuous bidirectional replication, which is as complex as the problem it tries to avoid. <strong>Caveat:</strong> for read-mostly data, or when a write freeze is acceptable, versioned tables with a one-way copy can be adequate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🪞</span>
+            <h4>C — Dual-Write With Shadowed Traffic</h4>
+          </div>
+          <p>Dual-write is the right <em>idea</em> (it is the core of expand/contract), but this version adds hazards. Mirrored traffic on write endpoints of a payments system can duplicate real side effects (charges, ledger entries, notifications) unless every external effect is stubbed, and a full green environment adds cost plus a final environment-level cutover that is still a big-bang event. Dual writes are also only safe when both representations are written atomically, which must be designed rather than assumed. <strong>Caveat:</strong> shadow traffic is excellent for validating read paths and performance; the safer form of this option is D, with dual-writes in the live application inside one transaction.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Expand/Contract (Parallel Change) With Feature Flags ✓</h4>
+          </div>
+          <p>Skip a big blue-green cutover for this change: make the schema change backward compatible (add new or nullable columns, keep the old ones), roll out code with feature flags and canaries, backfill onli</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Zero-Downtime Safety</th><th>Lossless Rollback</th><th>Implementation Complexity</th><th>Infrastructure Cost</th><th>Data Divergence Risk</th><th>Fits Breaking Schema Changes</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Classic Blue-Green + Locking Migration</td><td>Poor (table locks) ❌</td><td>No (snapshot restore) ❌</td><td>Medium ⚠</td><td>High (duplicate environment) ❌</td><td>High ❌</td><td>Poor ❌</td></tr>
+            <tr><td class="tt-option">B — Dual Schemas + Async Copy</td><td>Good, with a gap at cutover ⚠</td><td>No (v2 writes lost on rollback) ❌</td><td>High ❌</td><td>Medium ⚠</td><td>High ❌</td><td>Fair ⚠</td></tr>
+            <tr><td class="tt-option">C — Dual-Write With Shadowed Traffic</td><td>Good ⚠</td><td>Partial ⚠</td><td>High ❌</td><td>High (duplicate environment, mirrored traffic) ❌</td><td>Medium ⚠</td><td>Good ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Expand/Contract + Flags ✓</td><td>Excellent ✅</td><td>Yes (flag flip) ✅</td><td>Medium (several releases) ⚠</td><td>Low ✅</td><td>Low (single-transaction dual writes) ✅</td><td>Excellent ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Classic Blue-Green + Locking Migration</h4>
+          </div>
+          <p>Systems where the database change is trivially compatible or the data is disposable, and a maintenance window is acceptable. Effective for the stateless tier.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Dual Schemas + Async Copy</h4>
+          </div>
+          <p>Read-mostly or analytical data where a write freeze or maintenance window is possible and losing recent writes on rollback is not critical.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Dual-Write With Shadowed Traffic</h4>
+          </div>
+          <p>As the dual-write phase of expand/contract when old and new representations must stay in sync, with atomic writes and shadow traffic limited to read paths.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Expand/Contract + Flags</h4>
+          </div>
+          <p>Production systems with strict availability needs and continuous writes (payments, orders, accounts). The default for any schema change that touches live transactional data.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Expand/Contract Migration Phases</h3>
+        <p>Each phase is backward compatible and reversible until the final contract step:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    E[&quot;1. Expand, add nullable columns and new tables&quot;] --&gt; W[&quot;2. Dual-write in one transaction, behind a flag&quot;]
+    W --&gt; B[&quot;3. Backfill history in throttled batches&quot;]
+    B --&gt; V[&quot;4. Verify old vs new, zero mismatches&quot;]
+    V --&gt; R[&quot;5. Switch reads gradually, 1 to 100 percent&quot;]
+    R --&gt; C[&quot;6. Contract, drop old fields after bake time&quot;]
+    R -.-&gt;|flag off, instant rollback| W
+    V -.-&gt;|mismatch found| B">flowchart LR
+    E[&quot;1. Expand, add nullable columns and new tables&quot;] --&gt; W[&quot;2. Dual-write in one transaction, behind a flag&quot;]
+    W --&gt; B[&quot;3. Backfill history in throttled batches&quot;]
+    B --&gt; V[&quot;4. Verify old vs new, zero mismatches&quot;]
+    V --&gt; R[&quot;5. Switch reads gradually, 1 to 100 percent&quot;]
+    R --&gt; C[&quot;6. Contract, drop old fields after bake time&quot;]
+    R -.-&gt;|flag off, instant rollback| W
+    V -.-&gt;|mismatch found| B</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Expand, Dual-Write, Backfill, Verify, Switch, Contract</h3>
+        <p>An illustrative migration of a money column into minor units plus a currency code, with every step backward compatible and flag-controlled:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Illustrative change: amount DECIMAL(18,2) becomes amount_minor BIGINT plus currency_code</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Release 1 - EXPAND (additive only, old code unaffected)</span></span>
+<span class="line">ALTER TABLE transactions ADD COLUMN amount_minor BIGINT NULL;          <span class="tk-com">// nullable, no table rewrite</span></span>
+<span class="line">ALTER TABLE transactions ADD COLUMN currency_code <span class="tk-fn">CHAR</span>(<span class="tk-num">3</span>) NULL;</span>
+<span class="line">CREATE INDEX CONCURRENTLY idx_txn_currency ON <span class="tk-fn">transactions</span> (currency_code);   <span class="tk-com">// PostgreSQL syntax; use online DDL tooling on MySQL</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Release 2 - DUAL-WRITE (same transaction, behind a flag)</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">saveTransaction</span>(tx):</span>
+<span class="line">    db.transaction:</span>
+<span class="line">        db.<span class="tk-fn">write</span>(tx.id, amount <span class="tk-op">=</span> tx.amount)                           <span class="tk-com">// old representation stays authoritative</span></span>
+<span class="line">        <span class="tk-kw">if</span> flags.<span class="tk-fn">on</span>(<span class="tk-str">&#x27;txn_dual_write&#x27;</span>):</span>
+<span class="line">            db.<span class="tk-fn">write</span>(tx.id, amount_minor <span class="tk-op">=</span> <span class="tk-fn">toMinorUnits</span>(tx.amount, tx.currency), currency_code <span class="tk-op">=</span> tx.currency)   <span class="tk-com">// per-currency exponent</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Backfill - throttled, resumable, idempotent</span></span>
+<span class="line">cursor <span class="tk-op">=</span> <span class="tk-fn">loadCheckpoint</span>()</span>
+<span class="line"><span class="tk-kw">while</span> <span class="tk-lit">true</span>:</span>
+<span class="line">    rows <span class="tk-op">=</span> db.<span class="tk-fn">query</span>(<span class="tk-str">&#x27;SELECT id FROM transactions WHERE id &gt; ? AND amount_minor IS NULL ORDER BY id LIMIT 1000&#x27;</span>, cursor)</span>
+<span class="line">    <span class="tk-kw">if</span> rows.empty: <span class="tk-kw">break</span></span>
+<span class="line">    db.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;UPDATE transactions SET amount_minor = ..., currency_code = ... WHERE id IN (?)&#x27;</span>, rows.ids)</span>
+<span class="line">    cursor <span class="tk-op">=</span> rows.lastId; <span class="tk-fn">saveCheckpoint</span>(cursor)</span>
+<span class="line">    <span class="tk-fn">sleepWhile</span>(<span class="tk-fn">replicaLag</span>() <span class="tk-op">&gt;</span> <span class="tk-num">2s</span> <span class="tk-kw">or</span> <span class="tk-fn">dbCpu</span>() <span class="tk-op">&gt;</span> <span class="tk-num">60</span><span class="tk-op">%</span>)                    <span class="tk-com">// protect live traffic</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Verify - must report zero mismatches for the whole bake period</span></span>
+<span class="line">mismatches <span class="tk-op">=</span> db.<span class="tk-fn">query</span>(<span class="tk-str">&#x27;SELECT count(*) FROM transactions WHERE amount_minor IS NOT NULL AND amount_minor &lt;&gt; minorUnits(amount, currency_code)&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Release 3 - SWITCH READS (canary 1% -&gt; 5% -&gt; 25% -&gt; 100%, the flag is the rollback)</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">readAmount</span>(tx):</span>
+<span class="line">    <span class="tk-kw">if</span> flags.<span class="tk-fn">on</span>(<span class="tk-str">&#x27;txn_read_new&#x27;</span>, rollout <span class="tk-op">=</span> user) <span class="tk-kw">and</span> tx.amount_minor <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">fromMinorUnits</span>(tx.amount_minor, tx.currency_code)</span>
+<span class="line">    <span class="tk-kw">return</span> tx.amount</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Release N - CONTRACT (only after bake time, no remaining readers, verified backup)</span></span>
+<span class="line"><span class="tk-com">//   1. stop dual-write and make the new columns authoritative</span></span>
+<span class="line"><span class="tk-com">//   2. in a later release: ALTER TABLE transactions DROP COLUMN amount;</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Skipping the compatibility check on old code:</strong> During a rolling deploy, old and new versions run together. Test the previous release against the expanded schema before shipping.</li>
+          <li><strong>Non-transactional dual writes:</strong> Writing two places in separate steps diverges on partial failure. Write both in one database transaction, or use a change-data-capture stream with verification.</li>
+          <li><strong>Backfilling with one giant update:</strong> A single large update holds locks, floods replication, and can stall the database. Use small keyed batches, throttle on replica lag, and make the job resumable and idempotent.</li>
+          <li><strong>Switching reads before verifying data:</strong> Always run a comparison job (counts, checksums, sampled field-level diffs) and require zero mismatches for the agreed bake time.</li>
+          <li><strong>Dropping old columns too early:</strong> Forgotten readers (reports, ETL, support tools) break and rollback is gone. Keep a bake period, check query logs for remaining usage, and keep verified backups.</li>
+          <li><strong>Making the flag service a single point of failure:</strong> If the flag system is unavailable, the app must fall back to a safe default, not an undefined state.</li>
+          <li><strong>Unversioned cache entries:</strong> If the cached object shape changes, old and new code can read each other's incompatible entries. Version cache keys with the shape.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, payments teams run schema changes as <strong>multi-release, flag-controlled programs</strong>, following the same pattern Stripe describes in its engineering post on online migrations at scale (dual-write, change reads, change writes, remove old data):</p>
+        <ul>
+          <li><strong>Step 0 — Decompose the change:</strong> Write down the target schema, then split the path into backward-compatible steps. Identify every reader and writer, including batch jobs, reports, and downstream consumers.</li>
+          <li><strong>Step 1 — Expand:</strong> Ship additive-only DDL (nullable columns, new tables, concurrently built indexes). Old code keeps working untouched.</li>
+          <li><strong>Step 2 — Dual-write:</strong> Deploy code that writes both representations in one transaction, behind a flag, using a canary rollout.</li>
+          <li><strong>Step 3 — Backfill and verify:</strong> Run a throttled, idempotent backfill and a comparison job that proves old and new data match.</li>
+          <li><strong>Step 4 — Switch reads, then writes:</strong> Move reads to the new representation gradually (1%, 5%, 25%, 100%), watch error rate and latency, and keep the flag as the rollback.</li>
+          <li><strong>Step 5 — Contract:</strong> After a bake period, stop writing the old fields, drop them in a later release, and remove the flags and dead code.</li>
+        </ul>
+        <p>Use blue-green for the stateless tier and expand/contract for the data; they solve different problems and work well together.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>You cannot blue-green your way around shared state. <strong>Make the schema change in backward-compatible steps</strong> so old and new code can run together, backfill online, switch behavior with feature flags, and delete the old structure only after a bake period. Rollback then means turning a flag off, not restoring a snapshot and losing payments.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

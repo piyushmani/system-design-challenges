@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Testing Strategy for a Payments Microservices Platform: Contracts Over Brittle E2E — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">22 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Testing Pyramid</span>
+      <span class="tag tag--green">Payments System</span>
+      <span class="tag tag--amber">Quality Assurance</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Testing Strategy for a Payments Microservices Platform: Contracts Over Brittle E2E</h1>
+      <p class="q-scenario"><strong>Evelyn</strong> is the lead backend engineer for a <strong>payments platform</strong> built on microservices, processing a <strong>massive transaction volume</strong> under strict availability and latency SLOs. Teams deploy services <strong>independently, multiple times a day</strong>. Recent <strong>production outages</strong> were caused by <strong>changing API contracts</strong> between services, while <strong>unreliable end-to-end tests</strong> keep slowing CI. She needs a testing strategy, aligned with the <strong>testing pyramid</strong>, that gives <strong>fast feedback</strong>, protects <strong>resilience and money correctness</strong>, and does not inflate CI time.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Lean on fast unit tests with heavy mocking: comprehensive unit tests for service-internal logic, fully mocked external and downstream systems in CI, and only a brief manual integration check before deploy.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Move most validation to large end-to-end suites on a staging cluster: deploy the whole stack (real brokers, databases, third-party mocks) and run the suites nightly or on every PR, treating unit tests as secondary.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Adopt a proportioned pyramid: a large suite of fast unit tests, automated consumer-driven contract tests in CI for all service APIs, a targeted set of Testcontainers-based integration tests on critical paths (databases, queues), and a minimal fast E2E suite, supplemented by feature flags, canary releases, chaos engineering, and deep production observability.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Cut pre-production testing sharply and rely on production validation: a basic smoke suite in CI, deploy behind feature toggles, and use monitoring, canaries, alerting, and automated rollback to find and fix issues in the live environment.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Pyramid With Contract and Money-Correctness Tests</h3>
+        <p>Evelyn's two problems point at the same gap: the system tests <strong>components in isolation</strong> (unit tests) and <strong>everything at once</strong> (end-to-end), but not the <strong>agreements between services</strong>, which is where the outages originate. A proportioned pyramid fills that gap with <strong>consumer-driven contract tests</strong> that run in seconds in CI, keeps unit tests as the base, uses real dependencies for a small set of critical integration paths, and keeps E2E minimal. For payments, the same structure also makes room for the checks that matter most: <strong>idempotency, money arithmetic, and ledger invariants</strong>, which are best proven with fast, focused tests rather than slow system tests. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Contract tests prevent the outages directly:</strong> Each consumer states what it needs (fields, types, status codes, error shapes), and the provider verifies those expectations on every build. A breaking change fails the provider's pipeline, not production.</li>
+          <li><strong>Payments-specific correctness is cheap to test:</strong> Contracts can pin money as integer minor units plus a currency code (never floating point), idempotency-key behavior, and error semantics for declines, timeouts, and duplicates. Property-based tests can check ledger invariants (debits equal credits, no negative balances) in milliseconds.</li>
+          <li><strong>CI stays fast and deterministic:</strong> Unit, contract, and Testcontainers-based integration tests do not need a shared staging cluster, so teams deploy independently without queuing for an environment.</li>
+          <li><strong>Event contracts are covered too:</strong> Message contracts (for example Pact message pacts) or schema-registry compatibility rules (backward or full) protect asynchronous flows such as payment-captured events, a common source of silent breakage.</li>
+          <li><strong>Production verification complements rather than replaces:</strong> Canaries with automatic rollback, feature flags, and controlled chaos experiments check resilience under real conditions, backed by traces and reconciliation checks that detect money discrepancies.</li>
+        </ul>
+        <p>A mature version adds <strong>pipeline time budgets</strong>, a <strong>contract broker with can-i-deploy gates</strong>, <strong>idempotency and double-charge tests</strong>, <strong>reconciliation jobs</strong> that compare ledgers with processor reports, and <strong>canary analysis tied to SLOs</strong>. Track CI duration, flaky-test rate, contract failures caught pre-deploy versus production incidents, and reconciliation mismatches; if incidents persist at service boundaries, look for uncovered service pairs first.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🎭</span>
+            <h4>A — Heavy Mocking With Manual Integration Checks</h4>
+          </div>
+          <p>Mocks only encode what a consumer <em>assumes</em> about a provider, so they stay green while real contracts drift, which is exactly what caused the outages. A manual integration check before deploy cannot keep pace with multiple deploys per day per team and puts human variability into the highest-risk step. For payments, mocked downstreams also hide timeout, retry, and duplicate-delivery behavior, which is where double charges come from. <strong>Caveat:</strong> unit tests with mocks are the right base layer for internal logic; the failure is treating them as sufficient.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏗️</span>
+            <h4>B — End-to-End Suites as the Main Safety Net</h4>
+          </div>
+          <p>Large E2E suites are slow, flaky, and expensive to maintain, which is the source of Evelyn's CI problem, and they diagnose failures poorly: a red test could mean any of dozens of services. A shared staging cluster also serializes teams that are supposed to deploy independently. Running them on every PR worsens the bottleneck, and nightly runs find breakage only after merge. <strong>Caveat:</strong> a handful of E2E journeys for money movement (authorize, capture, refund) are worth keeping as a final sanity check.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🎲</span>
+            <h4>D — Production as the Test Environment</h4>
+          </div>
+          <p>Canaries, flags, and rollback are essential, but treating production as the primary test bed in a payments system exposes customers' money to untested changes. Some failures cannot be undone by a rollback (a duplicate charge or a wrong ledger entry still has to be corrected and communicated), and the regulatory and trust costs are high. A basic smoke suite also cannot detect contract mismatches that only appear on certain request shapes. <strong>Caveat:</strong> for low-risk, read-only, or internal paths, a lean suite with strong canarying can be appropriate.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Pyramid With Contract and Money-Correctness Tests ✓</h4>
+          </div>
+          <p>Adopt a proportioned pyramid: a large suite of fast unit tests, automated consumer-driven contract tests in CI for all service APIs, a targeted set of Testcontainers-based integration tests on critica</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>CI Speed</th><th>Catches Contract Breaks Pre-Deploy</th><th>Money-Correctness Coverage</th><th>Independent Team Deploys</th><th>Maintenance Cost</th><th>Production Risk Exposure</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Heavy Mocking + Manual Checks</td><td>Fast ✅</td><td>No ❌</td><td>Partial (logic only, not integration) ⚠</td><td>Unblocked but unsafe ⚠</td><td>Low, but mocks drift ⚠</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">B — E2E as Main Safety Net</td><td>Slow ❌</td><td>Late and indirect ⚠</td><td>Good in principle, but flaky ⚠</td><td>Blocked by shared staging ❌</td><td>High ❌</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Pyramid + Contract Tests ✓</td><td>Fast ✅</td><td>Yes ✅</td><td>Strong (property, integration, reconciliation) ✅</td><td>Unblocked and gated ✅</td><td>Medium ⚠</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">D — Production Validation</td><td>Fast ✅</td><td>No, found by users ❌</td><td>Weak ❌</td><td>Unblocked but risky ⚠</td><td>Low ✅</td><td>Very high ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Heavy Mocking + Manual Checks</h4>
+          </div>
+          <p>Pure business-logic modules, libraries, and early prototypes with no meaningful downstream dependencies, as the base layer rather than a full strategy.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — E2E as Main Safety Net</h4>
+          </div>
+          <p>A small number of services with a stable, cheap, hermetic environment, or regulated flows that require full-system evidence before release. Keep the suite narrow.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Pyramid + Contract Tests</h4>
+          </div>
+          <p>Multiple independently deployed services, frequent releases, strict SLOs, and incidents caused by service interactions, as in payments and other high-stakes domains.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Production Validation</h4>
+          </div>
+          <p>Low-risk, easily reversible changes with excellent observability and a tiny blast radius, as an addition to pre-production tests.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Consumer-Driven Contract Workflow With a Deploy Gate</h3>
+        <p>The consumer publishes what it needs, the provider verifies it on every build, and the deploy pipeline asks the broker whether the version is safe:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant CT as Consumer CI
+    participant PB as Pact Broker
+    participant PT as Provider CI
+    participant DEP as Deploy pipeline
+    CT-&gt;&gt;CT: Run consumer tests against a mock provider
+    CT-&gt;&gt;PB: Publish contract with consumer version
+    PB--&gt;&gt;PT: Webhook, new or changed contract
+    PT-&gt;&gt;PB: Fetch contracts for this provider
+    PT-&gt;&gt;PT: Replay each interaction against the real provider
+    PT-&gt;&gt;PB: Publish verification result
+    DEP-&gt;&gt;PB: can-i-deploy for the version going to production
+    alt Contracts verified
+        PB--&gt;&gt;DEP: Safe to deploy
+    else Verification failed or missing
+        PB--&gt;&gt;DEP: Blocked
+    end">sequenceDiagram
+    participant CT as Consumer CI
+    participant PB as Pact Broker
+    participant PT as Provider CI
+    participant DEP as Deploy pipeline
+    CT-&gt;&gt;CT: Run consumer tests against a mock provider
+    CT-&gt;&gt;PB: Publish contract with consumer version
+    PB--&gt;&gt;PT: Webhook, new or changed contract
+    PT-&gt;&gt;PB: Fetch contracts for this provider
+    PT-&gt;&gt;PT: Replay each interaction against the real provider
+    PT-&gt;&gt;PB: Publish verification result
+    DEP-&gt;&gt;PB: can-i-deploy for the version going to production
+    alt Contracts verified
+        PB--&gt;&gt;DEP: Safe to deploy
+    else Verification failed or missing
+        PB--&gt;&gt;DEP: Blocked
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Contract Test, Provider Verification, and Payment Invariants</h3>
+        <p>A consumer contract that pins money as minor units, provider states for verification, and fast property-based checks for idempotency and ledger balance:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// CONSUMER side: the checkout service states what it needs from the payments service</span></span>
+<span class="line">test <span class="tk-str">&#x27;authorize payment returns amount in minor units&#x27;</span>:</span>
+<span class="line">    contract.<span class="tk-fn">given</span>(<span class="tk-str">&#x27;card 4242 is valid and funds are available&#x27;</span>)</span>
+<span class="line">            .<span class="tk-fn">uponReceiving</span>(<span class="tk-str">&#x27;authorize request&#x27;</span>)</span>
+<span class="line">            .<span class="tk-fn">withRequest</span>(POST, <span class="tk-str">&#x27;/v1/payments&#x27;</span>, headers <span class="tk-op">=</span> {Idempotency<span class="tk-op">-</span>Key: <span class="tk-fn">matchUuid</span>()},</span>
+<span class="line">                         body <span class="tk-op">=</span> {amountMinor: <span class="tk-fn">matchInteger</span>(<span class="tk-num">1999</span>), currency: <span class="tk-fn">matchRegex</span>(<span class="tk-str">&#x27;[A-Z]{3}&#x27;</span>, <span class="tk-str">&#x27;USD&#x27;</span>)})</span>
+<span class="line">            .<span class="tk-fn">willRespondWith</span>(<span class="tk-num">201</span>, body <span class="tk-op">=</span> {id: <span class="tk-fn">matchString</span>(), status: <span class="tk-str">&#x27;AUTHORIZED&#x27;</span>, amountMinor: <span class="tk-fn">matchInteger</span>(<span class="tk-num">1999</span>), currency: <span class="tk-str">&#x27;USD&#x27;</span>})</span>
+<span class="line">    response <span class="tk-op">=</span> paymentsClient.<span class="tk-fn">authorize</span>(<span class="tk-num">1999</span>, <span class="tk-str">&#x27;USD&#x27;</span>, idempotencyKey)</span>
+<span class="line">    assert response.status <span class="tk-op">==</span> AUTHORIZED          <span class="tk-com">// running this test generates the pact file to publish to the broker</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// PROVIDER side: the payments service replays every consumer expectation against itself</span></span>
+<span class="line">providerStates:</span>
+<span class="line">    <span class="tk-str">&#x27;card 4242 is valid and funds are available&#x27;</span>: <span class="tk-fn">seed</span>(account, balance <span class="tk-op">=</span> <span class="tk-num">100000</span>)</span>
+<span class="line">    <span class="tk-str">&#x27;card is declined&#x27;</span>:                           <span class="tk-fn">stubProcessor</span>(decline <span class="tk-op">=</span> <span class="tk-str">&#x27;insufficient_funds&#x27;</span>)</span>
+<span class="line"><span class="tk-fn">verifyAllPacts</span>(provider <span class="tk-op">=</span> <span class="tk-str">&#x27;payments-service&#x27;</span>, states <span class="tk-op">=</span> providerStates)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Idempotency invariant, checked at the unit or integration level (fast, no staging needed)</span></span>
+<span class="line">property <span class="tk-str">&#x27;repeating a request with the same key never double-charges&#x27;</span>:</span>
+<span class="line">    <span class="tk-fn">forAll</span>(request, n <span class="tk-kw">in</span> <span class="tk-num">2</span>..<span class="tk-num">5</span>):</span>
+<span class="line">        results <span class="tk-op">=</span> <span class="tk-kw">repeat</span>(n) { payments.<span class="tk-fn">authorize</span>(request, idempotencyKey <span class="tk-op">=</span> k) }</span>
+<span class="line">        assert <span class="tk-fn">allEqual</span>(results) <span class="tk-kw">and</span> ledger.<span class="tk-fn">entriesFor</span>(k).count <span class="tk-op">==</span> <span class="tk-num">1</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Ledger invariant, property-based</span></span>
+<span class="line">property <span class="tk-str">&#x27;every transaction balances&#x27;</span>:</span>
+<span class="line">    <span class="tk-fn">forAll</span>(sequenceOfOperations):</span>
+<span class="line">        <span class="tk-fn">apply</span>(ops)</span>
+<span class="line">        assert <span class="tk-fn">sum</span>(ledger.debits) <span class="tk-op">==</span> <span class="tk-fn">sum</span>(ledger.credits) <span class="tk-kw">and</span> no account balance <span class="tk-op">&lt;</span> <span class="tk-num">0</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Gate in the deploy pipeline</span></span>
+<span class="line">pact<span class="tk-op">-</span>broker can<span class="tk-op">-</span>i<span class="tk-op">-</span>deploy <span class="tk-op">-</span><span class="tk-op">-</span>pacticipant payments<span class="tk-op">-</span>service <span class="tk-op">-</span><span class="tk-op">-</span>version $GIT_SHA <span class="tk-op">-</span><span class="tk-op">-</span>to<span class="tk-op">-</span>environment production</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Using floating point for money in tests or contracts:</strong> Rounding bugs pass tests and fail in production. Use integer minor units plus a currency code, and test per-currency exponents (zero-, two-, and three-decimal currencies).</li>
+          <li><strong>Not testing idempotency and retries:</strong> Duplicate delivery and client retries are normal in distributed payments. Test that repeating a request with the same key never charges twice.</li>
+          <li><strong>Over-specified contracts:</strong> Contracts that pin fields the consumer does not use block safe evolution. Describe only what the consumer reads, with flexible matchers.</li>
+          <li><strong>Contract tests without provider verification in CI:</strong> A published contract that nobody verifies gives false confidence.</li>
+          <li><strong>Skipping event and async contracts:</strong> Payment events (captured, refunded, chargeback) are consumed by many services, and schema changes there break silently.</li>
+          <li><strong>Letting E2E tests multiply:</strong> Each flaky test erodes trust in the pipeline and trains people to re-run until green.</li>
+          <li><strong>No reconciliation as a safety net:</strong> Tests cannot catch every discrepancy. Compare ledger totals against processor and bank reports continuously.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, payments teams <strong>layer correctness checks by cost and risk</strong>, adding the cheapest high-value layer first:</p>
+        <ul>
+          <li><strong>Step 0 — Map the contract surface:</strong> List the service pairs and event streams involved in money movement, and rank them by incident history and blast radius.</li>
+          <li><strong>Step 1 — Harden the base:</strong> Keep unit tests deterministic and add property-based tests for money arithmetic, rounding rules, and ledger invariants.</li>
+          <li><strong>Step 2 — Add contract tests to the riskiest pairs:</strong> Cover request and response shapes, error semantics, idempotency headers, and event payloads. Publish to a broker and gate deployments with <code>can-i-deploy</code>.</li>
+          <li><strong>Step 3 — Targeted integration tests:</strong> Use Testcontainers for real databases and brokers on transaction, outbox, and retry paths, including duplicate delivery and timeout scenarios.</li>
+          <li><strong>Step 4 — Keep E2E minimal:</strong> Retain a few hermetic journeys such as authorize, capture, and refund, and remove tests that duplicate lower layers.</li>
+          <li><strong>Step 5 — Verify in production:</strong> Use canary releases with automatic rollback, feature flags, synthetic transactions, reconciliation against processor reports, and controlled chaos experiments.</li>
+        </ul>
+        <p>Put each risk at the cheapest layer that can detect it reliably.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Outages at service boundaries need <strong>boundary tests</strong>. Build a pyramid with fast unit tests, consumer-driven contract tests for every API and event stream, targeted real-dependency integration tests, and a very small E2E layer, then verify resilience and money correctness in production through canaries, reconciliation, and observability.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

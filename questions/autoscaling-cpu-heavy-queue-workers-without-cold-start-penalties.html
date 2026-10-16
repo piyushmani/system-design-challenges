@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autoscaling CPU-Heavy Queue Workers Without Cold-Start Penalties — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">22 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Autoscaling</span>
+      <span class="tag tag--green">Cold Starts</span>
+      <span class="tag tag--amber">Cost Optimization</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Autoscaling CPU-Heavy Queue Workers Without Cold-Start Penalties</h1>
+      <p class="q-scenario"><strong>Ethan</strong> is the backend architect for a <strong>video-processing platform</strong> with predictable <strong>morning and evening peaks</strong> and sudden, unpredictable <strong>viral surges</strong>. The workload is <strong>CPU-intensive and queue-based</strong> (workers pull jobs) and bound by a strict <strong>p95 latency SLO</strong>. New VMs and pods take a long time to become useful (node provisioning, image pull, codec and model initialization), so every scale-out is a <strong>cold start</strong>. Today a Kubernetes <strong>HPA on CPU utilization</strong> either reacts too slowly during bursts or leaves expensive idle capacity off-peak. He must choose the autoscaling strategy that meets the SLO, controls cost, and hides cold-start delay.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Stay purely reactive: keep the CPU-based Kubernetes HPA, lower scale-up thresholds, scale down aggressively, rely on horizontal scaling and faster pod boot, and use no warm pools or prediction.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Use scheduled scaling only: add capacity by cron before known peaks and remove it in quiet periods, with no reactive or predictive scaling, accepting failures or queueing on unexpected spikes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Blend strategies: scheduled scaling for known daily peaks, a lightweight predictive autoscaler that keeps a small pre-warmed pod pool ahead of expected spikes, a reactive layer driven by queue depth and tail latency, pre-warmed serverless workers for unexpected bursts, and carefully tuned scale-down delays to prevent thrashing.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Use a centralized global scaler that scales instances vertically (more CPU and RAM) across regions synchronously during load, and temporarily throttles incoming requests until scaling finishes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Layered Scheduled + Predictive + Reactive Scaling</h3>
+        <p>The problem has <strong>two separate components</strong>: <em>when</em> to add capacity (known peaks, forecastable ramps, and unforecastable surges) and <em>how fast</em> new capacity becomes useful (cold-start time). No single mechanism addresses both: scheduled scaling knows nothing about viral spikes, and a reactive loop always pays the full cold-start delay after the damage has started. The answer is a <strong>layered strategy</strong> where each layer covers the failure mode of the others, and where <strong>warm capacity</strong> takes the cold start off the critical path. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Right signal for the workload:</strong> For queue-based workers, CPU is a lagging, indirect signal: workers sit at high CPU whether the backlog is 10 jobs or 10,000. Queue depth and oldest-message age measure how far behind the system is, and tail latency measures SLO risk. Sizing the fleet as backlog divided by (per-worker throughput times the drain budget) is far more accurate than a CPU threshold.</li>
+          <li><strong>Scheduled floors handle the known peaks cheaply:</strong> The morning and evening ramps are deterministic, so raising minimum capacity before them removes the need to react at all, with no forecasting model required.</li>
+          <li><strong>Predictive pre-warming hides cold starts:</strong> A short-horizon forecast only needs to look ahead by the time it takes a node and pod to become ready. Pre-warmed pods, low-priority placeholder pods that real pods preempt, and pre-pulled images turn minutes of startup into seconds.</li>
+          <li><strong>Serverless overflow absorbs the unforecastable:</strong> For a viral surge even a good reactive scaler is too slow. Pre-warmed serverless or burst workers take overflow jobs while the main fleet catches up, provided the work can be split into short chunks that fit their time and resource limits.</li>
+          <li><strong>Cost stays bounded:</strong> Warm capacity is a small, deliberately sized buffer (a percentage of expected demand) rather than a permanently oversized fleet, and tuned scale-down delays avoid paying for churn.</li>
+        </ul>
+        <p>A production-ready setup includes <strong>queue-depth-based scaling</strong> (for example with KEDA), <strong>overprovisioning placeholder pods</strong>, <strong>pre-pulled and slimmed images</strong>, <strong>scale-down stabilization windows</strong>, and a <strong>hard cost ceiling</strong>. Track queue wait time against the SLO, warm-pool utilization, and cost per processed minute of video; if the warm pool is rarely used, shrink it, and if jobs wait for capacity, grow it or raise the predictive floor.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📈</span>
+            <h4>A — Reactive HPA on CPU</h4>
+          </div>
+          <p>A purely reactive loop pays the full cold-start delay on every burst: metrics lag, the scaler decides, then nodes and pods boot before any extra throughput exists. Lowering thresholds does not remove that delay; it triggers it earlier on noise and keeps more idle capacity running. CPU is also a weak signal for queue workers, because a backlog of any size looks the same once workers are saturated. <strong>Caveat:</strong> for stateless services with fast start times and gradual load, a reactive HPA is simple and adequate, and it should remain the safety-net layer even in the blended design.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🕒</span>
+            <h4>B — Scheduled Scaling Only</h4>
+          </div>
+          <p>Scheduled scaling is excellent for predictable peaks and is the cheapest layer to operate, but it is blind to unplanned demand. A viral video produces exactly the surge it cannot see, and the result is queue growth and SLO breaches. Schedules also drift when holidays, time zones, or launch events change the traffic shape. <strong>Caveat:</strong> if traffic were fully periodic with no viral component, a schedule plus a modest reactive buffer would be enough.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>D — Global Vertical Scaler With Throttling</h4>
+          </div>
+          <p>Vertical scaling does not fit this workload. CPU-bound video jobs parallelize across workers, so more workers raise throughput more flexibly than a bigger single node, while vertical resizing is bounded by the largest machine size and often requires restarting the workload. A synchronous cross-region scaler is also a single point of failure and a coordination bottleneck, and throttling users during scale-up converts a capacity problem into a visible SLO violation. <strong>Caveat:</strong> right-sizing per-worker CPU and memory is useful tuning, but it is not a burst strategy.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Layered Scheduled + Predictive + Reactive Scaling ✓</h4>
+          </div>
+          <p>Blend strategies: scheduled scaling for known daily peaks, a lightweight predictive autoscaler that keeps a small pre-warmed pod pool ahead of expected spikes, a reactive layer driven by queue depth a</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Burst Responsiveness</th><th>Cold-Start Exposure</th><th>Cost Efficiency</th><th>Handles Unforecast Spikes</th><th>Operational Complexity</th><th>SLO Safety</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Reactive HPA on CPU</td><td>Slow (metric lag plus cold start) ❌</td><td>Full exposure ❌</td><td>Medium (idle waste off-peak) ⚠</td><td>Poor ❌</td><td>Low ✅</td><td>Weak ❌</td></tr>
+            <tr><td class="tt-option">B — Scheduled Only</td><td>Fast for known peaks only ⚠</td><td>Hidden for known peaks only ⚠</td><td>Good if the schedule fits ✅</td><td>None ❌</td><td>Low ✅</td><td>Weak on surprises ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Layered Strategy ✓</td><td>High ✅</td><td>Mostly hidden ✅</td><td>Good (small, bounded warm buffer) ✅</td><td>Good ✅</td><td>High ❌</td><td>Strong ✅</td></tr>
+            <tr><td class="tt-option">D — Global Vertical Scaler</td><td>Slow (restarts, node size limits) ❌</td><td>Exposed, or replaced by throttling ❌</td><td>Poor (large nodes, idle headroom) ❌</td><td>Poor ❌</td><td>High ❌</td><td>Weak (self-inflicted throttling) ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Reactive HPA on CPU</h4>
+          </div>
+          <p>Stateless services with fast start times, gradual and smooth load changes, and loose latency targets. Keep it as the safety-net layer even in layered designs.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Scheduled Only</h4>
+          </div>
+          <p>Strongly periodic traffic with little unplanned variance, where a modest idle buffer is acceptable. Cheap and predictable, but blind to surprises.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Layered Strategy</h4>
+          </div>
+          <p>Queue-based, CPU-heavy workloads with strict latency SLOs, long cold starts, and a mix of predictable peaks and surprise surges.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Global Vertical Scaler</h4>
+          </div>
+          <p>Stateful or hard-to-parallelize workloads limited by single-node resources, where in-place resizing is supported, used as a tuning tool rather than the primary burst strategy.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Layered Autoscaling Control Loop</h3>
+        <p>Three scaling signals feed one decision point; warm headroom and serverless overflow cover the cold-start gap:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    SCH[&quot;Scheduled floor, known daily peaks&quot;] --&gt; DEC[&quot;Capacity decision, max of all targets&quot;]
+    PRED[&quot;Predictive forecaster, boot-time horizon&quot;] --&gt; DEC
+    REACT[&quot;Reactive scaler, queue depth and oldest job age&quot;] --&gt; DEC
+    Q[&quot;Job queue&quot;] --&gt;|backlog and arrival rate| REACT
+    Q --&gt;|arrival history| PRED
+    DEC --&gt; K8S[&quot;Worker fleet on Kubernetes&quot;]
+    DEC --&gt; WARM[&quot;Warm headroom, placeholder pods and pre-pulled images&quot;]
+    WARM -.-&gt;|preempted instantly by real pods| K8S
+    Q --&gt;|overflow when wait nears SLO budget| SLS[&quot;Pre-warmed serverless burst workers&quot;]
+    K8S --&gt; OUT[&quot;Processed video&quot;]
+    SLS --&gt; OUT">flowchart LR
+    SCH[&quot;Scheduled floor, known daily peaks&quot;] --&gt; DEC[&quot;Capacity decision, max of all targets&quot;]
+    PRED[&quot;Predictive forecaster, boot-time horizon&quot;] --&gt; DEC
+    REACT[&quot;Reactive scaler, queue depth and oldest job age&quot;] --&gt; DEC
+    Q[&quot;Job queue&quot;] --&gt;|backlog and arrival rate| REACT
+    Q --&gt;|arrival history| PRED
+    DEC --&gt; K8S[&quot;Worker fleet on Kubernetes&quot;]
+    DEC --&gt; WARM[&quot;Warm headroom, placeholder pods and pre-pulled images&quot;]
+    WARM -.-&gt;|preempted instantly by real pods| K8S
+    Q --&gt;|overflow when wait nears SLO budget| SLS[&quot;Pre-warmed serverless burst workers&quot;]
+    K8S --&gt; OUT[&quot;Processed video&quot;]
+    SLS --&gt; OUT</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Single Decision Point for Layered Scaling</h3>
+        <p>One loop merges the reactive, scheduled, and predictive targets, keeps warm headroom, overflows to serverless when the SLO is at risk, and scales down slowly:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Single decision point, runs every 15 seconds</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">decideCapacity</span>():</span>
+<span class="line">    backlog   <span class="tk-op">=</span> queue.<span class="tk-fn">depth</span>()</span>
+<span class="line">    oldestAge <span class="tk-op">=</span> queue.<span class="tk-fn">oldestMessageAge</span>()</span>
+<span class="line">    arrival   <span class="tk-op">=</span> <span class="tk-fn">ewma</span>(queue.<span class="tk-fn">arrivalRate</span>(), window <span class="tk-op">=</span> <span class="tk-num">1m</span>)</span>
+<span class="line">    perWorker <span class="tk-op">=</span> <span class="tk-fn">measuredJobsPerSecondPerWorker</span>()            <span class="tk-com">// from recent completions</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Reactive: drain the backlog inside the SLO budget while keeping up with arrivals</span></span>
+<span class="line">    reactive  <span class="tk-op">=</span> <span class="tk-fn">ceil</span>((backlog <span class="tk-op">/</span> drainBudgetSeconds <span class="tk-op">+</span> arrival) <span class="tk-op">/</span> perWorker)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Scheduled: known daily peaks (for example 08:30-10:30 and 18:30-21:30 local time)</span></span>
+<span class="line">    floor     <span class="tk-op">=</span> <span class="tk-fn">scheduledFloor</span>(<span class="tk-fn">now</span>())</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Predictive: look ahead by node boot + pod startup, not by a fixed &#x27;few minutes&#x27;</span></span>
+<span class="line">    horizon   <span class="tk-op">=</span> nodeBootTime <span class="tk-op">+</span> podStartTime <span class="tk-op">+</span> <span class="tk-num">60s</span></span>
+<span class="line">    predicted <span class="tk-op">=</span> <span class="tk-fn">ceil</span>(<span class="tk-fn">forecast</span>(arrival, horizon) <span class="tk-op">/</span> perWorker)</span>
+<span class="line"></span>
+<span class="line">    target <span class="tk-op">=</span> <span class="tk-fn">clamp</span>(<span class="tk-fn">max</span>(floor, predicted, reactive), minReplicas, maxReplicas)   <span class="tk-com">// hard cost ceiling</span></span>
+<span class="line">    warm   <span class="tk-op">=</span> <span class="tk-fn">clamp</span>(<span class="tk-fn">ceil</span>(<span class="tk-num">0.10</span> <span class="tk-op">*</span> target), <span class="tk-num">2</span>, <span class="tk-num">20</span>)               <span class="tk-com">// placeholder pods that real pods preempt</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-fn">scaleOutNow</span>(target)</span>
+<span class="line">    <span class="tk-fn">keepWarmHeadroom</span>(warm)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Overflow: jobs are close to breaching the SLO while new capacity is still booting</span></span>
+<span class="line">    <span class="tk-kw">if</span> oldestAge <span class="tk-op">&gt;</span> <span class="tk-num">0.5</span> <span class="tk-op">*</span> sloQueueWaitBudget <span class="tk-kw">and</span> <span class="tk-fn">pendingPods</span>() <span class="tk-op">&gt;</span> <span class="tk-num">0</span>:</span>
+<span class="line">        <span class="tk-fn">dispatchToServerless</span>(<span class="tk-fn">chunkedJobs</span>(maxJobs <span class="tk-op">=</span> burstLimit))</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Scale-down: slow, stable, and graceful</span></span>
+<span class="line">    <span class="tk-kw">if</span> target <span class="tk-op">&lt;</span> currentReplicas <span class="tk-kw">for</span> <span class="tk-num">10</span> consecutive minutes:</span>
+<span class="line">        <span class="tk-fn">removeReplicas</span>(<span class="tk-fn">min</span>(currentReplicas <span class="tk-op">-</span> target, <span class="tk-num">0.10</span> <span class="tk-op">*</span> currentReplicas), drainFirst <span class="tk-op">=</span> <span class="tk-lit">true</span>)   <span class="tk-com">// at most 10% per minute</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Scaling queue workers on CPU:</strong> CPU saturates as soon as workers are busy and says nothing about backlog size. Scale on queue depth or message age.</li>
+          <li><strong>Scale-down thrashing:</strong> Removing capacity right after a spike and re-adding it minutes later pays the cold start twice. Use stabilization windows, cap the scale-down rate per minute, and drain workers gracefully.</li>
+          <li><strong>Competing autoscalers:</strong> An HPA, a scheduled job, and a predictive controller each setting replica counts will overwrite one another. Use one controller that takes the maximum of the targets.</li>
+          <li><strong>Oversized or disconnected warm pools:</strong> A large warm pool, or one that holds pods without node capacity behind them, costs money without helping. Size it as a fraction of demand and track its hit rate.</li>
+          <li><strong>Ignoring serverless limits:</strong> Sending whole multi-minute video jobs to time-limited functions fails or costs far more than expected. Split the work into chunks first.</li>
+          <li><strong>Forecasting without guardrails:</strong> A model that over-predicts inflates the bill, and one that under-predicts silently leaves you reactive. Alert on forecast error and cap maximum capacity.</li>
+          <li><strong>Forgetting downstream bottlenecks:</strong> More workers can overwhelm object storage, a database, or a license server. Load-test the whole path.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams introduce these layers <strong>one at a time</strong>, starting with whichever removes the biggest SLO risk:</p>
+        <ul>
+          <li><strong>Step 0 — Measure the cold-start budget:</strong> Break startup into node provisioning, image pull, process init, and readiness. Also measure per-worker throughput, since every scaling formula depends on it. Define the SLO as queue wait time plus processing time.</li>
+          <li><strong>Step 1 — Change the signal:</strong> Scale on queue depth and oldest-message age (for example with KEDA external metrics) instead of CPU, and keep CPU only as a secondary guard.</li>
+          <li><strong>Step 2 — Shrink the cold start:</strong> Slim and pre-pull images, move heavy initialization out of the startup path, and run low-priority placeholder pods so spare node capacity already exists when real pods need it.</li>
+          <li><strong>Step 3 — Add scheduled floors:</strong> Raise the minimum replica count ahead of the known daily peaks.</li>
+          <li><strong>Step 4 — Add prediction:</strong> Start with a seasonal baseline plus a short trend, forecast over the boot-time horizon, and move to heavier models only if the error justifies it. Cloud-native predictive scaling and warm-pool features can cover this where they fit.</li>
+          <li><strong>Step 5 — Add burst overflow and guardrails:</strong> Chunk jobs so they can run on serverless or spot burst capacity, set priorities so interactive jobs preempt batch work, and enforce scale-down stabilization and a spend cap.</li>
+        </ul>
+        <p>Each layer should earn its place by removing a measured SLO violation, not by looking sophisticated on a diagram.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Reactive scaling alone always arrives late for a cold-start-heavy workload, and schedules alone are blind to surprises. <strong>Combine them</strong>: scale on queue-based signals, pre-warm ahead of forecast and scheduled peaks, keep a small warm buffer plus burst overflow for the unexpected, and tune scale-down to avoid thrashing. Merge the three targets at one decision point so the layers cooperate instead of competing.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

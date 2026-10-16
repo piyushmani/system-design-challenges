@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya&#x27;s CDN dilemma: should she purge, revalidate, or version assets? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">26 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">CDN</span>
+      <span class="tag tag--green">Cache Purging</span>
+      <span class="tag tag--amber">Revalidation</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya&#x27;s CDN dilemma: should she purge, revalidate, or version assets?</h1>
+      <p class="q-scenario"><strong>Maya</strong> serves as a senior backend engineer for a high-traffic global digital media platform. Her infrastructure delivers two fundamentally distinct classes of assets through an international Content Delivery Network (CDN): heavy, infrequently modified <strong>static files</strong> (bundled JavaScript, compiled CSS, web fonts, and application logos) and volatile, rapidly changing <strong>dynamic content</strong> (breaking-news JSON endpoints, live editorial tickers, and breaking article hero thumbnails). When breaking-news events unfold, global reader traffic spikes exponentially within seconds. The engineering team requires a robust, unified caching architecture that achieves three competing goals: (1) shield backend origin databases and application servers from <em>thundering herd</em> collapses during extreme traffic surges, (2) sustain sub-50ms global response latencies at edge Points of Presence (PoPs), and (3) empower newsroom editors to push critical updates and headline revisions with near-instant global propagation. Maya must determine the caching and invalidation strategy that best reconciles these operational demands without creating unmanageable system fragility.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A) Global synchronous invalidation: for each update or publication, hold the publish request open until every CDN point-of-presence confirms the cache has been purged, guaranteeing instant consistency globally.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">B) Asynchronous cache clearing combined with brief TTLs: send invalidation signals to the CDN in the background and configure short Time-To-Live values for dynamic assets, tolerating eventual consistency while allowing outdated content to drop off rapidly.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">C) Universal edge stale-while-revalidate: set extended TTLs so edge servers can deliver older content to users while simultaneously fetching updates from the origin in the background, employing an origin shield to protect the backend from excessive load.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">D) Versioned immutable URLs for static resources alongside a dedicated mutable pipeline: distribute static files using unchanging, versioned links with extended TTLs, while applying a distinct approach (such as brief TTLs, specific cache purges, or stale-while-revalidate) for dynamic content to facilitate rapid updates without triggering massive global invalidations.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Versioned Immutable Static Assets with Dedicated Mutable Edge Pipeline</h3>
+        <p>The fundamental architectural insight is that <strong>static assets and dynamic breaking-news feeds possess diametrically opposed caching characteristics</strong> and must never share a single, uniform caching policy. Static assets (JavaScript bundles, CSS stylesheets, web fonts, core UI graphics) are deterministic and change only upon new software releases. In contrast, breaking-news payloads (live JSON feeds, article bodies, breaking thumbnails) are volatile, time-sensitive, and change unpredictably during major news events. <strong>Option D bifurcates the caching architecture</strong> into two specialized tiers, maximizing edge cache offload while preserving instant editorial agility:</p>
+        <ul>
+          <li><strong>Immutable Caching for Static Assets:</strong> Fingerprinting static files with content-based cryptographic hashes (e.g., <code>bundle.a1b2c3d4.js</code>) allows them to be served with <code>Cache-Control: public, max-age=31536000, immutable</code> (RFC 8246). Because their URLs change whenever the file content changes, edge PoPs and user browsers cache them permanently with a near 100% cache hit ratio, completely eliminating origin traffic and making cache invalidations unnecessary.</li>
+          <li><strong>Surgical Mutable Pipeline for Dynamic Feeds:</strong> Volatile dynamic resources (breaking news JSON APIs and live thumbnails) are managed via a dedicated pipeline using brief freshness lifetimes (e.g., <code>max-age=5</code> to <code>10</code> seconds) coupled with <code>stale-while-revalidate=60</code> (RFC 5861). The CDN edge serves stale cached content in milliseconds while refreshing from the origin asynchronously in the background.</li>
+          <li><strong>Targeted Surrogate-Key / Cache-Tag Purging:</strong> Instead of broad, indiscriminate wildcard cache purges (e.g., <code>PURGE /*</code>), the origin CMS assigns granular cache tags (e.g., <code>Surrogate-Key: article-10492 breaking-banner topic-world</code>). When editors publish breaking updates, the CDN executes a targeted tag purge globally in under 150ms, leaving static files and unrelated news completely unaffected.</li>
+          <li><strong>Origin Shielding & Request Collapsing:</strong> Dynamic requests traverse a designated Origin Shield (Tiered Cache) configured with request collapsing (request coalescing). When a short TTL expires during a surge of 100,000 requests/sec, the shield collapses thousands of concurrent edge cache misses into a single request back to the origin, preventing thundering herds.</li>
+          <li><strong>Fault Tolerance via <code>stale-if-error</code>:</strong> If the origin application or database experiences transient degradation during a massive traffic spike, edge PoPs gracefully serve cached content via <code>stale-if-error=86400</code>, ensuring 100% reader availability instead of propagating HTTP 502/504 errors.</li>
+        </ul>
+        <p>By decoupling <strong>immutable static assets</strong> from an <strong>event-driven, tag-purged mutable pipeline</strong>, Maya eliminates origin strain for static delivery and enables sub-second editorial updates, providing total resilience against breaking-news traffic surges.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>A — Global Synchronous Invalidation</h4>
+          </div>
+          <p>Holding the publish request open until every CDN Point-of-Presence (PoP) confirms cache invalidation violates core distributed systems principles. In a modern Anycast CDN with hundreds of global PoPs and tens of thousands of edge servers, synchronous distributed confirmation takes seconds or minutes, leading to frequent CMS timeouts. <strong>Caveats:</strong> During breaking-news events with rapid-fire editorial revisions, synchronous blocking quickly exhausts web server connection pools, locks CMS editorial workflows, and leaves the platform vulnerable to cascading failures when edge nodes experience transient network jitter.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📉</span>
+            <h4>B — Async Cache Clearing with Brief TTLs</h4>
+          </div>
+          <p>Applying short Time-To-Live (TTL) values across both static assets and dynamic content severely degrades edge caching efficiency. While short TTLs allow dynamic updates to drop off without explicit purges, applying them to large JavaScript bundles, CSS files, and media forces continuous cache expirations across hundreds of edge locations. <strong>Caveats:</strong> During traffic surges, thousands of concurrent requests hit edge caches right as TTLs expire, creating a catastrophic <strong>thundering herd (cache stampede)</strong> that floods the origin with multi-megabyte static asset downloads and crashes backend infrastructure.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>C — Universal Edge Stale-While-Revalidate</h4>
+          </div>
+          <p>While <code>stale-while-revalidate</code> (SWR) is an excellent pattern for dynamic feeds, applying it universally to static assets creates substantial, unnecessary overhead. For static assets that never change (e.g., JS/CSS bundles and UI images), the edge will continually make background conditional HTTP requests (e.g., <code>If-None-Match</code> yielding 304 Not Modified) back to the origin once the freshness window expires. <strong>Caveats:</strong> Across millions of global requests, these redundant background round trips waste origin bandwidth, connection slots, and CPU capacity precisely when the origin needs every available resource to process breaking-news queries.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Versioned Immutable Static Assets with Dedicated Mutable Edge Pipeline ✓</h4>
+          </div>
+          <p>D) Versioned immutable URLs for static resources alongside a dedicated mutable pipeline: distribute static files using unchanging, versioned links with extended TTLs, while applying a distinct approac</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Origin Surge Protection</th><th>Global Edge Latency</th><th>Editorial Propagation Speed</th><th>Operational Simplicity</th><th>Origin Bandwidth Efficiency</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Global Sync Invalidation</td><td>⚠ Moderate</td><td>✅ Fast</td><td>❌ Slow (Blocks CMS)</td><td>❌ High (Timeout Risk)</td><td>⚠ Moderate</td></tr>
+            <tr><td class="tt-option">B — Short TTLs + Async Purge</td><td>❌ Poor (Stampede Risk)</td><td>⚠ Variable (Tail Latency)</td><td>✅ Fast</td><td>✅ Simple</td><td>❌ Poor (High Egress)</td></tr>
+            <tr><td class="tt-option">C — Universal Edge SWR</td><td>⚠ Moderate (304 Overhead)</td><td>✅ Fast</td><td>⚠ Eventual (1-cycle delay)</td><td>✅ Simple</td><td>⚠ Moderate (Revalidation)</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Versioned Immutable + Mutable Pipeline ✓</td><td>✅ Maximum (Collapsing + Shields)</td><td>✅ Sub-50ms Global</td><td>✅ Instant (&lt;150ms Tag Purge)</td><td>⚠ Moderate (Two Pipelines)</td><td>✅ Optimal (Near 100% Hit)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Global Sync Invalidation</h4>
+          </div>
+          <p>Strict legal or regulatory compliance systems (e.g., court-ordered content takedowns, digital rights revocation) where serving even one stale byte after revocation is legally penalized and traffic volumes are low.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Short TTLs + Async Purge</h4>
+          </div>
+          <p>Low-traffic personal blogs or internal company wikis where content volume is minimal, origin hardware easily handles traffic spikes, and engineering resources cannot justify configuring dual pipelines.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Universal Edge SWR</h4>
+          </div>
+          <p>Dynamic API gateways where 100% of the served resources are mutable JSON payloads, and backend origin services are specifically optimized with Redis to answer high-frequency conditional 304 requests.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Versioned Immutable + Mutable Pipeline</h4>
+          </div>
+          <p>High-traffic media platforms, e-commerce applications, and enterprise SaaS products that serve both static frontends and volatile breaking content under volatile traffic surges.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Dual-Pipeline Request Flow: Static Asset vs. Dynamic Feed</h3>
+        <p>Static assets achieve permanent cache hits via immutable content hashes, while dynamic breaking news feeds leverage stale-while-revalidate and origin request collapsing.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    autonumber
+    actor User as Global Reader
+    participant Edge as Edge PoP (CDN)
+    participant Shield as Origin Shield
+    participant Storage as Static Storage (S3)
+    participant Origin as Backend API / CMS
+    Note over User, Storage: Static Asset Flow (Fingerprinted URL)
+    User-&gt;&gt;Edge: GET /static/bundle.8f4b2a.js
+    Edge-&gt;&gt;Edge: Cache Check: HIT (max-age=1y, immutable)
+    Edge--&gt;&gt;User: 200 OK (Served from Edge Memory / Disk)
+    Note over Edge, Storage: 100% Edge Offload — Zero Origin Requests
+    Note over User, Origin: Dynamic Breaking News Flow (Traffic Surge)
+    User-&gt;&gt;Edge: GET /api/news/breaking-live.json
+    Edge-&gt;&gt;Edge: Cache Check: STALE (within SWR window)
+    Edge--&gt;&gt;User: 200 OK (Stale Cached News — Instant &lt;10ms)
+    Note over Edge, Shield: Non-Blocking Background Revalidation
+    Edge-&gt;&gt;Shield: GET /api/news/breaking-live.json
+    Note over Shield: Request Collapsing: 10k PoP Requests Coalesced into 1
+    Shield-&gt;&gt;Origin: Single Coalesced Query to Backend
+    Origin--&gt;&gt;Shield: 200 OK (Fresh JSON + Surrogate-Key)
+    Shield--&gt;&gt;Edge: Edge Cache Refreshed
+    Edge-&gt;&gt;Edge: Edge PoP Cache Updated for Subsequent Readers">sequenceDiagram
+    autonumber
+    actor User as Global Reader
+    participant Edge as Edge PoP (CDN)
+    participant Shield as Origin Shield
+    participant Storage as Static Storage (S3)
+    participant Origin as Backend API / CMS
+    Note over User, Storage: Static Asset Flow (Fingerprinted URL)
+    User-&gt;&gt;Edge: GET /static/bundle.8f4b2a.js
+    Edge-&gt;&gt;Edge: Cache Check: HIT (max-age=1y, immutable)
+    Edge--&gt;&gt;User: 200 OK (Served from Edge Memory / Disk)
+    Note over Edge, Storage: 100% Edge Offload — Zero Origin Requests
+    Note over User, Origin: Dynamic Breaking News Flow (Traffic Surge)
+    User-&gt;&gt;Edge: GET /api/news/breaking-live.json
+    Edge-&gt;&gt;Edge: Cache Check: STALE (within SWR window)
+    Edge--&gt;&gt;User: 200 OK (Stale Cached News — Instant &lt;10ms)
+    Note over Edge, Shield: Non-Blocking Background Revalidation
+    Edge-&gt;&gt;Shield: GET /api/news/breaking-live.json
+    Note over Shield: Request Collapsing: 10k PoP Requests Coalesced into 1
+    Shield-&gt;&gt;Origin: Single Coalesced Query to Backend
+    Origin--&gt;&gt;Shield: 200 OK (Fresh JSON + Surrogate-Key)
+    Shield--&gt;&gt;Edge: Edge Cache Refreshed
+    Edge-&gt;&gt;Edge: Edge PoP Cache Updated for Subsequent Readers</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Dual-Pipeline Cache Headers, Edge SWR, and Targeted Invalidation</h3>
+        <p>Demonstrates differentiated origin Cache-Control headers, edge request collapsing with stale-while-revalidate, and surgical surrogate-key purge dispatching.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">python</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com"># 1. ORIGIN SERVICE: Differentiated Cache-Control Headers</span></span>
+<span class="line"><span class="tk-kw">def</span> <span class="tk-fn">handle_asset_response</span>(request, asset_path):</span>
+<span class="line">    <span class="tk-kw">if</span> asset_path.<span class="tk-fn">startswith</span>(<span class="tk-str">&quot;/static/&quot;</span>) <span class="tk-kw">and</span> <span class="tk-fn">is_content_hashed</span>(asset_path):</span>
+<span class="line">        <span class="tk-com"># Static, fingerprinted assets (JS, CSS, core media)</span></span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">Response</span>(</span>
+<span class="line">            body<span class="tk-op">=</span><span class="tk-fn">read_file</span>(asset_path),</span>
+<span class="line">            headers<span class="tk-op">=</span>{</span>
+<span class="line">                <span class="tk-str">&quot;Cache-Control&quot;</span>: <span class="tk-str">&quot;public, max-age=31536000, immutable&quot;</span>,</span>
+<span class="line">                <span class="tk-str">&quot;ETag&quot;</span>: <span class="tk-fn">generate_etag</span>(asset_path)</span>
+<span class="line">            }</span>
+<span class="line">        )</span>
+<span class="line">    <span class="tk-kw">elif</span> asset_path.<span class="tk-fn">startswith</span>(<span class="tk-str">&quot;/api/news/&quot;</span>):</span>
+<span class="line">        <span class="tk-com"># Dynamic breaking news payload</span></span>
+<span class="line">        article <span class="tk-op">=</span> <span class="tk-fn">get_article_from_db</span>(asset_path)</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">Response</span>(</span>
+<span class="line">            body<span class="tk-op">=</span>json.<span class="tk-fn">dumps</span>(article.payload),</span>
+<span class="line">            headers<span class="tk-op">=</span>{</span>
+<span class="line">                <span class="tk-com"># 5s fresh, 60s stale-while-revalidate, 24h stale-if-error</span></span>
+<span class="line">                <span class="tk-str">&quot;Cache-Control&quot;</span>: <span class="tk-str">&quot;public, max-age=5, stale-while-revalidate=60, stale-if-error=86400&quot;</span>,</span>
+<span class="line">                <span class="tk-str">&quot;Surrogate-Key&quot;</span>: f<span class="tk-str">&quot;news-feed article-{article.id} breaking-{article.is_breaking}&quot;</span>,</span>
+<span class="line">                <span class="tk-str">&quot;Surrogate-Control&quot;</span>: <span class="tk-str">&quot;max-age=60&quot;</span></span>
+<span class="line">            }</span>
+<span class="line">        )</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com"># 2. EDGE WORKER: Request Collapsing &amp; Background Revalidation</span></span>
+<span class="line"><span class="tk-kw">async</span> <span class="tk-kw">def</span> <span class="tk-fn">edge_cache_handler</span>(client_request):</span>
+<span class="line">    cached_entry <span class="tk-op">=</span> edge_cache.<span class="tk-fn">get</span>(client_request.url)</span>
+<span class="line">    </span>
+<span class="line">    <span class="tk-kw">if</span> cached_entry <span class="tk-kw">and</span> cached_entry.<span class="tk-fn">is_fresh</span>():</span>
+<span class="line">        <span class="tk-kw">return</span> cached_entry.<span class="tk-fn">to_response</span>()  <span class="tk-com"># Instant edge hit</span></span>
+<span class="line">        </span>
+<span class="line">    <span class="tk-kw">if</span> cached_entry <span class="tk-kw">and</span> cached_entry.<span class="tk-fn">is_in_swr_window</span>():</span>
+<span class="line">        <span class="tk-com"># Non-blocking background revalidation with request collapsing</span></span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> edge_inflight_locks.<span class="tk-fn">is_locked</span>(client_request.url):</span>
+<span class="line">            edge_inflight_locks.<span class="tk-fn">acquire</span>(client_request.url)</span>
+<span class="line">            <span class="tk-fn">schedule_background_task</span>(<span class="tk-fn">revalidate_origin</span>(client_request.url))</span>
+<span class="line">        <span class="tk-kw">return</span> cached_entry.<span class="tk-fn">to_response</span>()  <span class="tk-com"># Serve stale immediately (&lt;5ms)</span></span>
+<span class="line">        </span>
+<span class="line">    <span class="tk-com"># Synchronous coalesced fetch for cold cache / completely expired assets</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-kw">await</span> <span class="tk-fn">origin_shield_coalesce_fetch</span>(client_request)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com"># 3. CMS PUBLISH HANDLER: Surgical Surrogate-Key Invalidation</span></span>
+<span class="line"><span class="tk-kw">def</span> <span class="tk-fn">on_breaking_news_published</span>(article):</span>
+<span class="line">    db.<span class="tk-fn">save_and_commit</span>(article)</span>
+<span class="line">    </span>
+<span class="line">    <span class="tk-com"># Surgical async purge targeting only the specific cache tags (&lt;150ms)</span></span>
+<span class="line">    cdn_client.<span class="tk-fn">purge_by_surrogate_key</span>(</span>
+<span class="line">        keys<span class="tk-op">=</span>[f<span class="tk-str">&quot;article-{article.id}&quot;</span>, <span class="tk-str">&quot;breaking-live&quot;</span>],</span>
+<span class="line">        soft_purge<span class="tk-op">=</span><span class="tk-lit">True</span>  <span class="tk-com"># Marks stale to trigger immediate revalidation without 503s</span></span>
+<span class="line">    )</span>
+<span class="line">    <span class="tk-kw">return</span> {<span class="tk-str">&quot;status&quot;</span>: <span class="tk-str">&quot;published&quot;</span>, <span class="tk-str">&quot;edge_purged&quot;</span>: <span class="tk-lit">True</span>}</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Marking HTML Shells as Immutable:</strong> Setting <code>max-age=31536000, immutable</code> on root HTML documents (e.g., <code>/index.html</code>). If the HTML shell is cached permanently, client browsers will never fetch new HTML to discover updated hashed JS/CSS filenames after a deployment.</li>
+          <li><strong>Deploying HTML Before Static Assets:</strong> Rolling out new backend code or publishing HTML pages pointing to newly hashed asset bundles before those bundles have completed uploading to object storage, causing widespread HTTP 404 errors.</li>
+          <li><strong>Omitting Request Collapsing on Dynamic Misses:</strong> Failing to configure request coalescing at the Origin Shield. When a 5-second dynamic TTL expires during a breaking-news flash mob, hundreds of edge PoPs simultaneously query the origin, causing database connection exhaustion.</li>
+          <li><strong>Ignoring stale-if-error Directives:</strong> Configuring dynamic endpoints with short TTLs but omitting <code>stale-if-error</code>. If origin databases hiccup during a massive breaking-news spike, edge nodes immediately return HTTP 502/504 errors to readers instead of gracefully serving cached news.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In production media networks (such as The New York Times, BBC, and Reuters), building a resilient dual-pipeline CDN architecture involves coordinating the build pipeline, edge CDN rules, and CMS editorial webhooks:</p>
+        <ul>
+          <li><strong>Step 1 — Content-Hashed Asset Bundling:</strong> Frontend build tools (e.g., Vite, Webpack, esbuild) generate deterministic cryptographic content hashes in filenames (e.g., <code>main.7e4b9a.js</code>). The CI/CD pipeline deploys these to cloud object storage (e.g., AWS S3 or Google Cloud Storage) with <code>Cache-Control: public, max-age=31536000, immutable</code>.</li>
+          <li><strong>Step 2 — Edge CDN Route Segregation:</strong> The CDN configuration establishes path-based routing behaviors: requests matching <code>/static/<em></code> route to object storage with permanent caching and zero invalidation logic, while paths matching <code>/api/</em></code> and <code>/news/*</code> route to origin application clusters via an Origin Shield.</li>
+          <li><strong>Step 3 — Origin Header Injection:</strong> The dynamic news API emits granular caching headers: <code>Cache-Control: public, max-age=5, stale-while-revalidate=60, stale-if-error=86400</code>, alongside surrogate tags like <code>Surrogate-Key: feed-breaking article-4920 section-world</code>.</li>
+          <li><strong>Step 4 — Edge Request Collapsing:</strong> The Origin Shield enables request coalescing. When a dynamic breaking-news feed expires during a surge of 50,000 requests/second, the shield forwards only a single request to the backend while holding remaining requests in an inflight queue to receive the freshly cached response.</li>
+          <li><strong>Step 5 — Surgical Event-Driven Purging:</strong> When an editor clicks 'Publish' on an urgent correction, the CMS triggers an asynchronous purge API call targeting only <code>Surrogate-Key: article-4920</code>. The CDN purges that specific key across all global edge nodes in under 150ms without disrupting static assets or unrelated articles.</li>
+        </ul>
+        <p>This battle-tested architecture separates concerns cleanly: immutable assets scale autonomously at the edge for free, while dynamic news feeds remain fresh, responsive, and impervious to thundering herd crashes.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Never apply a uniform caching policy across distinct asset classes: serve <strong>content-hashed static assets with immutable one-year TTLs</strong> for zero-maintenance origin offload, and deliver <strong>dynamic feeds via short TTLs, stale-while-revalidate, request collapsing, and surrogate-key purges</strong>.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

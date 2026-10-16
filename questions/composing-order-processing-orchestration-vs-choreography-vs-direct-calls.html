@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Composing Order Processing: Orchestration vs Choreography vs Direct Calls — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">21 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Saga Orchestration</span>
+      <span class="tag tag--green">Choreography</span>
+      <span class="tag tag--amber">Order Processing</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Composing Order Processing: Orchestration vs Choreography vs Direct Calls</h1>
+      <p class="q-scenario"><strong>Noah</strong> is building a new <strong>order-processing pipeline</strong> for an e-commerce platform. Each order passes through <strong>validation, inventory reservation, payment, shipping, and confirmation</strong>. Some steps finish in under 100 ms, but external <strong>inventory checks, fraud analysis, and shipping-label creation</strong> can take seconds to minutes. The platform peaks at <strong>thousands of orders per second</strong> and must stay highly available. When a step fails, the system has to <strong>retry with backoff or compensate</strong> (for example, refund a captured payment when shipping fails), and <strong>every failure must be debuggable and auditable</strong> for compliance. Low latency at checkout matters, but <strong>correctness and auditability come first</strong>. Which composition pattern should he choose?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A synchronous API gateway composition: clients interact with an API gateway that makes sequential, blocking HTTP requests to each participating microservice (validate -&gt; reserve -&gt; charge -&gt; ship -&gt; confirm) before returning the outcome. Error handling, retries, and compensations are managed through synchronous error flows and immediate rollback requests.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">An event-driven choreography model: individual services publish domain events to a publish/subscribe message bus (e.g., OrderCreated -&gt; InventoryReserved -&gt; PaymentCharged -&gt; ShippingArranged -&gt; OrderCompleted). Services react to these events by subscribing and subsequently emitting new events. Compensations are handled by broadcasting specific compensating events (like InventoryReleased or PaymentRefunded) whenever a failure occurs.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">A centralized, durable workflow orchestration approach: utilize a stateful workflow engine (such as Temporal, AWS Step Functions, or a similar managed service) to manage the saga. This orchestrator handles steps as either synchronous or asynchronous activities, maintains durable state, manages retries with backoff strategies, and executes targeted compensation tasks upon failure. It simultaneously offers a unified dashboard for auditing and observability.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">A distributed two-phase commit (2PC) spanning the databases of all services: require each service to participate in a distributed transaction, ensuring that all database modifications (spanning inventory, payments, and orders) are committed or aborted as a single atomic operation. A coordinator manages the prepare and commit phases to guarantee strict consistency across the entire system.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Durable Workflow Orchestration</h3>
+        <p>An order is a <strong>long-running, multi-step business transaction</strong> that spans services and external providers, so it needs three things a plain request chain cannot give: <strong>durable state</strong> (survive crashes and deploys), <strong>explicit failure handling</strong> (retries, timeouts, compensations), and <strong>a single place to see what happened</strong>. A workflow engine such as Temporal or AWS Step Functions provides these as primitives. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Durable execution:</strong> The engine persists workflow state after each step, so a crashed worker or a redeploy resumes the saga where it left off instead of losing or duplicating the order.</li>
+          <li><strong>First-class retries and timeouts:</strong> Per-activity retry policies with exponential backoff, timeouts, and heartbeats handle slow external calls (fraud, shipping labels) without hand-written retry loops in every service.</li>
+          <li><strong>Explicit compensations:</strong> The failure path is code in one place: if shipping fails after payment, run refund and release-inventory in reverse order, each one retried until it succeeds.</li>
+          <li><strong>Auditability and observability:</strong> Every workflow has a full event history (what ran, when, with which input and result), searchable by order ID. That is exactly what compliance and support teams need.</li>
+          <li><strong>Fits mixed latency:</strong> Fast steps run as quick activities, slow ones wait asynchronously without holding a thread or HTTP connection, and the checkout call can return an order ID right after the workflow starts.</li>
+        </ul>
+        <p>A production-ready design includes <strong>idempotent activities</strong>, <strong>retry and timeout policies per step</strong>, <strong>compensation steps that are themselves retried</strong>, <strong>workflow IDs equal to order IDs</strong>, and <strong>metrics on workflow failure, stuck, and compensation rates</strong>. A workflow that ends in a compensated state should be a first-class, queryable status, not a hidden failure.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⛓️</span>
+            <h4>A — Synchronous API Gateway Chain</h4>
+          </div>
+          <p>Chaining blocking HTTP calls adds up latency and <strong>multiplies failure probability</strong> (availability is roughly the product of every hop). Slow external steps tie up connections, a gateway crash mid-chain loses the saga state, and compensation depends on the same unreliable request path that just failed. Retries risk duplicating side effects unless every call is idempotent. <strong>Caveat:</strong> a short synchronous chain is fine for the sub-100 ms validation prefix before the workflow starts.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">💃</span>
+            <h4>B — Event-Driven Choreography</h4>
+          </div>
+          <p>Choreography is loosely coupled and scales well, and it suits <em>fan-out</em> reactions such as notifications and analytics. For a business-critical saga, however, the process is <strong>implicit</strong>: no single place defines the flow, tracing an order means stitching events across services, compensation logic is spread everywhere, and adding a step risks cyclic or forgotten dependencies. Auditability and stuck-order detection have to be built separately. It works for simple flows of two or three steps, but this pipeline has five steps, external providers, and compliance needs.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🤝</span>
+            <h4>D — Distributed Two-Phase Commit</h4>
+          </div>
+          <p>Two-phase commit needs every participant to support the protocol and to <strong>hold locks while waiting for the coordinator</strong>. Fraud engines, payment processors, and shipping carriers are external services that do not join your transaction, minutes-long steps would hold locks for minutes, and a coordinator failure blocks participants. Throughput and availability collapse at thousands of orders per second. Sagas with compensations trade strict atomicity for availability, which is the right trade-off in this domain.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Durable Workflow Orchestration ✓</h4>
+          </div>
+          <p>A centralized, durable workflow orchestration approach: utilize a stateful workflow engine (such as Temporal, AWS Step Functions, or a similar managed service) to manage the saga. This orchestrator ha</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Fault Tolerance</th><th>Retry / Compensation Handling</th><th>Observability and Audit</th><th>Coupling</th><th>Throughput Scalability</th><th>Operational Overhead</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Sync API Gateway Chain</td><td>Poor ❌ (availability multiplies)</td><td>Weak ❌ (ad hoc rollbacks)</td><td>Medium ⚠ (traces only)</td><td>High ❌ (temporal coupling)</td><td>Limited ⚠ (blocking)</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Event Choreography</td><td>Good ✅</td><td>Fragmented ⚠ (spread across services)</td><td>Weak ❌ (stitch events together)</td><td>Low ✅</td><td>Very high ✅</td><td>Medium ⚠ (broker, tracing)</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Workflow Orchestration ✓</td><td>Strong ✅ (durable state)</td><td>Strong ✅ (built-in policies)</td><td>Strong ✅ (event history)</td><td>Medium ⚠ (orchestrator knows the flow)</td><td>High ✅ (scales with workers)</td><td>Medium ⚠ (engine to run or buy)</td></tr>
+            <tr><td class="tt-option">D — Distributed 2PC</td><td>Poor ❌ (blocking coordinator)</td><td>Not applicable ⚠ (atomic or abort)</td><td>Medium ⚠</td><td>Very high ❌</td><td>Poor ❌ (locks)</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sync API Gateway Chain</h4>
+          </div>
+          <p>Short, low-risk request chains (two or three fast internal calls) where the caller needs a synchronous answer, such as the validation prefix of checkout.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Event Choreography</h4>
+          </div>
+          <p>Simple, loosely coupled reactions and fan-out (notifications, analytics, search indexing) or flows with few steps and no complex compensation.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Workflow Orchestration</h4>
+          </div>
+          <p>Long-running, multi-step business processes with external dependencies, compensations, and audit requirements: orders, onboarding, payouts, KYC.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Distributed 2PC</h4>
+          </div>
+          <p>Tightly coupled databases within one organization and one technology where short transactions and strict atomicity are essential. Rarely appropriate across microservices.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Orchestrated Order Saga (Happy Path)</h3>
+        <p>The API accepts the order quickly and starts a workflow; the engine drives each step with durable state:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant API as Order API
+    participant W as Workflow Engine
+    participant I as Inventory Service
+    participant F as Fraud Service
+    participant P as Payment Service
+    participant S as Shipping Service
+    C-&gt;&gt;API: Place order
+    API-&gt;&gt;API: Validate, save PENDING, check idempotency
+    API-&gt;&gt;W: Start workflow with order id
+    API--&gt;&gt;C: 202 Accepted with order id
+    W-&gt;&gt;I: 1. Reserve inventory
+    W-&gt;&gt;F: 2. Analyze fraud risk
+    W-&gt;&gt;P: 3. Capture payment
+    W-&gt;&gt;S: 4. Create shipping label
+    W-&gt;&gt;W: 5. Mark CONFIRMED and publish OrderConfirmed">sequenceDiagram
+    participant C as Client
+    participant API as Order API
+    participant W as Workflow Engine
+    participant I as Inventory Service
+    participant F as Fraud Service
+    participant P as Payment Service
+    participant S as Shipping Service
+    C-&gt;&gt;API: Place order
+    API-&gt;&gt;API: Validate, save PENDING, check idempotency
+    API-&gt;&gt;W: Start workflow with order id
+    API--&gt;&gt;C: 202 Accepted with order id
+    W-&gt;&gt;I: 1. Reserve inventory
+    W-&gt;&gt;F: 2. Analyze fraud risk
+    W-&gt;&gt;P: 3. Capture payment
+    W-&gt;&gt;S: 4. Create shipping label
+    W-&gt;&gt;W: 5. Mark CONFIRMED and publish OrderConfirmed</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Saga Workflow with Retries and Reverse-Order Compensation</h3>
+        <p>Each step is an idempotent activity with its own retry policy; successful steps register an undo action that runs in reverse order on failure:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">workflow <span class="tk-fn">processOrder</span>(orderId):</span>
+<span class="line">    compensations <span class="tk-op">=</span> []                                              <span class="tk-com">// stack of undo actions</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        activity <span class="tk-fn">reserveInventory</span>(orderId)       <span class="tk-fn">retry</span>(backoff, max <span class="tk-op">=</span> <span class="tk-num">5</span>, timeout <span class="tk-op">=</span> <span class="tk-num">30s</span>)</span>
+<span class="line">        compensations.<span class="tk-fn">push</span>(() <span class="tk-op">=&gt;</span> <span class="tk-fn">releaseInventory</span>(orderId))</span>
+<span class="line"></span>
+<span class="line">        risk <span class="tk-op">=</span> activity <span class="tk-fn">analyzeFraud</span>(orderId)    <span class="tk-fn">retry</span>(backoff, max <span class="tk-op">=</span> <span class="tk-num">3</span>, timeout <span class="tk-op">=</span> <span class="tk-num">2m</span>)</span>
+<span class="line">        <span class="tk-kw">if</span> risk <span class="tk-op">==</span> HIGH:</span>
+<span class="line">            <span class="tk-kw">throw</span> <span class="tk-fn">OrderRejected</span>(<span class="tk-str">&#x27;fraud&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line">        activity <span class="tk-fn">capturePayment</span>(orderId, idempotencyKey <span class="tk-op">=</span> orderId <span class="tk-op">+</span> <span class="tk-str">&#x27;:capture&#x27;</span>)   <span class="tk-fn">retry</span>(backoff, max <span class="tk-op">=</span> <span class="tk-num">5</span>, timeout <span class="tk-op">=</span> <span class="tk-num">30s</span>)</span>
+<span class="line">        compensations.<span class="tk-fn">push</span>(() <span class="tk-op">=&gt;</span> <span class="tk-fn">refundPayment</span>(orderId, idempotencyKey <span class="tk-op">=</span> orderId <span class="tk-op">+</span> <span class="tk-str">&#x27;:refund&#x27;</span>))</span>
+<span class="line"></span>
+<span class="line">        activity <span class="tk-fn">createShippingLabel</span>(orderId)    <span class="tk-fn">retry</span>(backoff, max <span class="tk-op">=</span> <span class="tk-num">10</span>, timeout <span class="tk-op">=</span> <span class="tk-num">10m</span>)</span>
+<span class="line">        compensations.<span class="tk-fn">push</span>(() <span class="tk-op">=&gt;</span> <span class="tk-fn">cancelShippingLabel</span>(orderId))</span>
+<span class="line"></span>
+<span class="line">        activity <span class="tk-fn">markConfirmed</span>(orderId)</span>
+<span class="line">        activity <span class="tk-fn">publishEvent</span>(<span class="tk-str">&#x27;OrderConfirmed&#x27;</span>, orderId)            <span class="tk-com">// choreographed fan-out: email, analytics, loyalty</span></span>
+<span class="line">        <span class="tk-kw">return</span> CONFIRMED</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">catch</span> failure:</span>
+<span class="line">        <span class="tk-kw">for</span> undo <span class="tk-kw">in</span> <span class="tk-fn">reverse</span>(compensations):</span>
+<span class="line">            <span class="tk-fn">retryForever</span>(undo, backoff, alertAfter <span class="tk-op">=</span> <span class="tk-num">1h</span>)            <span class="tk-com">// compensations must eventually succeed</span></span>
+<span class="line">        activity <span class="tk-fn">markCancelled</span>(orderId, reason <span class="tk-op">=</span> failure)</span>
+<span class="line">        activity <span class="tk-fn">publishEvent</span>(<span class="tk-str">&#x27;OrderCancelled&#x27;</span>, orderId)</span>
+<span class="line">        <span class="tk-kw">return</span> CANCELLED</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Non-idempotent activities:</strong> Retries without idempotency keys cause double charges and double shipments. Pass a stable key per order and step.</li>
+          <li><strong>Fat workflow payloads:</strong> Embedding whole carts or documents in workflow state hits size limits and slows history replay. Store data in your database and pass IDs.</li>
+          <li><strong>Non-deterministic workflow code (for replay-based engines such as Temporal):</strong> Reading the clock, generating random numbers, or calling the network directly inside workflow logic breaks replay. Do side effects only inside activities.</li>
+          <li><strong>Forgetting that compensation can fail:</strong> A refund call can time out too. Make compensations idempotent, retry them durably, and alert when they exceed the retry budget.</li>
+          <li><strong>No timeout or escalation for stuck steps:</strong> A workflow waiting forever on a carrier is an invisible failure. Set step timeouts and a human-review path.</li>
+          <li><strong>Putting domain logic in the orchestrator:</strong> It turns into a new monolith. Keep it to sequencing, retries, and compensation.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Mature order platforms usually <strong>combine</strong> patterns, using each where it is strongest:</p>
+        <ul>
+          <li><strong>Step 0 — Fast synchronous prefix:</strong> Validate the request, check the idempotency key, persist the order as PENDING, and return 202 with the order ID in well under 100 ms.</li>
+          <li><strong>Step 1 — Start a workflow keyed by order ID:</strong> One workflow per order, started directly or through an outbox, with a deterministic ID so duplicate starts are rejected.</li>
+          <li><strong>Step 2 — Model each step as an idempotent activity:</strong> Reserve inventory, run fraud analysis, capture payment, create the shipping label, with timeouts and retry policies tuned per dependency.</li>
+          <li><strong>Step 3 — Define compensations:</strong> Release inventory, refund payment, cancel the label, executed in reverse order and retried until they succeed, with escalation to a human queue after the retry budget.</li>
+          <li><strong>Step 4 — Publish domain events at milestones:</strong> OrderConfirmed and OrderCancelled feed analytics, email, and loyalty via choreography, keeping the orchestrator out of fan-out.</li>
+          <li><strong>Step 5 — Operate it:</strong> Dashboards for workflow latency, failure and compensation rates, and stuck workflows, plus search by order ID for support and audits.</li>
+        </ul>
+        <p>Orchestrate the critical path, choreograph the side effects.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For long-running, multi-service business transactions with compliance needs, <strong>make the process explicit and durable</strong>. A workflow orchestrator gives retries, compensation, and an audit trail out of the box, while synchronous chains, pure choreography, and 2PC each fail on availability, visibility, or feasibility. Keep activities idempotent and use events for the non-critical fan-out.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

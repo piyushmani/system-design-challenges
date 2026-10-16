@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evolving an E-Commerce Monolith: Modular Monolith vs. Microservices Rewrite — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">22 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Refactoring</span>
+      <span class="tag tag--green">Microservices Migration</span>
+      <span class="tag tag--amber">Architecture</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Evolving an E-Commerce Monolith: Modular Monolith vs. Microservices Rewrite</h1>
+      <p class="q-scenario"><strong>Liam</strong> is the backend lead for a fast-growing e-commerce company whose <strong>monolith</strong> (catalog, payments, inventory, checkout, analytics) runs on <strong>one relational database</strong>. During flash sales it suffered <strong>severe checkout delays</strong>, <strong>deployment-triggered outages</strong>, and <strong>overselling</strong> caused by delayed inventory updates. He has an <strong>8-person team</strong> that must keep shipping features, so he needs a one-year evolution plan that improves availability and scalability <em>without</em> long downtime or hard-to-reason-about consistency problems. The plan must respect strict checkout latency needs and guarantee that stock is never oversold.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Do a big-bang rewrite into microservices: split every domain (checkout, catalog, payments, inventory, analytics) into its own service with its own database, use synchronous REST or gRPC between services, and keep cross-service data consistent with two-phase commit or distributed transactions.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Keep the monolith and scale it up: vertical scaling, read replicas, aggressive caching (application and CDN), query tuning, and heavy CI/CD automation so the monolith absorbs spikes without architectural change.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Split the monolith into microservices immediately, each with its own database, move to event-driven messaging with sagas and eventual consistency, and invest heavily up front in chaos testing, distributed tracing, and a service mesh.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Move gradually to a modular monolith: enforce strict domain boundaries and clean interfaces inside the codebase on a shared database for now, extract modules into services only when team scale or bottlenecks require, use async events for non-critical integrations (notifications, analytics), keep strong consistency for checkout and inventory (reservations or optimistic locking), and add feature flags, health checks, and observability for safe incremental releases.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Modular Monolith With Incremental Extraction</h3>
+        <p>Liam's three symptoms have <strong>different root causes</strong>, and only one of them is a scaling problem that microservices address directly. Checkout delays come from <strong>contention and coupling</strong> (analytics, catalog reads, and checkout share one process and one database), deployment outages come from <strong>big-bang releases of a tightly coupled codebase</strong>, and overselling comes from <strong>non-atomic inventory updates</strong>, a data-integrity bug that microservices would make <em>harder</em> to fix, not easier. With an 8-person team that must keep delivering features, the best strategy is to create clean seams inside the monolith, fix inventory correctness inside one transactional boundary, and extract services only where evidence justifies the operational cost. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Fixes overselling where it belongs:</strong> Keeping checkout and inventory in one transactional boundary lets an atomic conditional update or an expiring reservation guarantee stock never goes negative. Splitting them across services would force sagas and compensation onto the single most consistency-sensitive operation in the business.</li>
+          <li><strong>Delivers value early, with low risk:</strong> Module boundaries, feature flags, and async events for analytics and notifications can ship in weeks and immediately take load off the checkout path, with no big-bang cutover.</li>
+          <li><strong>Matches the team size:</strong> Microservices bring on-call load, service-to-service auth, tracing, per-service pipelines, and data-ownership problems. Eight engineers shipping features cannot absorb that tax across five or more services at once.</li>
+          <li><strong>Extraction becomes cheap when justified:</strong> A module that already has a narrow interface, owns its tables, and talks to others through events can be lifted into a service later using the strangler fig approach, with the database split as a late step rather than the first.</li>
+          <li><strong>A proven path:</strong> Shopify is a well-known example of running a very large commerce platform as a modular monolith with enforced component boundaries rather than one service per domain.</li>
+        </ul>
+        <p>A solid plan includes <strong>atomic inventory reservation</strong> with expiry, the <strong>transactional outbox</strong> pattern for publishing events, <strong>idempotent checkout</strong> requests, <strong>module dependency checks in CI</strong>, and <strong>read models or replicas</strong> for catalog and analytics. Track oversell incidents (target: zero), checkout p95 and p99 during sales, deploy failure rate, and cross-module coupling; extract a service only when a metric shows a boundary problem that a module cannot fix.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">💥</span>
+            <h4>A — Big-Bang Microservices Rewrite</h4>
+          </div>
+          <p>A simultaneous rewrite is the highest-risk option: it slows or freezes feature delivery for months, must rediscover years of hidden business rules, and delivers no value until cutover. Synchronous service calls chain latencies and failures along the checkout path, which can make the delays worse, and two-phase commit or distributed transactions reduce availability and are poorly supported across heterogeneous services. <strong>Caveat:</strong> a rewrite can make sense for a small, well-understood, low-traffic component with clear requirements; it is a poor fit for a revenue-critical monolith.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⬆️</span>
+            <h4>B — Scale the Monolith Up</h4>
+          </div>
+          <p>Vertical scaling, replicas, caching, and query tuning are valuable <em>tactical</em> moves that should happen immediately, but as a complete strategy they leave the structural problems in place: deploy-triggered outages from coupling, contention between analytics and checkout, and a single database as the ceiling. Caching and replicas also make <strong>stale inventory reads</strong> more likely, which worsens overselling unless the decrement itself is atomic on the primary. <strong>Caveat:</strong> if traffic growth is modest and flash sales are rare, this plus a modular cleanup may be enough for a long time.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>C — Immediate Microservices With Sagas and Mesh</h4>
+          </div>
+          <p>This may be the right end state for some organizations, but it is the wrong first move for an 8-person team. It front-loads a service mesh, tracing, chaos tooling, and per-service data ownership before there is evidence about where the real boundaries are, and eventual consistency on inventory risks overselling unless reservations are modeled very carefully. The usual result is slower feature delivery and a larger operational surface exactly when the business needs stability. <strong>Caveat:</strong> with many teams, independent scaling needs, and platform engineering capacity, this approach can pay off, ideally reached incrementally.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Modular Monolith With Incremental Extraction ✓</h4>
+          </div>
+          <p>Move gradually to a modular monolith: enforce strict domain boundaries and clean interfaces inside the codebase on a shared database for now, extract modules into services only when team scale or bott</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Migration Risk</th><th>Feature Delivery During Migration</th><th>Overselling Protection</th><th>Scalability Ceiling</th><th>Operational Complexity (8-person team)</th><th>Reversibility</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Big-Bang Microservices Rewrite</td><td>Very high ❌</td><td>Poor ❌</td><td>Weak (distributed transactions) ❌</td><td>High ✅</td><td>Very high ❌</td><td>Hard ❌</td></tr>
+            <tr><td class="tt-option">B — Scale the Monolith Up</td><td>Low ✅</td><td>Good ✅</td><td>Weak (stale reads) ❌</td><td>Limited by the single database ❌</td><td>Low ✅</td><td>Easy ✅</td></tr>
+            <tr><td class="tt-option">C — Immediate Microservices + Sagas</td><td>High ❌</td><td>Poor ❌</td><td>Depends on saga design ⚠</td><td>High ✅</td><td>Very high ❌</td><td>Hard ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Modular Monolith ✓</td><td>Low ✅</td><td>Good ✅</td><td>Strong (atomic reservations) ✅</td><td>Medium, extensible ⚠</td><td>Medium ⚠</td><td>Easy ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Big-Bang Microservices Rewrite</h4>
+          </div>
+          <p>Small, well-understood components with clear specifications and low traffic, or an unmaintainable legacy platform where a funded team can run both systems in parallel for months. Rarely right for a revenue-critical monolith.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Scale the Monolith Up</h4>
+          </div>
+          <p>Early-stage products with moderate growth where the monolith is healthy, as a tactical first step before any structural change.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Immediate Microservices + Sagas</h4>
+          </div>
+          <p>Many independent teams, clearly separated domains, independent scaling needs, and an existing platform team that can run service infrastructure.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Modular Monolith</h4>
+          </div>
+          <p>Small to mid-size teams that must keep shipping, need to grow safely, and want to defer distributed-system costs until measured needs justify them.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Target Architecture: Modular Monolith With an Event Edge</h3>
+        <p>One deployable with enforced module boundaries, a transactional outbox feeding async consumers, and replicas or caches carrying read load:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    U[&quot;Shoppers&quot;] --&gt; CDN[&quot;CDN and cache for catalog pages&quot;]
+    U --&gt; GW[&quot;Load balancer&quot;]
+    subgraph MONO[&quot;Modular monolith, one deployable&quot;]
+        CAT[&quot;Catalog module&quot;]
+        CHK[&quot;Checkout module&quot;]
+        INV[&quot;Inventory module&quot;]
+        PAY[&quot;Payments module&quot;]
+        ANA[&quot;Analytics module&quot;]
+        CHK --&gt; INV
+        CHK --&gt; PAY
+    end
+    GW --&gt; CHK
+    GW --&gt; CAT
+    MONO --&gt; DB[(&quot;Primary database, schema per module&quot;)]
+    DB --&gt; REP[(&quot;Read replicas&quot;)]
+    REP --&gt; ANA
+    DB --&gt; OB[&quot;Outbox table&quot;]
+    OB --&gt; BUS[&quot;Message broker&quot;]
+    BUS --&gt; NOTIF[&quot;Notifications&quot;]
+    BUS --&gt; SRCH[&quot;Search and analytics consumers&quot;]">flowchart LR
+    U[&quot;Shoppers&quot;] --&gt; CDN[&quot;CDN and cache for catalog pages&quot;]
+    U --&gt; GW[&quot;Load balancer&quot;]
+    subgraph MONO[&quot;Modular monolith, one deployable&quot;]
+        CAT[&quot;Catalog module&quot;]
+        CHK[&quot;Checkout module&quot;]
+        INV[&quot;Inventory module&quot;]
+        PAY[&quot;Payments module&quot;]
+        ANA[&quot;Analytics module&quot;]
+        CHK --&gt; INV
+        CHK --&gt; PAY
+    end
+    GW --&gt; CHK
+    GW --&gt; CAT
+    MONO --&gt; DB[(&quot;Primary database, schema per module&quot;)]
+    DB --&gt; REP[(&quot;Read replicas&quot;)]
+    REP --&gt; ANA
+    DB --&gt; OB[&quot;Outbox table&quot;]
+    OB --&gt; BUS[&quot;Message broker&quot;]
+    BUS --&gt; NOTIF[&quot;Notifications&quot;]
+    BUS --&gt; SRCH[&quot;Search and analytics consumers&quot;]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Atomic Inventory Reservation With Idempotent Checkout</h3>
+        <p>Check-and-decrement happens in one statement, payment runs outside the database transaction, events go through an outbox, and a sweeper returns stock from abandoned carts:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">checkout</span>(cartId, userId, idempotencyKey):</span>
+<span class="line">    cached <span class="tk-op">=</span> idempotencyStore.<span class="tk-fn">get</span>(idempotencyKey)</span>
+<span class="line">    <span class="tk-kw">if</span> cached <span class="tk-op">!=</span> <span class="tk-lit">null</span>: <span class="tk-kw">return</span> cached                              <span class="tk-com">// safe client retries</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">begin</span> transaction</span>
+<span class="line">        <span class="tk-kw">for</span> item <span class="tk-kw">in</span> <span class="tk-fn">sortBySku</span>(cart.items):                       <span class="tk-com">// fixed order avoids deadlocks</span></span>
+<span class="line">            n <span class="tk-op">=</span> db.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;UPDATE inventory SET available = available - ?, reserved = reserved + ? WHERE sku = ? AND available &gt;= ?&#x27;</span>, item.qty, item.qty, item.sku, item.qty)</span>
+<span class="line">            <span class="tk-kw">if</span> n <span class="tk-op">==</span> <span class="tk-num">0</span>:</span>
+<span class="line">                rollback</span>
+<span class="line">                <span class="tk-kw">return</span> <span class="tk-fn">OutOfStock</span>(item.sku)                       <span class="tk-com">// atomic check-and-decrement: no oversell</span></span>
+<span class="line">        reservation <span class="tk-op">=</span> <span class="tk-fn">insert</span>(<span class="tk-str">&#x27;reservations&#x27;</span>, cartId, items, status <span class="tk-op">=</span> HELD, expiresAt <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">+</span> 10min)</span>
+<span class="line">    commit</span>
+<span class="line"></span>
+<span class="line">    charge <span class="tk-op">=</span> payments.<span class="tk-fn">charge</span>(userId, amount, idempotencyKey)      <span class="tk-com">// outside the DB transaction</span></span>
+<span class="line">    <span class="tk-kw">if</span> charge.ok:</span>
+<span class="line">        <span class="tk-kw">begin</span> transaction</span>
+<span class="line">            update reservation set status <span class="tk-op">=</span> CONFIRMED</span>
+<span class="line">            update inventory set reserved <span class="tk-op">=</span> reserved <span class="tk-op">-</span> qty        <span class="tk-com">// per item</span></span>
+<span class="line">            insert order</span>
+<span class="line">            insert <span class="tk-fn">outbox</span>(OrderPlaced, orderId)                   <span class="tk-com">// published by a relay, never dual-written</span></span>
+<span class="line">        commit</span>
+<span class="line">    <span class="tk-kw">else</span>:</span>
+<span class="line">        <span class="tk-fn">releaseReservation</span>(reservation)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Background sweeper: return stock from abandoned carts</span></span>
+<span class="line">every <span class="tk-num">30s</span>:</span>
+<span class="line">    <span class="tk-kw">for</span> r <span class="tk-kw">in</span> reservations where status <span class="tk-op">==</span> HELD <span class="tk-kw">and</span> expiresAt <span class="tk-op">&lt;</span> <span class="tk-fn">now</span>():</span>
+<span class="line">        <span class="tk-fn">release</span>(r)                                                <span class="tk-com">// available += qty, reserved -= qty, status = EXPIRED</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Flash-sale hot SKUs: split stock into N counters so one row is not a global lock</span></span>
+<span class="line"><span class="tk-com">//   pick counter = hash(userId) % N, and fall back to other counters when one reaches zero</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Modules in name only:</strong> Folders without enforced dependency rules let modules reach into each other's tables. Enforce visibility in CI and give each module ownership of its tables.</li>
+          <li><strong>Read-then-write inventory logic:</strong> Checking stock and then decrementing in two steps lets concurrent buyers both pass the check. Use an atomic conditional update or a reservation.</li>
+          <li><strong>Using a cached stock number for the decision:</strong> A cache or replica can display availability, but the authoritative decrement must happen on the primary.</li>
+          <li><strong>Dual write without an outbox:</strong> Writing to the database and publishing an event as two separate steps loses or duplicates events on failure. Use a transactional outbox.</li>
+          <li><strong>Ignoring hot-row contention:</strong> A flash-sale SKU turns one row into a global lock. Shard stock counters or add a waiting-room admission gate.</li>
+          <li><strong>Never defining extraction criteria:</strong> Without explicit triggers, the modular monolith becomes permanent by default, or services get extracted by fashion.</li>
+          <li><strong>Sharing tables across modules:</strong> Shared tables turn a later extraction into a data-migration project. Access another module's data only through its interface.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams <strong>fix correctness first, then isolate load, then split</strong>, with each step independently shippable:</p>
+        <ul>
+          <li><strong>Step 0 — Find the real bottlenecks:</strong> Profile checkout under flash-sale load, find lock contention and slow queries, and trace oversell incidents to the exact read-then-write race.</li>
+          <li><strong>Step 1 — Fix inventory correctness:</strong> Replace read-then-write with an atomic conditional decrement or an expiring reservation, make checkout idempotent, and add a reconciliation job.</li>
+          <li><strong>Step 2 — Take the quick tactical wins:</strong> Add read replicas for catalog and reporting, a CDN and cache for catalog pages, and tune the slowest queries (the useful part of Option B).</li>
+          <li><strong>Step 3 — Draw module boundaries:</strong> Create modules for catalog, inventory, checkout, payments, and analytics with enforced interfaces and table ownership, plus dependency checks in CI.</li>
+          <li><strong>Step 4 — Decouple non-critical flows:</strong> Publish domain events through a transactional outbox to feed notifications, analytics, and search, removing that load from the checkout transaction.</li>
+          <li><strong>Step 5 — Extract by evidence:</strong> Peel off the first candidates (analytics, notifications, catalog reads) using the strangler fig approach, keep checkout and inventory together until a measured need forces a split, and use feature flags and canaries throughout.</li>
+        </ul>
+        <p>Treat each extraction as an experiment with a success metric, not as a milestone on a roadmap.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Overselling is a <strong>data-integrity problem</strong>, checkout delay is a <strong>contention problem</strong>, and outages are a <strong>release-coupling problem</strong>; none of them requires a rewrite to fix. Build clean module boundaries, keep checkout and inventory strongly consistent in one transactional boundary, move everything non-critical to async events, and extract services only when evidence justifies the added operational cost.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

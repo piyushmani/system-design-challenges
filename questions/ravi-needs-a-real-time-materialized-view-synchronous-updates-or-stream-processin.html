@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ravi needs a real-time materialized view — synchronous updates or stream processing? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">26 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Materialized Views</span>
+      <span class="tag tag--green">Real-time Sync</span>
+      <span class="tag tag--amber">Stream Processing</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Ravi needs a real-time materialized view — synchronous updates or stream processing?</h1>
+      <p class="q-scenario"><strong>Ravi</strong> serves as a senior backend engineer for a high-traffic online retail platform. He has been tasked by the product team with architecting a real-time operational dashboard that displays order volumes, gross revenue, and conversion metrics segmented by product category and geographic region. The dashboard enforces a strict data freshness SLA of <strong>less than 2 seconds</strong> for the vast majority of queries. The underlying core ordering platform processes tens of thousands of inserts per second across region-based database shards, where checkout performance and ultra-low write latency are non-negotiable business invariants. How should Ravi maintain the materialized view (MV) for this dashboard to optimally balance scale, uptime, freshness, and operational overhead without degrading checkout performance?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A) Synchronously modify the MV within the identical transaction used to record the order. Every write operation would handle the required calculations and apply them to a centralized materialized table, ensuring strictly consistent reads at all times.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">B) Utilize Change Data Capture (CDC) to stream updates from the main database into a robust stream processing architecture (e.g., Kafka combined with Flink or ksqlDB). Execute incremental and idempotent changes to the MV, keeping it nearly real-time under an eventual consistency model.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">C) Periodically recalculate the MV using a recurring batch process (for instance, every 30 to 60 seconds) that scans new orders, performs the aggregations, and updates or completely replaces the MV, which the dashboard then queries.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">D) Implement a hybrid strategy: execute minor, synchronous MV updates locally on each shard (such as incrementing a shard-specific table during the write transaction), and deploy an asynchronous global background task to merge these localized states into a unified MV for dashboard querying.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Change Data Capture (CDC) with Stream Processing</h3>
+        <p>Option B is the industry-standard architecture for high-throughput real-time analytics on sharded systems. By reading database write-ahead logs (WAL) asynchronously via Change Data Capture (CDC) and feeding a distributed stream processor (such as Apache Flink or ksqlDB), Ravi completely isolates the latency-sensitive checkout path from analytical computation while easily beating the <strong>&lt; 2-second data freshness SLA</strong>:</p>
+        <ul>
+          <li><strong>Zero OLTP Latency Overhead:</strong> Log-based CDC (e.g., Debezium) tails the database transaction logs (WAL/binlog) asynchronously in the background. The core checkout transaction commits immediately with zero extra SQL overhead, zero table contention, and no added write latency.</li>
+          <li><strong>Sub-Second Freshness at Scale:</strong> Modern stream processing engines like Apache Flink evaluate sliding and tumbling window aggregations continuously in memory, publishing incremental updates to a serving store within 200–800ms of the database commit.</li>
+          <li><strong>Seamless Multi-Shard Aggregation:</strong> Even though the ordering database is sharded by geographic region, Kafka seamlessly fans in and unifies events across all shards into partitioned topics. Flink aggregates metrics globally across shards without requiring distributed locks or Two-Phase Commit (2PC).</li>
+          <li><strong>Idempotency and Exactly-Once Semantics:</strong> Flink's Chandy-Lamport state checkpointing paired with idempotent upserts to a fast serving layer (e.g., Redis, ClickHouse, or Apache Pinot) guarantees that network blips, consumer rebalances, or worker restarts never double-count revenue or distort metrics.</li>
+          <li><strong>Decoupled Failure Blast Radius:</strong> If the analytics pipeline, Flink cluster, or dashboard datastore experiences degraded performance or a full outage, the transactional checkout system continues processing orders with zero interruption.</li>
+        </ul>
+        <p>By extracting mutations asynchronously via the database log and offloading aggregations to a specialized stream processor, <strong>Option B</strong> provides the scale, sub-second freshness, and fault tolerance necessary to power real-time dashboards without risking checkout performance.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>A — Synchronous In-Transaction Updates</h4>
+          </div>
+          <p>Attempting to update a centralized materialized view inside the checkout transaction creates a crippling bottleneck. Under tens of thousands of inserts per second across sharded databases, updating shared aggregation counters (e.g., product/region revenue totals) forces extreme row-level lock contention and serializes transactions. Furthermore, because orders are sharded across multiple databases, updating a centralized MV requires distributed Two-Phase Commit (2PC) or cross-database network hops. <strong>Caveat:</strong> Any latency spike or lock wait directly inflates checkout response times, resulting in transaction timeouts and lost sales.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>C — Periodic Batch Recalculation (30-60s)</h4>
+          </div>
+          <p>A 30 to 60-second batch cycle directly violates the product requirement of a <strong>&lt; 2-second data freshness SLA</strong>. Furthermore, repeatedly running batch aggregation queries across tens of thousands of newly inserted rows every minute hammers the sharded OLTP databases with expensive table scans, cache churn, and CPU spikes. <strong>Caveat:</strong> Shortening the batch interval to 1–2 seconds to satisfy the SLA creates disastrous query storms, connection pool exhaustion, and overlapping batch executions that degrade transactional throughput.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>D — Shard-Local Sync Increments with Async Merge</h4>
+          </div>
+          <p>While keeping increments shard-local avoids cross-shard distributed transactions during checkout, it still forces the OLTP write path to execute synchronous secondary writes and disk I/O, inflating commit latency. More critically, deploying an ad-hoc global background merge process is essentially attempting to hand-roll a custom, unvetted stream processing engine. <strong>Caveat:</strong> Ravi's team would have to independently solve checkpointing, watermark tracking, out-of-order state reconciliation, and failover recovery—complex distributed problems that mature frameworks like Apache Flink already solve out of the box.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Change Data Capture (CDC) with Stream Processing ✓</h4>
+          </div>
+          <p>B) Utilize Change Data Capture (CDC) to stream updates from the main database into a robust stream processing architecture (e.g., Kafka combined with Flink or ksqlDB). Execute incremental and idempote</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>OLTP Write Latency</th><th>Data Freshness (&lt;2s)</th><th>Cross-Shard Scalability</th><th>Operational Simplicity</th><th>Failure Isolation</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Sync In-Transaction</td><td>❌ (High contention)</td><td>✅ (Instantaneous)</td><td>❌ (Requires 2PC / lock waits)</td><td>✅ (Single database)</td><td>❌ (Dashboard breaks checkout)</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — CDC + Stream Processing ✓</td><td>✅ (Zero WAL impact)</td><td>✅ (Sub-second latency)</td><td>✅ (Linear Kafka partitioning)</td><td>⚠ (Flink/Kafka infrastructure)</td><td>✅ (Completely decoupled)</td></tr>
+            <tr><td class="tt-option">C — Periodic Batch Recalc</td><td>✅ (No write path impact)</td><td>❌ (30-60s violates SLA)</td><td>⚠ (Scans across all shards)</td><td>✅ (Simple cron queries)</td><td>⚠ (OLTP CPU/IO spikes)</td></tr>
+            <tr><td class="tt-option">D — Shard-Local Sync + Async Merge</td><td>⚠ (Local write overhead)</td><td>⚠ (Merge lag variable)</td><td>⚠ (Custom merge bottleneck)</td><td>❌ (Complex hand-rolled engine)</td><td>⚠ (Partial write coupling)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sync In-Transaction</h4>
+          </div>
+          <p>Low-throughput systems (< 50 writes/sec) running on a single unsharded database where financial strict serializability and immediate read-your-writes consistency across views are legally required.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — CDC + Stream Processing</h4>
+          </div>
+          <p>High-throughput systems (thousands of writes/sec) with sharded or microservice architectures, where dashboards or downstream services need sub-second to low-second freshness without degrading OLTP write latency.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Periodic Batch Recalc</h4>
+          </div>
+          <p>Analytical reporting and BI dashboards where data freshness SLAs are relaxed (hourly, daily, or every 15-30 minutes) and queries involve heavy analytical joins across complete historical datasets.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Shard-Local Sync + Async Merge</h4>
+          </div>
+          <p>Resource-constrained environments where streaming infrastructure (Kafka/Flink) cannot be operated, each shard's metric counts are naturally isolated, and global rollup delays are acceptable.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Decoupled Checkout and CDC Ingestion Flow</h3>
+        <p>The fast-path checkout write commits directly to the local database shard without latency overhead, while CDC captures mutations asynchronously.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    actor Shopper
+    participant API as Checkout Service
+    participant Shard as Regional DB Shard
+    participant WAL as Write-Ahead Log (WAL)
+    participant CDC as Debezium CDC Connector
+    participant Kafka as Apache Kafka Topic
+    
+    Note over Shopper,WAL: Synchronous Checkout Path (&lt; 15ms)
+    Shopper-&gt;&gt;API: POST /checkout/orders
+    API-&gt;&gt;Shard: INSERT INTO orders (order_data)
+    Shard-&gt;&gt;WAL: Append transaction record
+    WAL--&gt;&gt;Shard: Commit durable
+    Shard--&gt;&gt;API: 201 Created (Order Placed)
+    API--&gt;&gt;Shopper: Order Confirmation OK
+    
+    Note over WAL,Kafka: Asynchronous Ingestion (Sub-second)
+    WAL-)CDC: Read commit log stream (Non-blocking)
+    CDC-&gt;&gt;Kafka: Publish OrderPlacedEvent (Key: region:product)
+    Kafka--&gt;&gt;CDC: Ack durable">sequenceDiagram
+    actor Shopper
+    participant API as Checkout Service
+    participant Shard as Regional DB Shard
+    participant WAL as Write-Ahead Log (WAL)
+    participant CDC as Debezium CDC Connector
+    participant Kafka as Apache Kafka Topic
+    
+    Note over Shopper,WAL: Synchronous Checkout Path (&lt; 15ms)
+    Shopper-&gt;&gt;API: POST /checkout/orders
+    API-&gt;&gt;Shard: INSERT INTO orders (order_data)
+    Shard-&gt;&gt;WAL: Append transaction record
+    WAL--&gt;&gt;Shard: Commit durable
+    Shard--&gt;&gt;API: 201 Created (Order Placed)
+    API--&gt;&gt;Shopper: Order Confirmation OK
+    
+    Note over WAL,Kafka: Asynchronous Ingestion (Sub-second)
+    WAL-)CDC: Read commit log stream (Non-blocking)
+    CDC-&gt;&gt;Kafka: Publish OrderPlacedEvent (Key: region:product)
+    Kafka--&gt;&gt;CDC: Ack durable</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Incremental Stream Aggregation and Idempotent View Materialization</h3>
+        <p>PyFlink streaming job consuming CDC order events, updating sliding window metrics, and idempotently sinking aggregated records into Redis.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">python</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">from</span> pyflink.datastream <span class="tk-kw">import</span> StreamExecutionEnvironment</span>
+<span class="line"><span class="tk-kw">from</span> pyflink.table <span class="tk-kw">import</span> StreamTableEnvironment</span>
+<span class="line"><span class="tk-kw">import</span> redis</span>
+<span class="line"><span class="tk-kw">import</span> json</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com"># 1. Initialize PyFlink Streaming Environment</span></span>
+<span class="line">env <span class="tk-op">=</span> StreamExecutionEnvironment.<span class="tk-fn">get_execution_environment</span>()</span>
+<span class="line">env.<span class="tk-fn">enable_checkpointing</span>(<span class="tk-num">1000</span>)  <span class="tk-com"># Checkpoint state every 1 second for fault tolerance</span></span>
+<span class="line">t_env <span class="tk-op">=</span> StreamTableEnvironment.<span class="tk-fn">create</span>(env)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com"># 2. Define Kafka CDC Source consuming Debezium JSON events</span></span>
+<span class="line">t_env.<span class="tk-fn">execute_sql</span>(<span class="tk-str">&quot;&quot;</span>&quot;</span>
+<span class="line">    CREATE TABLE <span class="tk-fn">order_cdc_stream</span> (</span>
+<span class="line">        order_id STRING,</span>
+<span class="line">        product_category STRING,</span>
+<span class="line">        region_id STRING,</span>
+<span class="line">        amount DOUBLE,</span>
+<span class="line">        order_time <span class="tk-fn">TIMESTAMP</span>(<span class="tk-num">3</span>),</span>
+<span class="line">        WATERMARK FOR order_time AS order_time <span class="tk-op">-</span> INTERVAL <span class="tk-str">&#x27;2&#x27;</span> SECOND</span>
+<span class="line">    ) <span class="tk-fn">WITH</span> (</span>
+<span class="line">        <span class="tk-str">&#x27;connector&#x27;</span> <span class="tk-op">=</span> <span class="tk-str">&#x27;kafka&#x27;</span>,</span>
+<span class="line">        <span class="tk-str">&#x27;topic&#x27;</span> <span class="tk-op">=</span> <span class="tk-str">&#x27;orders.cdc.events&#x27;</span>,</span>
+<span class="line">        <span class="tk-str">&#x27;properties.bootstrap.servers&#x27;</span> <span class="tk-op">=</span> <span class="tk-str">&#x27;kafka:9092&#x27;</span>,</span>
+<span class="line">        <span class="tk-str">&#x27;format&#x27;</span> <span class="tk-op">=</span> <span class="tk-str">&#x27;debezium-json&#x27;</span></span>
+<span class="line">    )</span>
+<span class="line"><span class="tk-str">&quot;&quot;</span>&quot;)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com"># 3. Continuous Incremental Aggregation over a 1-Minute Sliding Window</span></span>
+<span class="line">result_table <span class="tk-op">=</span> t_env.<span class="tk-fn">sql_query</span>(<span class="tk-str">&quot;&quot;</span>&quot;</span>
+<span class="line">    SELECT</span>
+<span class="line">        region_id,</span>
+<span class="line">        product_category,</span>
+<span class="line">        <span class="tk-fn">COUNT</span>(order_id) AS total_orders,</span>
+<span class="line">        <span class="tk-fn">SUM</span>(amount) AS total_revenue,</span>
+<span class="line">        window_end AS window_timestamp</span>
+<span class="line">    FROM <span class="tk-fn">TABLE</span>(</span>
+<span class="line">        <span class="tk-fn">TUMBLE</span>(TABLE order_cdc_stream, <span class="tk-fn">DESCRIPTOR</span>(order_time), INTERVAL <span class="tk-str">&#x27;5&#x27;</span> SECOND)</span>
+<span class="line">    )</span>
+<span class="line">    GROUP BY region_id, product_category, window_end</span>
+<span class="line"><span class="tk-str">&quot;&quot;</span>&quot;)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com"># 4. Idempotent Redis Sink to guarantee exactly-once view materialization</span></span>
+<span class="line"><span class="tk-kw">class</span> IdempotentRedisSink:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, host<span class="tk-op">=</span><span class="tk-str">&#x27;redis-serving&#x27;</span>, port<span class="tk-op">=</span><span class="tk-num">6379</span>):</span>
+<span class="line">        self.client <span class="tk-op">=</span> redis.<span class="tk-fn">Redis</span>(host<span class="tk-op">=</span>host, port<span class="tk-op">=</span>port, decode_responses<span class="tk-op">=</span><span class="tk-lit">True</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">write_aggregate</span>(self, region_id, product_category, total_orders, total_revenue, window_ts):</span>
+<span class="line">        <span class="tk-com"># Composite key segmenting by region and product</span></span>
+<span class="line">        redis_key <span class="tk-op">=</span> f<span class="tk-str">&quot;mv:metrics:{region_id}:{product_category}&quot;</span></span>
+<span class="line">        <span class="tk-com"># Deterministic payload ensuring idempotent overwrites across retries</span></span>
+<span class="line">        payload <span class="tk-op">=</span> {</span>
+<span class="line">            <span class="tk-str">&quot;total_orders&quot;</span>: total_orders,</span>
+<span class="line">            <span class="tk-str">&quot;total_revenue&quot;</span>: total_revenue,</span>
+<span class="line">            <span class="tk-str">&quot;last_updated&quot;</span>: <span class="tk-fn">str</span>(window_ts)</span>
+<span class="line">        }</span>
+<span class="line">        <span class="tk-com"># Atomic hash update - safe against replay and redelivery</span></span>
+<span class="line">        self.client.<span class="tk-fn">hset</span>(redis_key, mapping<span class="tk-op">=</span>payload)</span>
+<span class="line">        self.client.<span class="tk-fn">expire</span>(redis_key, <span class="tk-num">86400</span>)  <span class="tk-com"># 24-hour TTL</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Non-Idempotent Sink Updates:</strong> Relying on simple incremental operations (like Redis <code>INCRBY</code> or SQL <code>counter = counter + 1</code>). When a Flink job restarts from a checkpoint and replays events, simple increments will double-count metrics. Sinks must use versioned upserts or window-level overwrites.</li>
+          <li><strong>Processing-Time vs. Event-Time Mismatch:</strong> Grouping windowed metrics by system arrival time (processing time) instead of transaction commit time (event time). Consumer lag or network delays will misassign events to later windows, producing misleading historical metrics.</li>
+          <li><strong>Unbounded State Growth:</strong> Forgetting to configure State Time-To-Live (State TTL) on keyed stream state in Flink or ksqlDB. As millions of ephemeral products and regional keys are processed over months, embedded RocksDB storage will balloon indefinitely, exhausting node disk and memory.</li>
+          <li><strong>Table Polling Instead of Log-Based CDC:</strong> Attempting CDC by running periodic queries (e.g., <code>SELECT * WHERE updated_at &gt; :last_sync</code>) against the primary database. Polling puts heavy read strain on the OLTP database, misses deleted records, and struggles to preserve strict transaction commit ordering.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In hyper-scale retail and financial platforms (such as Amazon, Shopify, and Uber), real-time materialized views are constructed using a decoupled, event-driven streaming topology:</p>
+        <ul>
+          <li><strong>Step 1 — Log-Based Change Data Capture:</strong> Debezium connectors tail the transaction logs (e.g., PostgreSQL WAL or MySQL binary logs) of all regional order shards, capturing row-level inserts with zero query overhead on the databases.</li>
+          <li><strong>Step 2 — Partitioned Ingestion:</strong> Debezium serializes mutation events into Apache Kafka. Messages are partitioned by composite dimensions (e.g., <code>region_id:product_id</code>) to guarantee strictly ordered delivery per aggregation key.</li>
+          <li><strong>Step 3 — Stateful Stream Aggregation:</strong> An Apache Flink application consumes the Kafka topic, managing keyed state in embedded RocksDB. Flink calculates tumbling 1-minute and sliding 1-hour window aggregates (volumes, revenue, conversion rates) utilizing event-time watermarks to accommodate out-of-order records.</li>
+          <li><strong>Step 4 — Sub-Second Idempotent Sinks:</strong> Flink flushes aggregated metrics at 500ms micro-intervals to a dedicated analytical serving store (such as Redis, ClickHouse, or Apache Pinot) using deterministic key-value upserts (e.g., <code>HSET</code>) to ensure exactly-once semantics across restarts.</li>
+          <li><strong>Step 5 — High-Concurrency Dashboard Serving:</strong> The analytics dashboard queries the serving store directly via sub-10ms primary-key lookups, delivering sub-second real-time metrics without touching the transactional order databases.</li>
+        </ul>
+        <p>This pattern guarantees that the operational OLTP database remains dedicated exclusively to high-throughput checkout writes, while analytics consumers query dedicated serving views with sub-second freshness.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Never overburden transactional write paths with analytical aggregations. Use <strong>log-based Change Data Capture (CDC)</strong> paired with a <strong>stream processing engine (Flink/ksqlDB)</strong> to asynchronously materialize views, achieving sub-2-second data freshness without sacrificing checkout latency or cross-shard scalability.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

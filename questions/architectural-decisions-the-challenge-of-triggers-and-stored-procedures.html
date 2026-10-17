@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architectural Decisions: The Challenge of Triggers and Stored Procedures — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">02 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Database Triggers</span>
+      <span class="tag tag--green">Architecture</span>
+      <span class="tag tag--amber">Databases</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Architectural Decisions: The Challenge of Triggers and Stored Procedures</h1>
+      <p class="q-scenario"><strong>Alex</strong>, a software developer at an expanding e-commerce company, must keep the <strong>order processing pipeline</strong> responsive under heavy traffic. The current design relies on <strong>stored procedures and triggers</strong> that run <em>synchronously inside the order transaction</em>: when an order changes state, triggers update inventory counters, write history rows, refresh aggregates, and enqueue emails. Profiling shows that during peaks <strong>transactions hold locks for a long time</strong> and <strong>database CPU is saturated</strong>, with the time spread across many trigger side effects rather than one pathological query. Order writes dominate over reads. Alex needs the most effective strategy to keep the system responsive.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Transitioning to an asynchronous processing model utilizing message queues.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Deploying an in-memory caching solution to serve frequently requested data.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Implementing database sharding to evenly distribute the transaction workload.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Restructuring existing Stored Procedures to minimize their computational complexity.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Asynchronous Processing with Message Queues</h3>
+        <p>The root problem is structural: <strong>non-critical work runs synchronously inside the transaction</strong>, on the one resource that is hardest to scale (the primary database). Moving side effects off the critical path with a message queue shortens transactions, reduces lock hold time and database CPU, and lets the heavy work scale on cheap, stateless workers. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Shorter transactions:</strong> The request commits the essential state change (plus an outbox row) and returns. Lock hold time drops, so contention and tail latency fall exactly when load peaks.</li>
+          <li><strong>Moves CPU off the database:</strong> Trigger and procedure logic burns primary database CPU. Workers on application servers scale horizontally and independently of the database.</li>
+          <li><strong>Smooths traffic spikes:</strong> The queue buffers bursts, and workers drain it at a steady rate (queue-based load leveling) instead of letting a spike hammer the database.</li>
+          <li><strong>Isolates failures:</strong> A slow email provider or analytics refresh no longer blocks order processing. Failed jobs retry or go to a dead-letter queue instead of rolling back the order.</li>
+          <li><strong>Unlocks further evolution:</strong> Business logic moves into versioned, testable application code, which is easier to scale, deploy, and observe than triggers.</li>
+        </ul>
+        <p>Keep the <strong>minimal invariant-protecting work synchronous</strong> (valid state transition, inventory reservation if required), move everything else behind an <strong>outbox, broker, and idempotent workers</strong> pipeline, and add alerts on <strong>queue depth, consumer lag, and age of the oldest message</strong>. Retire triggers gradually: replace one side effect at a time and compare outputs.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — In-Memory Caching</h4>
+          </div>
+          <p>A cache speeds up <strong>repeated reads</strong>, but this workload is dominated by <em>state-changing writes</em> and trigger work inside transactions. Caching does not shorten those transactions or remove the locks, and it adds invalidation complexity around fast-changing order and inventory data. <strong>Caveat:</strong> it is a good addition for read-heavy paths such as order status lookups, catalog, and pricing, once the write path is healthy.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>C — Database Sharding</h4>
+          </div>
+          <p>Sharding spreads write load and can eventually raise ceilings, but it is a <strong>heavy, hard-to-reverse change</strong> that does not fix the inefficiency: each shard still runs the same synchronous triggers with the same long transactions. Cross-shard operations (inventory, reporting) also get harder, particularly when logic lives inside the database. <strong>Caveat:</strong> consider it only after the write path is lean and a single primary still cannot keep up.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🛠️</span>
+            <h4>D — Optimize Stored Procedure Complexity</h4>
+          </div>
+          <p>Tuning procedures (removing row-by-row loops, adding missing indexes, reducing round trips) is <strong>cheap, low-risk, and always worth doing</strong>, and if profiling had shown one pathological routine it would be the right first move. Here the cost is spread across many synchronous side effects, so optimization yields a constant-factor gain while the architecture still scales with database CPU and lock time. <strong>Caveat:</strong> do it as hygiene on whatever stays in the synchronous path.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Asynchronous Processing with Message Queues ✓</h4>
+          </div>
+          <p>Transitioning to an asynchronous processing model utilizing message queues.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Shortens Write Transactions</th><th>Reduces Database CPU</th><th>Handles Traffic Spikes</th><th>Implementation Complexity</th><th>Consistency Impact</th><th>Reversibility</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Async Message Queues ✓</td><td>Yes ✅</td><td>Yes ✅</td><td>Yes (buffering) ✅</td><td>Medium–High ⚠</td><td>Eventual for side effects ⚠</td><td>Moderate ⚠</td></tr>
+            <tr><td class="tt-option">B — In-Memory Cache</td><td>No ❌</td><td>Reads only ⚠</td><td>Reads only ⚠</td><td>Medium ⚠</td><td>Staleness risk ⚠</td><td>Easy ✅</td></tr>
+            <tr><td class="tt-option">C — Sharding</td><td>No ❌</td><td>Spread across nodes ⚠</td><td>Partial ⚠</td><td>Very high ❌</td><td>Cross-shard limits ❌</td><td>Very hard ❌</td></tr>
+            <tr><td class="tt-option">D — Optimize Stored Procedures</td><td>Somewhat ⚠</td><td>Somewhat ⚠</td><td>Marginal ❌</td><td>Low ✅</td><td>No change ✅</td><td>Easy ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Async Message Queues</h4>
+          </div>
+          <p>Transactions are slow because they perform many non-critical side effects, traffic is spiky, and a short delay for downstream effects is acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — In-Memory Cache</h4>
+          </div>
+          <p>Read-heavy, repeated lookups (order status, catalog, pricing) with tolerable staleness. Useful alongside, not instead of, fixing the write path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Sharding</h4>
+          </div>
+          <p>A lean write path that still exceeds one primary's capacity or storage, with data that partitions cleanly (for example by customer or region).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Optimize Stored Procedures</h4>
+          </div>
+          <p>A few hot or inefficient procedures identified by profiling (loops, missing indexes, excessive round trips), and as hygiene on whatever remains synchronous.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Before: Synchronous Trigger Chain Inside the Order Transaction</h3>
+        <p>Every side effect extends the transaction and the time locks are held:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant A as App
+    participant D as Database
+    C-&gt;&gt;A: Place or update order
+    A-&gt;&gt;D: 1. BEGIN, UPDATE orders
+    D-&gt;&gt;D: 2. Trigger: update inventory counters
+    D-&gt;&gt;D: 3. Trigger: write history rows
+    D-&gt;&gt;D: 4. Trigger: refresh aggregates
+    D-&gt;&gt;D: 5. Trigger: enqueue email
+    A-&gt;&gt;D: 6. COMMIT (locks held through steps 2 to 5)
+    A--&gt;&gt;C: Response (slow under load)">sequenceDiagram
+    participant C as Client
+    participant A as App
+    participant D as Database
+    C-&gt;&gt;A: Place or update order
+    A-&gt;&gt;D: 1. BEGIN, UPDATE orders
+    D-&gt;&gt;D: 2. Trigger: update inventory counters
+    D-&gt;&gt;D: 3. Trigger: write history rows
+    D-&gt;&gt;D: 4. Trigger: refresh aggregates
+    D-&gt;&gt;D: 5. Trigger: enqueue email
+    A-&gt;&gt;D: 6. COMMIT (locks held through steps 2 to 5)
+    A--&gt;&gt;C: Response (slow under load)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Outbox Write and Idempotent Worker</h3>
+        <p>The synchronous path keeps only invariant-protecting work and an outbox row, and an idempotent worker applies the deferred side effects:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Synchronous path: keep only what protects invariants, plus an outbox row</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">updateOrderStatus</span>(orderId, newStatus):</span>
+<span class="line">    db.transaction:</span>
+<span class="line">        order <span class="tk-op">=</span> orders.<span class="tk-fn">selectForUpdate</span>(orderId)</span>
+<span class="line">        assert <span class="tk-fn">isValidTransition</span>(order.status, newStatus)      <span class="tk-com">// state machine guard</span></span>
+<span class="line">        orders.<span class="tk-fn">update</span>(orderId, status <span class="tk-op">=</span> newStatus, version <span class="tk-op">=</span> order.version <span class="tk-op">+</span> <span class="tk-num">1</span>)</span>
+<span class="line">        outbox.<span class="tk-fn">insert</span>(eventId <span class="tk-op">=</span> <span class="tk-fn">newUuid</span>(),</span>
+<span class="line">                      type <span class="tk-op">=</span> <span class="tk-str">&quot;OrderStatusChanged&quot;</span>,</span>
+<span class="line">                      key <span class="tk-op">=</span> orderId,                            <span class="tk-com">// partition key keeps per-order ordering</span></span>
+<span class="line">                      payload <span class="tk-op">=</span> { orderId, newStatus, version <span class="tk-op">=</span> order.version <span class="tk-op">+</span> <span class="tk-num">1</span> })</span>
+<span class="line">    <span class="tk-com">// no history rows, counters, emails, or aggregates inside the transaction</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Asynchronous path: idempotent worker (at-least-once delivery)</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleOrderStatusChanged</span>(event):</span>
+<span class="line">    db.transaction:</span>
+<span class="line">        <span class="tk-kw">if</span> processedEvents.<span class="tk-fn">exists</span>(event.eventId):</span>
+<span class="line">            <span class="tk-kw">return</span>                                              <span class="tk-com">// duplicate delivery: skip safely</span></span>
+<span class="line">        history.<span class="tk-fn">insert</span>(event.orderId, event.payload.newStatus, event.payload.version)</span>
+<span class="line">        inventoryCounters.<span class="tk-fn">apply</span>(event.orderId, event.payload.newStatus)</span>
+<span class="line">        processedEvents.<span class="tk-fn">insert</span>(event.eventId)                   <span class="tk-com">// same transaction as the effect</span></span>
+<span class="line">    emailService.<span class="tk-fn">sendOnce</span>(event.eventId, event.orderId)         <span class="tk-com">// provider-level idempotency key</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Failure policy: retry with exponential backoff and jitter, then dead-letter after N attempts</span></span>
+<span class="line"><span class="tk-com">// Alerts: queue depth, age of the oldest message, dead-letter queue size, consumer lag per partition</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Moving the wrong work out:</strong> Steps that protect invariants (stock reservation, valid state transitions) may need to stay synchronous. Classify each trigger effect as critical or deferrable first.</li>
+          <li><strong>Dual-writing to the broker:</strong> Commit then publish can lose events on a crash. Use a transactional outbox.</li>
+          <li><strong>Non-idempotent consumers:</strong> At-least-once delivery will repeat messages. Without deduplication, customers get double emails and double inventory decrements.</li>
+          <li><strong>No backpressure or dead-letter handling:</strong> Poison messages block partitions, and unbounded queues hide overload as ever-growing latency. Cap retries, route failures to a dead-letter queue, and alert on message age.</li>
+          <li><strong>Losing ordering where it matters:</strong> Order state changes must apply in order per order id. Key by order id, and make handlers tolerate out-of-order delivery with state checks.</li>
+          <li><strong>A big-bang rewrite of all triggers:</strong> Migrating everything at once risks regressions. Replace one side effect at a time, run old and new in parallel, and compare results.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Strong teams <strong>profile first</strong> and treat these options as layers rather than rivals. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Profile:</strong> Find where transaction time goes (lock waits, trigger costs, slow statements) before choosing. If one procedure dominates, fix that first.</li>
+          <li><strong>Step 1 — Fix pathological hot spots:</strong> Row-by-row loops, missing indexes, and N+1 patterns inside procedures are cheap wins.</li>
+          <li><strong>Step 2 — Classify trigger effects:</strong> Critical (must stay in the transaction) versus deferrable (can happen asynchronously).</li>
+          <li><strong>Step 3 — Introduce outbox plus queue:</strong> Migrate deferrable side effects one at a time, comparing old and new outputs, the biggest win for this scenario.</li>
+          <li><strong>Step 4 — Cache read-heavy paths:</strong> Order status and catalog lookups, with explicit invalidation.</li>
+          <li><strong>Step 5 — Consider sharding last:</strong> Only when the lean write path still saturates a single primary.</li>
+        </ul>
+        <p>Shorten the transaction first, scale the data layer last.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When synchronous triggers make transactions long, <strong>shorten the transaction and move deferrable work off the database</strong>. Async processing with an outbox and idempotent workers cuts lock time and database CPU, absorbs spikes, and isolates failures. Tuning, caching, and sharding are useful but address symptoms or different bottlenecks. If profiling instead shows one pathological procedure, fix that first.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

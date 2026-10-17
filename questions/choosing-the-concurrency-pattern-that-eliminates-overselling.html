@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Choosing the Concurrency Pattern That Eliminates Overselling — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">31 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Concurrency</span>
+      <span class="tag tag--green">Oversell Prevention</span>
+      <span class="tag tag--amber">Locking</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Choosing the Concurrency Pattern That Eliminates Overselling</h1>
+      <p class="q-scenario"><strong>Nora</strong> is building the inventory service for an international retailer. Thousands of orders per second arrive from many application nodes, and each order needs an <strong>atomic stock deduction</strong> so inventory never goes negative. Latency must stay low, availability high and monitoring simple. The data tier is a <strong>single primary relational database</strong> with read replicas, and the environment is exposed to <strong>node crashes and network partitions</strong>. Each order decrements <strong>one SKU by a known quantity</strong>, and no other rows need to be examined to decide. She must choose the most scalable, consistent and simple method for stock reduction.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">&lt;code&gt;SELECT ... FOR UPDATE&lt;/code&gt; inside a transaction on the primary: lock the inventory row, check the balance, decrement and commit (pessimistic row locking).</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">A distributed lock layer (for example Redlock on Redis) acquired per SKU across all application servers before reading and decrementing, serializing operations outside the relational database.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">A single atomic conditional statement: &lt;code&gt;UPDATE inventory SET qty = qty - :amount WHERE id = :id AND qty &gt;= :amount&lt;/code&gt;, verifying that exactly one row was affected; otherwise abort (or retry transient failures). No separate lock service and no explicit pessimistic locks.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Accept orders into a message queue and return success immediately; background workers check stock and decrement asynchronously, issuing compensating refunds or cancellations when stock is insufficient.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Single Conditional UPDATE</h3>
+        <p>When the decision depends on <strong>one row and one predicate</strong>, the cheapest correct primitive is the one the database already guarantees: a <strong>single atomic statement</strong>. The row lock is taken, the condition is evaluated and the value is changed in one step, so there is no window between 'check' and 'decrement' for another order to slip into. Here's why it stands out:</p>
+        <ul>
+          <li><strong>No race window:</strong> Check and update are indivisible, so two orders competing for the last unit cannot both succeed: one sees one affected row, the other sees zero.</li>
+          <li><strong>Shortest lock hold time:</strong> The row lock lives for one statement instead of spanning several round trips (as with <code>SELECT ... FOR UPDATE</code>), which matters most on hot rows receiving thousands of orders per second.</li>
+          <li><strong>Immune to node crashes and partitions:</strong> A crashed or partitioned application node cannot corrupt stock: its transaction either committed atomically or the database rolls it back and releases the lock. There is no lease to expire.</li>
+          <li><strong>Simplest to operate:</strong> No lock service to run, monitor or fail over. The database is the only authority, and its metrics (lock waits, rows affected, latency) are the monitoring surface.</li>
+          <li><strong>Honest synchronous result:</strong> The affected-row count tells the caller immediately whether the order was fulfilled, so customers are never promised stock that does not exist.</li>
+        </ul>
+        <p>Pair the statement with an <strong>idempotency key (unique order ID in the same transaction)</strong>, <strong>retry only transient errors such as deadlocks or connection resets</strong>, and publish <strong>metrics for zero-row results, retries, latency and lock waits</strong>. Add a nightly reconciliation of orders against stock to detect drift from bugs or manual adjustments.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔐</span>
+            <h4>A — SELECT ... FOR UPDATE</h4>
+          </div>
+          <p>Also correct, because the row lock prevents concurrent modification, but it needs at least two statements and a transaction that holds the lock across application round trips. At thousands of orders per second on hot rows, longer lock hold times increase queueing and deadlock risk, and any business logic added inside the transaction extends the hold further. <strong>Caveat:</strong> the right tool when the decision reads multiple rows or applies complex rules that cannot be expressed as a single conditional UPDATE.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧷</span>
+            <h4>B — Distributed Lock (Redlock)</h4>
+          </div>
+          <p>Adds another system, more network hops and new failure modes to protect data that the database could already protect by itself. It is also unsafe as a correctness mechanism: a paused or partitioned client can resume after its lease expired and still write, and a plain database update has no fencing token to reject it. <strong>Caveat:</strong> fine for coordinating work across systems that do not share a database, ideally with fencing tokens.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📬</span>
+            <h4>D — Queue With Optimistic Success</h4>
+          </div>
+          <p>Excellent for absorbing bursts, but telling the customer 'success' <em>before</em> checking stock guarantees that some promises will be broken and then repaired with cancellations and refunds. It adds queue lag, ordering and exactly-once concerns for the workers, and it makes monitoring harder because order state is unknown for a while. <strong>Caveat:</strong> reasonable for backorder or pre-order models where 'accepted pending allocation' is a legitimate business state.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Single Conditional UPDATE ✓</h4>
+          </div>
+          <p>A single atomic conditional statement: &lt;code&gt;UPDATE inventory SET qty = qty - :amount WHERE id = :id AND qty &gt;= :amount&lt;/code&gt;, verifying that exactly one row was affected; otherwise abort (or retry t</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Oversell Prevention</th><th>Lock Hold Time</th><th>Resilience to Crashes and Partitions</th><th>Extra Infrastructure</th><th>Operational Simplicity</th><th>Customer-Facing Accuracy</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — SELECT ... FOR UPDATE</td><td>Strong ✅</td><td>Medium (spans round trips) ⚠</td><td>Good, the database releases locks on disconnect ✅</td><td>None ✅</td><td>Good ✅</td><td>Accurate ✅</td></tr>
+            <tr><td class="tt-option">B — Distributed Lock (Redlock)</td><td>Weak without fencing ❌</td><td>Long (extra hops) ❌</td><td>Lease and pause races ❌</td><td>Lock service ❌</td><td>Low ❌</td><td>Accurate only if correct ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Single Conditional UPDATE ✓</td><td>Strong ✅</td><td>Shortest ✅</td><td>Excellent ✅</td><td>None ✅</td><td>Highest ✅</td><td>Accurate ✅</td></tr>
+            <tr><td class="tt-option">D — Queue With Optimistic Success</td><td>Eventual ⚠</td><td>None in the request path ✅</td><td>Depends on workers ⚠</td><td>Queue and workers ❌</td><td>Low ❌</td><td>Broken promises possible ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — SELECT ... FOR UPDATE</h4>
+          </div>
+          <p>Decisions that read multiple rows or apply complex rules before writing, where transactions are short and contention is moderate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Distributed Lock (Redlock)</h4>
+          </div>
+          <p>Coordinating work across systems without a shared transactional store, with fencing tokens and a clear cost-benefit.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Single Conditional UPDATE</h4>
+          </div>
+          <p>Single-row counters and quotas (stock, seats, credits) in a relational database where the answer is needed synchronously.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Queue With Optimistic Success</h4>
+          </div>
+          <p>Pre-order or backorder flows and burst smoothing where orders legitimately remain 'pending allocation' for a while.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Atomic Conditional Update</h3>
+        <p>The database applies the check and the decrement in one statement and reports how many rows changed:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant A as App Node
+    participant P as Primary Database
+    participant R as Read Replica
+    A-&gt;&gt;P: UPDATE qty minus 2 where id matches and qty is at least 2
+    P-&gt;&gt;P: Take row lock, test qty, subtract, release
+    alt 1 row affected
+        P--&gt;&gt;A: Success
+        A-&gt;&gt;A: Confirm order to customer
+    else 0 rows affected
+        P--&gt;&gt;A: No rows changed
+        A-&gt;&gt;A: Report out of stock
+    end
+    P--&gt;&gt;R: Replicate change, used for display reads only">sequenceDiagram
+    participant A as App Node
+    participant P as Primary Database
+    participant R as Read Replica
+    A-&gt;&gt;P: UPDATE qty minus 2 where id matches and qty is at least 2
+    P-&gt;&gt;P: Take row lock, test qty, subtract, release
+    alt 1 row affected
+        P--&gt;&gt;A: Success
+        A-&gt;&gt;A: Confirm order to customer
+    else 0 rows affected
+        P--&gt;&gt;A: No rows changed
+        A-&gt;&gt;A: Report out of stock
+    end
+    P--&gt;&gt;R: Replicate change, used for display reads only</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Atomic Stock Deduction With Idempotency</h3>
+        <p>A single conditional UPDATE decides the order; the affected-row count drives the response, and only transient failures are retried:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">deductStock</span>(orderId, productId, amount):</span>
+<span class="line">    <span class="tk-kw">for</span> attempt <span class="tk-kw">in</span> <span class="tk-num">1</span>..<span class="tk-num">3</span>:                                      <span class="tk-com">// retry only transient failures</span></span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            <span class="tk-kw">begin</span> transaction</span>
+<span class="line">                recorded <span class="tk-op">=</span> db.<span class="tk-fn">exec</span>(&#x27;INSERT INTO <span class="tk-fn">order_deductions</span> (order_id, product_id, amount)</span>
+<span class="line">                                    <span class="tk-fn">VALUES</span> (:orderId, :productId, :amount)</span>
+<span class="line">                                    ON <span class="tk-fn">CONFLICT</span> (order_id) DO NOTHING&#x27;, ...)</span>
+<span class="line">                <span class="tk-kw">if</span> recorded <span class="tk-op">==</span> <span class="tk-num">0</span>:</span>
+<span class="line">                    commit</span>
+<span class="line">                    <span class="tk-kw">return</span> <span class="tk-fn">previousResult</span>(orderId)            <span class="tk-com">// duplicate submission</span></span>
+<span class="line"></span>
+<span class="line">                rows <span class="tk-op">=</span> db.<span class="tk-fn">exec</span>(&#x27;UPDATE inventory SET qty <span class="tk-op">=</span> qty <span class="tk-op">-</span> :amount</span>
+<span class="line">                                 WHERE id <span class="tk-op">=</span> :productId AND qty <span class="tk-op">&gt;=</span> :amount&#x27;, ...)</span>
+<span class="line"></span>
+<span class="line">                <span class="tk-kw">if</span> rows <span class="tk-op">==</span> <span class="tk-num">1</span>:</span>
+<span class="line">                    commit</span>
+<span class="line">                    <span class="tk-kw">return</span> Fulfilled</span>
+<span class="line"></span>
+<span class="line">                rollback                                      <span class="tk-com">// rows == 0: insufficient stock, insert undone</span></span>
+<span class="line">                <span class="tk-kw">return</span> OutOfStock                             <span class="tk-com">// not an error, do not retry</span></span>
+<span class="line">        <span class="tk-kw">catch</span> DeadlockDetected, SerializationFailure, ConnectionReset:</span>
+<span class="line">            <span class="tk-fn">sleep</span>(<span class="tk-fn">jitteredBackoff</span>(attempt))</span>
+<span class="line">    <span class="tk-kw">return</span> TemporaryFailure</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Display reads may use replicas; the decision above must always run on the primary.</span></span>
+<span class="line"><span class="tk-com">// Emit metrics: fulfilled, out_of_stock, retries, statement latency, row-lock wait time.</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Ignoring the affected-row count:</strong> The statement 'succeeds' even when zero rows change. Always branch on the count.</li>
+          <li><strong>Read, compute in the application, write back:</strong> This reintroduces the race. Let the database do the arithmetic and the check.</li>
+          <li><strong>Running the decision on a replica or through a lagging proxy:</strong> Writes must hit the primary, and so must reads used for decisions.</li>
+          <li><strong>No idempotency key:</strong> A retry after a timeout decrements twice. Record the order ID transactionally.</li>
+          <li><strong>Retrying the zero-row case:</strong> It is a legitimate sold-out result, and retrying wastes capacity.</li>
+          <li><strong>Ignoring the replication mode after failover:</strong> Asynchronous replicas can miss committed decrements. Use synchronous or semi-synchronous commit for inventory.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, the winning pattern is to <strong>push the invariant into the database</strong> and keep application code stateless. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — State the invariant:</strong> Stock must never be negative, and the decision for one order depends on one row.</li>
+          <li><strong>Step 1 — One conditional statement:</strong> Express the check and the decrement together and branch on the affected-row count.</li>
+          <li><strong>Step 2 — Make it idempotent:</strong> Store the order ID with the decrement in one transaction so retries and duplicate submissions are safe.</li>
+          <li><strong>Step 3 — Protect the primary:</strong> Keep decisions on the primary with synchronous or semi-synchronous replication, and use replicas for display reads.</li>
+          <li><strong>Step 4 — Monitor the database signals:</strong> Alert on lock wait time, zero-row rate, retry rate and p99 latency per SKU.</li>
+          <li><strong>Step 5 — Scale selectively:</strong> Bucket or gate only the SKUs that measurements show are hot, and reserve queues for downstream work, not for the stock decision.</li>
+        </ul>
+        <p>Let the database enforce the invariant, and keep everything else stateless.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For single-row invariants, <strong>one conditional atomic UPDATE beats explicit locks and queues</strong>: no race window, minimal lock time, no extra infrastructure and a clear synchronous result. Choose <code>SELECT ... FOR UPDATE</code> only when the decision needs multiple rows or complex logic, and use queues for work that follows the stock decision, not for the decision itself.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

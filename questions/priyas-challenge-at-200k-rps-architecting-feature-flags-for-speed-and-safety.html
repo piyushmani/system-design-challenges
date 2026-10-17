@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Priya&#x27;s Challenge at 200k RPS: Architecting Feature Flags for Speed and Safety — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">01 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Feature Flags</span>
+      <span class="tag tag--green">Throughput</span>
+      <span class="tag tag--amber">Production Safety</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Priya&#x27;s Challenge at 200k RPS: Architecting Feature Flags for Speed and Safety</h1>
+      <p class="q-scenario"><strong>Priya</strong> is designing a <strong>global microservices platform</strong> handling <strong>200k RPS</strong> across many regions. The product team needs to (a) <strong>progressively roll out</strong> features to a share of traffic (1% → 5% → 50%), (b) flip an <strong>emergency kill switch</strong> instantly, and (c) add <strong>no more than 5 ms</strong> of latency per request. Flags are evaluated <strong>synchronously on the request path</strong> and must be observable for metrics and auditing. The design must balance rollout accuracy, fault tolerance, availability, latency and telemetry.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Centralized authoritative flag service: every request synchronously calls a central, strongly consistent feature-flag API to fetch current rules. Decisions are perfectly consistent, but each request pays a network hop and depends on the latency and uptime of the central service.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Local caching with periodic updates: each service instance keeps a local cache of flags and polls the central repository every few seconds (for example 5 to 30 s). Evaluation is local, which cuts central load and per-request latency, but updates propagate slowly and rollouts can be inconsistent during ramps.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Push-based streaming with local deterministic evaluation: a control plane pushes flag updates to all instances over persistent connections (WebSockets, gRPC or SSE). Instances evaluate locally using deterministic bucketing (seeded hashes), keep versioned flags and an instant local kill switch, and log evaluations for observability.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Embed feature flags in JWTs or session tokens at login: evaluate flags once during authentication and store the result in the token so downstream systems read it without lookups. This is very fast but limits flag changes to token refresh cycles, so active sessions cannot be toggled instantly.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Push-Based Updates with Local Deterministic Evaluation</h3>
+        <p>Option C is the best fit. It separates the <strong>control plane</strong> (where flags are edited, audited and distributed) from the <strong>data plane</strong> (where flags are evaluated). Evaluation happens in-process against an in-memory snapshot, so it is effectively free, while a push channel delivers changes in well under a second. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Latency far under budget:</strong> an in-memory lookup plus one hash takes microseconds, so the 5 ms budget is untouched even at 200k RPS. No network call sits on the request path.</li>
+          <li><strong>Accurate, sticky percentage rollouts:</strong> deterministic bucketing computes <code>hash(salt + flagKey + userId) mod 10000</code> and compares it with the rollout threshold. A user in the 1% group stays enabled at 5% and 50% because the threshold only grows, and every instance reaches the same decision without coordination.</li>
+          <li><strong>Fast kill switch:</strong> a kill flag pushed over persistent connections typically reaches instances in tens to hundreds of milliseconds, instead of waiting for the next poll.</li>
+          <li><strong>Resilient to control-plane outages:</strong> instances keep evaluating their last known good snapshot (persisted locally for cold starts), so the flag service is not a tier-0 dependency of request handling.</li>
+          <li><strong>Versioned and auditable:</strong> every flag set has a monotonic version, so instances ignore stale or duplicate updates, and each evaluation can be counted against the version that produced it.</li>
+          <li><strong>Cheap telemetry:</strong> evaluations are aggregated in memory and flushed in batches, giving exposure counts per flag and variant without a synchronous write per request.</li>
+          <li><strong>Scalable distribution:</strong> regional relay proxies fan updates out to instances, so the central service does not hold every connection.</li>
+        </ul>
+        <p>Use <strong>deterministic hashing with a per-flag salt</strong>, <strong>immutable versioned snapshots swapped atomically</strong>, <strong>push with a poll fallback</strong> and <strong>batched exposure telemetry</strong>. Measure flag propagation time (publish to applied), evaluation latency and snapshot age.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>A — Central Authoritative Flag Service</h4>
+          </div>
+          <p>Every request pays a network round trip, and at 200k RPS the flag service must serve the full request rate with its own tight latency. Even a hop of a millisecond or two plus tail latency consumes much of the 5 ms budget, and the service becomes a tier-0 dependency: if it is slow or down, every request is slow or must fall back to a default. It does give perfectly consistent decisions, but consistent rollout percentages do not require a central call. <strong>Caveat:</strong> a central call is fine for low-volume back-office paths where latency and availability matter less.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⏲️</span>
+            <h4>B — Local Cache with Periodic Polling</h4>
+          </div>
+          <p>This is simple and robust, and with deterministic hashing the percentage rollout is accurate. Its weakness is speed of change: with a poll interval of 5 to 30 seconds, a kill switch can take that long to reach every instance, and instances disagree while updates propagate. Polling from many instances also creates periodic load spikes unless it is jittered. <strong>Caveat:</strong> as the fallback layer under Option C polling is exactly right, but as the primary mechanism it fails the instant kill-switch requirement.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🎟️</span>
+            <h4>D — Flags Embedded in JWT / Session Tokens</h4>
+          </div>
+          <p>Flags frozen into a token at login stay stale until it is refreshed, so a kill switch cannot reach active sessions, and ramping from 5% to 50% only affects users who authenticate again. Tokens grow with every flag, expose rollout rules to clients, do not cover anonymous traffic, and revoking tokens at scale is hard. <strong>Caveat:</strong> coarse, long-lived entitlements such as a plan tier belong in tokens, but release flags and kill switches do not.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Push-Based Updates with Local Deterministic Evaluation ✓</h4>
+          </div>
+          <p>Push-based streaming with local deterministic evaluation: a control plane pushes flag updates to all instances over persistent connections (WebSockets, gRPC or SSE). Instances evaluate locally using d</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Added Request Latency</th><th>Kill-Switch Speed</th><th>Rollout Accuracy</th><th>Control-Plane Outage Resilience</th><th>Operational Complexity</th><th>Observability</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Central Flag Service</td><td>Network hop per request ❌</td><td>Instant ✅</td><td>Exact ✅</td><td>Poor ❌</td><td>Low ✅</td><td>Centralized ✅</td></tr>
+            <tr><td class="tt-option">B — Local Cache + Polling</td><td>In-process ✅</td><td>Delayed by poll interval ❌</td><td>Good with hashing ⚠</td><td>Good ✅</td><td>Low ✅</td><td>Moderate ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Push + Local Evaluation ✓</td><td>In-process ✅</td><td>Sub-second ✅</td><td>Exact ✅</td><td>Good ✅</td><td>Medium–High ⚠</td><td>Strong ✅</td></tr>
+            <tr><td class="tt-option">D — Flags in Tokens</td><td>None ✅</td><td>Until token refresh ❌</td><td>Poor for active sessions ❌</td><td>Good ✅</td><td>Low ✅</td><td>Weak ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Central Flag Service</h4>
+          </div>
+          <p>Low-volume admin tools or entitlement checks with a generous latency budget, where perfectly fresh, centrally logged decisions matter more than speed.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Local Cache + Polling</h4>
+          </div>
+          <p>Smaller systems, or as the fallback layer under a streaming design, where flags change rarely and tens of seconds of propagation delay is acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Push + Local Evaluation</h4>
+          </div>
+          <p>High-RPS, multi-region systems with tight latency budgets, progressive delivery and a need for a fast, reliable kill switch.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Flags in Tokens</h4>
+          </div>
+          <p>Coarse user-level entitlements that change rarely, such as plan tier or beta-program membership. Not for release flags or kill switches.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Request-Path Evaluation (Data Plane)</h3>
+        <p>Evaluation reads an in-memory snapshot and hashes locally, with no network call, and only counts the exposure in a buffer:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant U as User Request
+    participant S as Service Instance
+    participant M as In-Memory Snapshot
+    participant T as Telemetry Buffer
+    U-&gt;&gt;S: Handle request
+    S-&gt;&gt;M: Read flag checkout-v2 (version 43)
+    M--&gt;&gt;S: Rollout 500 basis points, salt abc
+    S-&gt;&gt;S: bucket = hash(salt and userId) mod 10000
+    S-&gt;&gt;T: Count exposure (flag, version, variant)
+    S--&gt;&gt;U: Response (feature on if bucket is under 500)">sequenceDiagram
+    participant U as User Request
+    participant S as Service Instance
+    participant M as In-Memory Snapshot
+    participant T as Telemetry Buffer
+    U-&gt;&gt;S: Handle request
+    S-&gt;&gt;M: Read flag checkout-v2 (version 43)
+    M--&gt;&gt;S: Rollout 500 basis points, salt abc
+    S-&gt;&gt;S: bucket = hash(salt and userId) mod 10000
+    S-&gt;&gt;T: Count exposure (flag, version, variant)
+    S--&gt;&gt;U: Response (feature on if bucket is under 500)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Local Deterministic Flag Evaluation with Versioned Snapshots</h3>
+        <p>An immutable snapshot is swapped atomically on push or resync, and evaluation uses a salted stable hash so rollouts are sticky and the kill switch always wins:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">snapshot <span class="tk-op">=</span> <span class="tk-fn">atomicRef</span>(<span class="tk-fn">loadLastKnownGood</span>())          <span class="tk-com">// immutable FlagSet { version, flags }</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onStreamMessage</span>(msg):</span>
+<span class="line">    <span class="tk-kw">if</span> msg.version <span class="tk-op">&lt;=</span> snapshot.<span class="tk-fn">get</span>().version:</span>
+<span class="line">        <span class="tk-kw">return</span>                                      <span class="tk-com">// stale or duplicate update</span></span>
+<span class="line">    snapshot.<span class="tk-fn">set</span>(msg.flagSet)                       <span class="tk-com">// atomic swap, readers never see a partial update</span></span>
+<span class="line">    <span class="tk-fn">persistLastKnownGood</span>(msg.flagSet)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">isEnabled</span>(flagKey, userId, ctx):</span>
+<span class="line">    flag <span class="tk-op">=</span> snapshot.<span class="tk-fn">get</span>().flags[flagKey]</span>
+<span class="line">    <span class="tk-kw">if</span> flag <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> DEFAULT_OFF                          <span class="tk-com">// fail-safe for unknown flags</span></span>
+<span class="line">    <span class="tk-kw">if</span> flag.killed:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-lit">false</span>                                <span class="tk-com">// kill switch always wins</span></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">matchesAny</span>(ctx.attributes, flag.excludeRules):</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-lit">false</span></span>
+<span class="line"></span>
+<span class="line">    bucket <span class="tk-op">=</span> <span class="tk-fn">murmur3_32</span>(flag.salt <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> flagKey <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> userId) <span class="tk-op">%</span> <span class="tk-num">10000</span>     <span class="tk-com">// 0..9999, stable per user and flag</span></span>
+<span class="line">    enabled <span class="tk-op">=</span> bucket <span class="tk-op">&lt;</span> flag.rolloutBasisPoints      <span class="tk-com">// 100 = 1%, 500 = 5%, 5000 = 50%, threshold only grows</span></span>
+<span class="line"></span>
+<span class="line">    metrics.<span class="tk-fn">record</span>(flagKey, flag.version, enabled)  <span class="tk-com">// in-memory counter, flushed in batches</span></span>
+<span class="line">    <span class="tk-kw">return</span> enabled</span>
+<span class="line"></span>
+<span class="line">background resync:</span>
+<span class="line">    every <span class="tk-num">30s</span>, <span class="tk-kw">or</span> after any stream reconnect:</span>
+<span class="line">        update <span class="tk-op">=</span> GET <span class="tk-op">/</span>flags?sinceVersion<span class="tk-op">=</span>snapshot.<span class="tk-fn">get</span>().version        <span class="tk-com">// ETag or version based</span></span>
+<span class="line">        <span class="tk-kw">if</span> update <span class="tk-op">!=</span> <span class="tk-lit">null</span>: <span class="tk-fn">onStreamMessage</span>(update)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Random bucketing per request:</strong> users flip in and out of the feature between requests. Bucket deterministically by a stable id.</li>
+          <li><strong>Reusing one salt for every flag:</strong> the same users end up in every experiment's early cohort, correlating results and risk.</li>
+          <li><strong>Different hash implementations across services:</strong> the same user gets different answers from different languages. Share test vectors.</li>
+          <li><strong>Push without a polling fallback or version checks:</strong> a dropped connection leaves instances stale indefinitely, and out-of-order messages can roll flags back.</li>
+          <li><strong>Evaluating independently at every hop:</strong> one user journey sees the feature on in one service and off in another. Evaluate once and pass the decision along.</li>
+          <li><strong>No fail-safe defaults:</strong> a missing or unparsable flag silently turns a risky feature on.</li>
+          <li><strong>Synchronous per-request telemetry writes:</strong> the observability path then becomes the latency problem. Aggregate and flush in batches.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams treat flags as a small distributed system with a data plane and a control plane. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Classify flags:</strong> release flags, kill switches, experiments and permissions have different lifetimes and safety defaults.</li>
+          <li><strong>Step 1 — Fix the bucketing spec:</strong> algorithm, salt per flag, a stable identifier (user id or device id) and basis points, with published test vectors.</li>
+          <li><strong>Step 2 — Build the data plane:</strong> an SDK with an immutable snapshot, atomic swap, last known good copy on disk and fail-safe defaults.</li>
+          <li><strong>Step 3 — Distribution:</strong> streaming (SSE or gRPC) through regional relays, with polling fallback and bootstrap from a CDN or object store.</li>
+          <li><strong>Step 4 — Control plane:</strong> access control, approvals, an audit log, and gradual ramps with automated guardrails on error rate and latency.</li>
+          <li><strong>Step 5 — Telemetry:</strong> batched exposure events, per-flag metrics and propagation-time dashboards.</li>
+          <li><strong>Step 6 — Hygiene:</strong> flag expiry and cleanup, kill-switch drills, and chaos tests with the control plane unavailable.</li>
+        </ul>
+        <p>Keep evaluation local and deterministic, and make distribution the only networked part.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>At 200k RPS, <strong>never put the flag decision behind a network call</strong>. Distribute versioned flag data to every instance, evaluate it locally with deterministic hashing, and combine push for speed with polling for safety. That gives microsecond decisions, sticky percentage rollouts and a kill switch that works in well under a second, even when the control plane is down.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

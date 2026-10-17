@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Liam&#x27;s Flash Sale Dilemma: Scaling Up vs. Sharding Out — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">01 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Flash Sales</span>
+      <span class="tag tag--green">Horizontal vs Vertical Scaling</span>
+      <span class="tag tag--amber">Capacity Planning</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Liam&#x27;s Flash Sale Dilemma: Scaling Up vs. Sharding Out</h1>
+      <p class="q-scenario"><strong>Liam</strong> is a backend engineer at an online retailer. During <strong>flash sales</strong> the inventory service jumps from <strong>200 to 10k requests per second</strong>, saturating the primary SQL database's I/O and CPU. This causes <strong>write latency spikes</strong> and <strong>intermittent overselling</strong> despite heavy index tuning. The current setup is a monolith with a <strong>single primary writer</strong>, several <strong>read replicas</strong> and a <strong>Redis cache</strong> for queries. He must choose an architecture that <strong>eliminates oversells</strong>, fixes backend latency and reliably absorbs sudden, massive traffic spikes.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Scale the primary database vertically (more CPU, memory and faster storage), raise connection pool limits and tune indexes further. Keep the single-writer architecture and rely on application-layer autoscaling.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Keep the single-writer database but add more read replicas and a larger Redis cache. Move reporting and read queries to replicas and cache, while writes still go synchronously to the primary.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Shard the inventory write domain horizontally by product ID and make the service partition-aware and stateless. Route writes to the right shard so app instances and shards scale horizontally. Keep strong consistency within each shard and use read replicas or async replication for read-heavy traffic per shard.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Move to an eventually consistent, asynchronous write approach: process inventory decrements through a fast queue, apply the actual database updates with background workers and resolve conflicts later with compensating actions (CQRS and eventual consistency).</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Shard Inventory Writes by Product ID</h3>
+        <p>Option C is the best fit. The bottleneck is a <strong>single writer</strong> that every stock decrement must pass through. Sharding the write domain by product id gives each product exactly one authoritative owner, so a strongly consistent decrement stays simple and oversells can be prevented, while write capacity grows with the number of shards. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Attacks the real bottleneck:</strong> indexes, replicas and caches all help reads, but the saturated resource is write I/O and CPU on one primary. Splitting writes across shards scales exactly that resource horizontally.</li>
+          <li><strong>Overselling is prevented per product:</strong> all decrements for a product land on one shard leader, so a conditional update such as <code>UPDATE inventory SET available = available - qty WHERE sku = ? AND available >= qty</code> is atomic and can never go negative.</li>
+          <li><strong>No distributed transaction on the hot path:</strong> a single-item reservation touches one shard, so strong consistency is local and there is no cross-node coordination cost.</li>
+          <li><strong>Stateless, partition-aware service:</strong> app instances hold no stock state and can autoscale freely. A routing layer (hash or directory) maps each product to its shard.</li>
+          <li><strong>Reads still scale:</strong> each shard can have its own replicas and cache for display data such as in-stock badges, while the authoritative decrement stays on the leader.</li>
+          <li><strong>Failure isolation:</strong> a hot or failing shard affects only its own products, not the whole catalog.</li>
+        </ul>
+        <p>Pair the sharded design with an <strong>atomic conditional decrement</strong>, <strong>reservations with expiry</strong>, an <strong>admission gate</strong> for hot SKUs and <strong>load tests that replay flash-sale traffic</strong>. Track the oversell count (target zero), per-shard write latency and lock wait time.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏋️</span>
+            <h4>A — Scale Up Vertically</h4>
+          </div>
+          <p>A bigger primary buys headroom but has a hard ceiling and stays a single point of contention. A 10k RPS spike on a hot SKU can saturate even a very large node, and cost grows faster than capacity. It also does nothing about overselling if the decrement logic is racy. <strong>Caveat:</strong> as a short-term step before the next sale it is cheap and reversible, so it is a sensible stopgap, but not an architecture.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📚</span>
+            <h4>B — More Replicas and a Bigger Cache</h4>
+          </div>
+          <p>This helps reads, but the pain described is write saturation. Replicas lag, so stock decisions made from a replica or cache can be stale and make overselling <strong>worse</strong> during a spike. Cached counts that drift from the database become a second source of truth. <strong>Caveat:</strong> offloading reads is still good hygiene for browse and reporting traffic.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📬</span>
+            <h4>D — Async Queue with Eventual Consistency</h4>
+          </div>
+          <p>Acknowledging a decrement before the database applies it means the system can accept more orders than stock exists and then has to cancel or apologize through compensations. That directly contradicts the goal of eliminating oversells. Queues smooth write bursts well, but the authoritative stock check must happen before the customer is told yes. <strong>Caveat:</strong> a queue that serializes decrements per SKU and returns the real outcome to the caller can be strongly consistent, but that is not the fire-and-compensate design described. Businesses that accept occasional oversells and offer backorders may choose this on purpose.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Shard Inventory Writes by Product ID ✓</h4>
+          </div>
+          <p>Shard the inventory write domain horizontally by product ID and make the service partition-aware and stateless. Route writes to the right shard so app instances and shards scale horizontally. Keep str</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Oversell Prevention</th><th>Write Scalability</th><th>Hot-SKU Resilience</th><th>Read Scalability</th><th>Operational Complexity</th><th>Reversibility</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Scale Up Vertically</td><td>Unchanged ❌ (needs logic fix)</td><td>Limited (hard ceiling) ❌</td><td>Weak ❌</td><td>Moderate ⚠</td><td>Low ✅</td><td>Easy ✅</td></tr>
+            <tr><td class="tt-option">B — More Replicas and Cache</td><td>Can worsen ❌ (stale reads)</td><td>None ❌</td><td>Weak ❌</td><td>High ✅</td><td>Low ✅</td><td>Easy ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Shard by Product ID ✓</td><td>Strong ✅ (single owner per SKU)</td><td>High ✅</td><td>Needs extras ⚠</td><td>High ✅</td><td>High ❌</td><td>Hard ❌</td></tr>
+            <tr><td class="tt-option">D — Async Queue + Compensation</td><td>Weak ❌ (compensation)</td><td>High ✅</td><td>Good ✅ (queue absorbs bursts)</td><td>High ✅</td><td>High ❌</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Scale Up Vertically</h4>
+          </div>
+          <p>A quick, reversible stopgap before the next event, or when growth is moderate and the bottleneck is raw CPU or I/O rather than lock contention.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — More Replicas and Cache</h4>
+          </div>
+          <p>Read-dominated overload such as browsing, search and reporting. Not for write saturation or stock decisions.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Shard by Product ID</h4>
+          </div>
+          <p>Write saturation on a single primary where strong per-item consistency is required and the data partitions cleanly by product.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Async Queue + Compensation</h4>
+          </div>
+          <p>Stock is advisory or backorders are allowed, such as pre-orders or effectively unlimited digital goods, and absorbing peaks matters more than strict correctness.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Partition-Aware Reservation Path</h3>
+        <p>A stateless service routes each reservation to the shard that owns the product, and a conditional update decides atomically whether stock remains:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant G as Gateway and Admission Gate
+    participant S as Inventory Service
+    participant M as Shard Map
+    participant P as Shard Primary
+    participant R as Shard Replica
+    C-&gt;&gt;G: POST /reserve sku-77 qty 1
+    G-&gt;&gt;G: Rate limit and atomic gate check
+    G-&gt;&gt;S: Forward
+    S-&gt;&gt;M: Which shard owns sku-77
+    M--&gt;&gt;S: Shard 7
+    S-&gt;&gt;P: Conditional decrement, only if enough stock remains
+    alt One row updated
+        P--&gt;&gt;S: Reserved (reservation row stored, expires in 10 min)
+        S--&gt;&gt;C: 201 Reserved
+    else Zero rows updated
+        P--&gt;&gt;S: Not enough stock
+        S--&gt;&gt;C: 409 Sold out
+    end
+    P--&gt;&gt;R: Async replication (display reads only)">sequenceDiagram
+    participant C as Client
+    participant G as Gateway and Admission Gate
+    participant S as Inventory Service
+    participant M as Shard Map
+    participant P as Shard Primary
+    participant R as Shard Replica
+    C-&gt;&gt;G: POST /reserve sku-77 qty 1
+    G-&gt;&gt;G: Rate limit and atomic gate check
+    G-&gt;&gt;S: Forward
+    S-&gt;&gt;M: Which shard owns sku-77
+    M--&gt;&gt;S: Shard 7
+    S-&gt;&gt;P: Conditional decrement, only if enough stock remains
+    alt One row updated
+        P--&gt;&gt;S: Reserved (reservation row stored, expires in 10 min)
+        S--&gt;&gt;C: 201 Reserved
+    else Zero rows updated
+        P--&gt;&gt;S: Not enough stock
+        S--&gt;&gt;C: 409 Sold out
+    end
+    P--&gt;&gt;R: Async replication (display reads only)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Atomic Reservation on the Owning Shard</h3>
+        <p>The decrement is a single conditional update on the authoritative shard, reservations expire automatically, and an optional gate protects hot SKUs:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reserve</span>(sku, qty, orderId):</span>
+<span class="line">    <span class="tk-com">// Optional admission gate for hot SKUs. It is an optimization, the database stays authoritative.</span></span>
+<span class="line">    <span class="tk-kw">if</span> gate.<span class="tk-fn">enabled</span>(sku) <span class="tk-kw">and</span> redis.<span class="tk-fn">decrBy</span>(<span class="tk-str">&#x27;gate:&#x27;</span> <span class="tk-op">+</span> sku, qty) <span class="tk-op">&lt;</span> <span class="tk-num">0</span>:</span>
+<span class="line">        redis.<span class="tk-fn">incrBy</span>(<span class="tk-str">&#x27;gate:&#x27;</span> <span class="tk-op">+</span> sku, qty)</span>
+<span class="line">        <span class="tk-kw">return</span> SoldOut</span>
+<span class="line"></span>
+<span class="line">    shard <span class="tk-op">=</span> shardMap.<span class="tk-fn">lookup</span>(<span class="tk-fn">hash</span>(sku))            <span class="tk-com">// stateless routing, e.g. consistent hashing or a directory</span></span>
+<span class="line">    tx <span class="tk-op">=</span> shard.primary.<span class="tk-kw">begin</span>()</span>
+<span class="line"></span>
+<span class="line">    updated <span class="tk-op">=</span> tx.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;UPDATE inventory SET available = available - ? WHERE sku = ? AND available &gt;= ?&#x27;</span>,</span>
+<span class="line">                      qty, sku, qty)</span>
+<span class="line">    <span class="tk-kw">if</span> updated <span class="tk-op">==</span> <span class="tk-num">0</span>:</span>
+<span class="line">        tx.<span class="tk-fn">rollback</span>()</span>
+<span class="line">        <span class="tk-fn">releaseGate</span>(sku, qty)</span>
+<span class="line">        <span class="tk-kw">return</span> SoldOut                            <span class="tk-com">// cannot go negative, so no oversell</span></span>
+<span class="line"></span>
+<span class="line">    tx.<span class="tk-fn">exec</span>(<span class="tk-str">&#x27;INSERT INTO reservations(order_id, sku, qty, expires_at) VALUES (?, ?, ?, now() + 10 minutes) ON CONFLICT DO NOTHING&#x27;</span>,</span>
+<span class="line">            orderId, sku, qty)                    <span class="tk-com">// idempotent per order and SKU</span></span>
+<span class="line">    tx.<span class="tk-fn">commit</span>()                                   <span class="tk-com">// keep the transaction short: no remote calls inside</span></span>
+<span class="line">    <span class="tk-kw">return</span> Reserved</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">releaseExpired</span>(shard):                   <span class="tk-com">// periodic job on each shard</span></span>
+<span class="line">    <span class="tk-kw">in</span> transaction:</span>
+<span class="line">        rows <span class="tk-op">=</span> SELECT order_id, sku, qty FROM reservations WHERE expires_at <span class="tk-op">&lt;</span> <span class="tk-fn">now</span>() FOR UPDATE SKIP LOCKED</span>
+<span class="line">        <span class="tk-kw">for</span> r <span class="tk-kw">in</span> rows:</span>
+<span class="line">            UPDATE inventory SET available <span class="tk-op">=</span> available <span class="tk-op">+</span> r.qty WHERE sku <span class="tk-op">=</span> r.sku</span>
+<span class="line">            DELETE FROM reservations WHERE order_id <span class="tk-op">=</span> r.order_id AND sku <span class="tk-op">=</span> r.sku</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Check-then-act on stock:</strong> reading the available quantity and then updating it lets concurrent requests all pass the check. Use a conditional update and check the affected row count.</li>
+          <li><strong>Deciding from replica or cache stock:</strong> both can be stale during a spike. Only the authoritative store may say yes.</li>
+          <li><strong>Sharding without addressing the hot SKU:</strong> one popular product still maps to one shard and one hot row.</li>
+          <li><strong>Reservations without expiry:</strong> abandoned carts lock stock forever. Release automatically with a TTL.</li>
+          <li><strong>Long transactions across payment calls:</strong> holding row locks while waiting for a payment provider serializes everything behind one slow call.</li>
+          <li><strong>Never load-testing a realistic spike:</strong> the first real flash sale becomes the test.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams fix correctness first, then control demand, and only then scale the write path. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Fix correctness first:</strong> use an atomic conditional decrement, one unique reservation per order and SKU, and never trust a cache or replica for the final decision.</li>
+          <li><strong>Step 1 — Reservation model:</strong> reserve with a TTL, confirm on payment and release on timeout. It is cheaper than rolling back confirmed orders.</li>
+          <li><strong>Step 2 — Admission control:</strong> a waiting room, per-user and global rate limits, and an optional atomic counter gate in Redis. The database stays authoritative.</li>
+          <li><strong>Step 3 — Shard by product id:</strong> partition-aware stateless services, a shard map and high availability per shard.</li>
+          <li><strong>Step 4 — Hot-SKU strategy:</strong> bucketed stock or a per-SKU serialized processor for the few extreme items.</li>
+          <li><strong>Step 5 — Reads:</strong> show stock from replicas and cache labeled as approximate, and re-check at checkout.</li>
+          <li><strong>Step 6 — Load testing and autoscaling:</strong> replay a flash-sale traffic profile, alert on lock wait and p99 latency, and practice shard failover.</li>
+        </ul>
+        <p>Scale out only after the decrement logic is provably safe, otherwise you will oversell faster on more hardware.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Overselling is a <strong>consistency problem</strong> and latency spikes are a <strong>write-capacity problem</strong>. Give every product a single authoritative owner with an atomic conditional decrement, partition the write domain so capacity scales horizontally, and protect hot SKUs with admission control. Vertical scaling and read offloading only buy time, and fire-and-compensate trades correctness for throughput.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

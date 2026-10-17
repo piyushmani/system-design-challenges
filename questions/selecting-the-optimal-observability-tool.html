@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Selecting the Optimal Observability Tool — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">05 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Observability</span>
+      <span class="tag tag--green">Distributed Systems</span>
+      <span class="tag tag--amber">Architecture</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Selecting the Optimal Observability Tool</h1>
+      <p class="q-scenario"><strong>Sarah</strong>, a backend engineer designing a modern microservices architecture, is defining the platform's core observability strategy. The ecosystem comprises dozens of distributed services communicating over <code>gRPC</code>, <code>REST</code>, and asynchronous message brokers. Sarah must satisfy three critical operational imperatives: <strong>efficient troubleshooting</strong> when distributed failures occur, <strong>microsecond performance tuning</strong> across multi-hop request pathways, and <strong>continuous tracking of system health</strong> with real-time alerting. Facing choices between isolated telemetry paradigms—such as comprehensive logging, distributed request tracing, or metric-based monitoring—Sarah must determine which architectural approach ensures rapid mean time to detect (<code>MTTD</code>) and mean time to resolve (<code>MTTR</code>) without leaving critical operational blind spots.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Set up in-depth Logging across all services to record complete logs for every request and internal component communication.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Use Tracing to monitor request flows through microservices, allowing Sarah to pinpoint latency issues and performance snags.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Prioritize Monitoring by establishing real-time dashboards and alerting systems to observe crucial indicators such as errors, delays, and traffic volumes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Blend Logging, Tracing, and Monitoring solutions for a comprehensive observability strategy, despite a possible rise in operational overhead.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Unified Observability Triad: Correlated Metrics, Traces, and Logs</h3>
+        <p>In modern distributed architectures, no single telemetry pillar can satisfy the disparate demands of system health alerting, latency diagnosis, and deep forensic debugging. The three pillars of observability serve complementary, non-overlapping functions: <strong>Monitoring (Metrics)</strong> provides aggregated numerical time-series (e.g., Prometheus counters, gauges, histograms) for instant, low-overhead detection and alerting on high-level SLO/SLI golden signals (Rate, Errors, Duration); <strong>Distributed Tracing</strong> propagates contextual trace and span headers across network boundaries to construct end-to-end distributed execution graphs, pinpointing the exact microservice, database query, or network hop causing latency bottlenecks; and <strong>Structured Logging</strong> captures rich contextual event payloads, parameters, and stack traces at specific execution points to explain <em>why</em> a component failed. <strong>Blending all three solutions</strong>—and unifying them via OpenTelemetry standards where <code>trace_id</code> and <code>span_id</code> are embedded directly into structured log lines and linked to metric exemplars—creates a closed-loop diagnostic workflow: an alert triggers on a metric anomaly, the on-call engineer drills directly into the slowest trace waterfall, and inspects the exact correlated error logs emitted by the failing span. Prioritizing one at the expense of others creates critical operational blind spots that paralyze incident response.</p>
+        <ul>
+          <li><strong>Complete incident lifecycle coverage:</strong> Metrics provide immediate macroscopic detection and alerting (MTTD), distributed tracing isolates the responsible downstream component, and structured logs reveal the precise microscopic root cause (MTTR).</li>
+          <li><strong>Contextual cross-pillar correlation:</strong> Injecting W3C trace IDs into structured JSON logs and linking metrics to trace exemplars allows instantaneous bi-directional navigation between dashboards, distributed call waterfalls, and log lines.</li>
+          <li><strong>Eliminates distributed blind spots:</strong> While logs only capture intra-service events and metrics summarize fleet averages, distributed tracing tracks transactions traversing disparate protocols (HTTP, gRPC, Kafka) across asynchronous service boundaries.</li>
+          <li><strong>Optimized cost and retention tiering:</strong> Combining all three pillars allows aggressive tail-based trace sampling (capturing 100% of errors and slow requests, but only 1% of normal 200 OKs) and tiered log retention, balancing telemetry fidelity against storage costs.</li>
+          <li><strong>SLA governance and architectural discovery:</strong> Metrics track long-term SLO error budget burn rates, while tracing automatically constructs real-time service dependency topology graphs for capacity planning.</li>
+        </ul>
+        <p>Observability is not an either-or decision among logs, metrics, or traces—it is the unified synergy of all three. Investing in an integrated OpenTelemetry-based observability pipeline delivers rapid incident resolution and robust system health tracking that far outweighs the operational overhead.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📄</span>
+            <h4>A — In-Depth Logging Across All Services</h4>
+          </div>
+          <p>Relying exclusively on comprehensive logging is economically and operationally disastrous in microservices. Recording full logs for every request and internal RPC generates astronomical storage volumes, high ingestion lag, and massive disk I/O overhead. Furthermore, uncoordinated text logs lack causal ordering across asynchronous distributed boundaries—diagnosing a single request hopping across 15 microservices requires manual grepping across disparate log streams without unified latency waterfall visualizations or automated alerting.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>B — Distributed Tracing Only</h4>
+          </div>
+          <p>While distributed tracing excels at visualizing call paths and isolating latency snags across microservices, it cannot serve as a standalone observability strategy. Tracing lacks system-level resource health visibility (e.g., host CPU saturation, JVM memory leaks, network dropped packets, or disk IOPS bottlenecks). Furthermore, due to storage and network costs, tracing heavily relies on sampling (often discarding 95-99% of requests), meaning critical transient errors or specific customer payload failures may be completely missed unless detailed logs and aggregated metrics accompany them.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📊</span>
+            <h4>C — Monitoring &amp; Real-Time Alerting Only</h4>
+          </div>
+          <p>Monitoring dashboards and time-series metrics excel at alerting on high-level system indicators (errors, throughput, latency percentiles). However, metrics are aggregated numerical summaries that intentionally lack contextual cardinality. A metric can alert Sarah that p99 latency spiked from 50ms to 2.5s on the /checkout API, but it cannot explain which microservice in the downstream dependency tree stalled, which database query blocked, or what specific user inputs triggered the regression.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Unified Observability Triad: Correlated Metrics, Traces, and Logs ✓</h4>
+          </div>
+          <p>Blend Logging, Tracing, and Monitoring solutions for a comprehensive observability strategy, despite a possible rise in operational overhead.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Incident Detection Speed (MTTD)</th><th>Root Cause Diagnostics (MTTR)</th><th>Distributed Latency Pinpointing</th><th>Infrastructure Resource Visibility</th><th>Cost &amp; Storage Efficiency</th><th>Operational Simplicity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — In-Depth Logging Across All Services</td><td>Slow (Log Ingestion Lag) ❌</td><td>Detailed Local Context ✅</td><td>Poor Across Microservices ❌</td><td>Limited (App-Level Only) ⚠️</td><td>Extremely Costly / High Volume ❌</td><td>Moderate ⚠️</td></tr>
+            <tr><td class="tt-option">B — Distributed Tracing Only</td><td>Moderate (Sample Dependent) ⚠️</td><td>Missing Host/Payload Context ⚠️</td><td>Exceptional Waterfall Visuals ✅</td><td>Blind to System Resources ❌</td><td>Moderate (With Sampling) ⚠️</td><td>Moderate (SDK Wiring) ⚠️</td></tr>
+            <tr><td class="tt-option">C — Monitoring &amp; Alerting Only</td><td>Instant Real-Time Alerts ✅</td><td>Lacks Context &amp; Cardinality ❌</td><td>Blind to Call Graphs ❌</td><td>Comprehensive Fleet Metrics ✅</td><td>Extremely High Efficiency ✅</td><td>High (Simple Setup) ✅</td></tr>
+            <tr><td class="tt-option">D — Blended Triad (Logs, Traces, Metrics)</td><td>Instant via Metrics ✅</td><td>Unrivaled with Correlated Logs ✅</td><td>Complete End-to-End Spans ✅</td><td>Full Infrastructure &amp; App Health ✅</td><td>Optimized via Tiering &amp; Sampling ⚠️</td><td>Requires Governance &amp; OTel ⚠️</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — In-Depth Logging Across All Services</h4>
+          </div>
+          <p>Monolithic, single-process applications or compliance-driven audit trails where regulatory standards mandate immutable transaction logs and distributed tracing is unnecessary.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Distributed Tracing Only</h4>
+          </div>
+          <p>Complex microservices with low error rates where performance optimization, dependency mapping, and distributed latency profiling are the sole concerns.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Monitoring &amp; Alerting Only</h4>
+          </div>
+          <p>Legacy infrastructure monitoring, network equipment, or static hardware clusters where high-level resource utilization (CPU, memory, disk, network) is sufficient.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Blended Triad (Logs, Traces, Metrics)</h4>
+          </div>
+          <p>Modern distributed microservices architectures, cloud-native Kubernetes environments, and high-scale web platforms requiring comprehensive health tracking and fast incident recovery.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Unified Observability Triad Diagnostic Workflow</h3>
+        <p>The closed-loop diagnostic workflow connecting metric alert detection to distributed trace waterfall isolation and granular structured log root-cause inspection using correlated W3C trace IDs.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    autonumber
+    participant Svc as Microservice Fleet
+    participant Met as Metrics Engine (Prometheus)
+    participant Tra as Distributed Tracing (Tempo/Jaeger)
+    participant Log as Structured Logging (Loki/Elastic)
+    participant Dev as On-Call Engineer
+    Svc-&gt;&gt;Met: Emit RED Metrics (Latency, Error Rate + Trace Exemplar)
+    Svc-&gt;&gt;Tra: Emit Spans (TraceID: a1b2c3d4, Latency: 1250ms, Error: true)
+    Svc-&gt;&gt;Log: Emit JSON Log (TraceID: a1b2c3d4, Level: ERROR, Query Timeout)
+    Met-&gt;&gt;Dev: 1. Alert: p99 Latency SLO Violated on /checkout
+    Dev-&gt;&gt;Met: Inspect Dashboard &amp; Click Trace Exemplar
+    Met-&gt;&gt;Tra: 2. Jump to Trace a1b2c3d4 (Waterfalls reveals Payment Svc hung)
+    Dev-&gt;&gt;Tra: Click &#x27;View Logs for Span&#x27;
+    Tra-&gt;&gt;Log: 3. Filter Logs by TraceID: a1b2c3d4
+    Log--&gt;&gt;Dev: 4. Pinpoint Exact Root Cause: DB connection pool exhausted">sequenceDiagram
+    autonumber
+    participant Svc as Microservice Fleet
+    participant Met as Metrics Engine (Prometheus)
+    participant Tra as Distributed Tracing (Tempo/Jaeger)
+    participant Log as Structured Logging (Loki/Elastic)
+    participant Dev as On-Call Engineer
+    Svc-&gt;&gt;Met: Emit RED Metrics (Latency, Error Rate + Trace Exemplar)
+    Svc-&gt;&gt;Tra: Emit Spans (TraceID: a1b2c3d4, Latency: 1250ms, Error: true)
+    Svc-&gt;&gt;Log: Emit JSON Log (TraceID: a1b2c3d4, Level: ERROR, Query Timeout)
+    Met-&gt;&gt;Dev: 1. Alert: p99 Latency SLO Violated on /checkout
+    Dev-&gt;&gt;Met: Inspect Dashboard &amp; Click Trace Exemplar
+    Met-&gt;&gt;Tra: 2. Jump to Trace a1b2c3d4 (Waterfalls reveals Payment Svc hung)
+    Dev-&gt;&gt;Tra: Click &#x27;View Logs for Span&#x27;
+    Tra-&gt;&gt;Log: 3. Filter Logs by TraceID: a1b2c3d4
+    Log--&gt;&gt;Dev: 4. Pinpoint Exact Root Cause: DB connection pool exhausted</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> OpenTelemetry Correlated Middleware and Structured Logger</h3>
+        <p>HTTP middleware demonstrating distributed trace context propagation, metric recording, and trace-correlated structured JSON logging in a microservice.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> ObservabilityMiddleware:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, tracer, metrics_registry, logger):</span>
+<span class="line">        self.tracer <span class="tk-op">=</span> tracer</span>
+<span class="line">        self.http_duration_histogram <span class="tk-op">=</span> metrics_registry.<span class="tk-fn">create_histogram</span>(</span>
+<span class="line">            name<span class="tk-op">=</span><span class="tk-str">&quot;http_request_duration_seconds&quot;</span>,</span>
+<span class="line">            description<span class="tk-op">=</span><span class="tk-str">&quot;Latency distribution across endpoints&quot;</span></span>
+<span class="line">        )</span>
+<span class="line">        self.logger <span class="tk-op">=</span> logger</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">process_request</span>(self, request, next_handler):</span>
+<span class="line">        <span class="tk-com"># 1. Extract distributed trace context from incoming W3C HTTP headers</span></span>
+<span class="line">        parent_context <span class="tk-op">=</span> self.tracer.<span class="tk-fn">extract_context</span>(request.headers)</span>
+<span class="line">        start_time <span class="tk-op">=</span> <span class="tk-fn">clock_now</span>()</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># 2. Start a child span covering this service&#x27;s execution</span></span>
+<span class="line">        <span class="tk-kw">with</span> self.tracer.<span class="tk-fn">start_span</span>(<span class="tk-str">&quot;handle_http_request&quot;</span>, context<span class="tk-op">=</span>parent_context) <span class="tk-kw">as</span> span:</span>
+<span class="line">            trace_id <span class="tk-op">=</span> span.<span class="tk-fn">get_trace_id</span>()</span>
+<span class="line">            span_id <span class="tk-op">=</span> span.<span class="tk-fn">get_span_id</span>()</span>
+<span class="line"></span>
+<span class="line">            <span class="tk-kw">try</span>:</span>
+<span class="line">                response <span class="tk-op">=</span> <span class="tk-fn">next_handler</span>(request)</span>
+<span class="line">                duration <span class="tk-op">=</span> <span class="tk-fn">clock_now</span>() <span class="tk-op">-</span> start_time</span>
+<span class="line"></span>
+<span class="line">                <span class="tk-com"># 3. Record metric with attached trace exemplar for instant drill-down</span></span>
+<span class="line">                self.http_duration_histogram.<span class="tk-fn">record</span>(</span>
+<span class="line">                    duration,</span>
+<span class="line">                    labels<span class="tk-op">=</span>{<span class="tk-str">&quot;route&quot;</span>: request.path, <span class="tk-str">&quot;status&quot;</span>: response.status_code},</span>
+<span class="line">                    exemplar<span class="tk-op">=</span>{<span class="tk-str">&quot;trace_id&quot;</span>: trace_id}</span>
+<span class="line">                )</span>
+<span class="line">                <span class="tk-kw">return</span> response</span>
+<span class="line"></span>
+<span class="line">            <span class="tk-kw">except</span> Exception <span class="tk-kw">as</span> ex:</span>
+<span class="line">                span.<span class="tk-fn">set_status</span>(STATUS_ERROR)</span>
+<span class="line">                span.<span class="tk-fn">record_exception</span>(ex)</span>
+<span class="line"></span>
+<span class="line">                <span class="tk-com"># 4. Emit structured JSON log enriched with active trace_id and span_id</span></span>
+<span class="line">                self.logger.<span class="tk-fn">error</span>({</span>
+<span class="line">                    <span class="tk-str">&quot;message&quot;</span>: <span class="tk-str">&quot;Unhandled exception during request processing&quot;</span>,</span>
+<span class="line">                    <span class="tk-str">&quot;trace_id&quot;</span>: trace_id,</span>
+<span class="line">                    <span class="tk-str">&quot;span_id&quot;</span>: span_id,</span>
+<span class="line">                    <span class="tk-str">&quot;route&quot;</span>: request.path,</span>
+<span class="line">                    <span class="tk-str">&quot;error&quot;</span>: <span class="tk-fn">str</span>(ex),</span>
+<span class="line">                    <span class="tk-str">&quot;stack_trace&quot;</span>: ex.<span class="tk-fn">get_stack_trace</span>()</span>
+<span class="line">                })</span>
+<span class="line">                <span class="tk-kw">raise</span> ex</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Siloed telemetry without trace ID correlation:</strong> Generating logs, traces, and metrics in separate, disconnected tools without passing <code>trace_id</code> across logs and metrics, forcing engineers to manually cross-reference timestamps during outages.</li>
+          <li><strong>Neglecting trace sampling strategies:</strong> Collecting 100% of distributed traces in high-volume production systems, creating crushing network egress bills and storage exhaustion.</li>
+          <li><strong>High-cardinality label explosions in metrics:</strong> Adding dynamic strings like <code>user_id</code> or <code>request_id</code> as metric labels in Prometheus, causing exponential memory growth and scraping crashes.</li>
+          <li><strong>Failing to propagate context across async queues:</strong> Dropping trace headers when pushing messages to Kafka, RabbitMQ, or SQS, breaking distributed trace trees into fragmented, disconnected spans.</li>
+          <li><strong>Alerting on symptoms rather than SLOs:</strong> Triggering pager alerts on noisy micro-metrics (e.g., transient CPU spikes) rather than customer-impacting SLO burn rates, leading to severe alert fatigue.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Top engineering organizations (such as Netflix, Uber, and Google) design observability around unified telemetry frameworks like OpenTelemetry (OTel). Rather than operating siloed logging, metrics, and tracing stacks, modern platforms correlate telemetry at the ingestion boundary.</p>
+        <ul>
+          <li><strong>Standardize on OpenTelemetry (OTel):</strong> Deploy the OpenTelemetry Collector as a daemonset or sidecar across Kubernetes clusters to ingest, process, batch, and export metrics, traces, and logs through a vendor-agnostic pipeline.</li>
+          <li><strong>Inject trace context into structured logs:</strong> Automatically inject <code>trace_id</code> and <code>span_id</code> into all JSON application log records, enabling log analysis platforms (e.g., Grafana Loki, Datadog) to link directly to the corresponding distributed trace.</li>
+          <li><strong>Implement tail-based trace sampling:</strong> Configure trace collectors to evaluate complete request spans in memory, retaining 100% of traces containing HTTP 5xx errors or p95+ latency thresholds while down-sampling mundane 200 OK requests to 1%.</li>
+          <li><strong>Correlate metrics with trace exemplars:</strong> Attach exemplar trace IDs to Prometheus latency histograms, allowing engineers clicking on a p99 latency spike in Grafana to jump immediately to an illustrative slow request trace.</li>
+          <li><strong>Guard against high cardinality in metrics:</strong> Never inject unbound dimensions (such as user IDs, email addresses, or raw UUIDs) into metric labels; reserve high-cardinality metadata exclusively for traces and logs.</li>
+          <li><strong>Establish SLO-driven alerting:</strong> Define Service Level Objectives based on RED (Rate, Errors, Duration) metrics to alert on-call engineers only when customer-facing error budgets burn rapidly, avoiding alert fatigue.</li>
+        </ul>
+        <p>Combine metrics for instant detection, distributed traces for pinpoint isolation, and structured logs for root-cause forensics. Correlating all three via unified trace IDs transforms observability from guessing to definitive debugging.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p><strong>Observability requires the correlated triad of metrics, traces, and logs.</strong> Metrics sound the alarm, traces pinpoint the guilty service, and logs reveal the exact failure reason.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

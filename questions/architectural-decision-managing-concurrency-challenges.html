@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architectural Decision: Managing Concurrency Challenges — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">04 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Concurrency</span>
+      <span class="tag tag--green">System Design</span>
+      <span class="tag tag--amber">Locking</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Architectural Decision: Managing Concurrency Challenges</h1>
+      <p class="q-scenario"><strong>Alex</strong> is building an application that must absorb a <strong>massive number of simultaneous user requests</strong> while preserving <strong>strict data consistency</strong> (no lost updates, no invalid states) and keeping <strong>throughput as high as possible</strong>. The data lives in a transactional datastore that supports atomic conditional writes, requests mostly touch many <strong>different records</strong>, and two requests rarely update the <em>same</em> record at the same moment (<strong>low to moderate contention</strong>). Operations are short, so retrying a rejected one is cheap. Alex must choose the concurrency strategy.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Use a locking synchronization approach to guarantee consistency, even if it creates bottlenecks.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Apply version-based optimistic concurrency to permit non-blocking parallel execution, handling conflicts as they arise.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Adopt an event-driven model with async queues to decouple work, trading strict consistency for better scaling.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Create a distributed locking system to orchestrate shared resource access across nodes, increasing performance and complexity.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Version-Based Optimistic Concurrency</h3>
+        <p><strong>Optimistic concurrency control (OCC) with a version check</strong> is the best fit. Requests proceed in parallel without holding locks, and each write includes the version it read. The database applies the write only if the version is unchanged; if another request got there first, the write is rejected and retried. No update is ever silently lost, so consistency stays strict, while the common no-conflict case runs at full speed. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Consistency is preserved:</strong> The conditional write (<code>UPDATE ... WHERE id = ? AND version = ?</code>) is atomic, so conflicting writers cannot both succeed. A losing writer must re-read and retry, which yields the same end state as running the two updates one after the other.</li>
+          <li><strong>No blocking on the common path:</strong> Readers and writers do not wait for locks, so there are no lock queues, convoy effects or deadlocks on uncontended records, and throughput scales with the number of concurrent requests.</li>
+          <li><strong>Cheap to implement and operate:</strong> A version column (or an ETag, or a conditional write in a key-value store) is enough. There is no lock service to run and no lock-expiry logic to get wrong.</li>
+          <li><strong>Works across stateless instances:</strong> Because the check lives in the datastore, any application server can apply it, which fits horizontally scaled services.</li>
+          <li><strong>Why not locking first?</strong> Locks guarantee consistency too, but they serialize access, hold resources while waiting and risk deadlocks. When conflicts are rare, that cost buys almost nothing.</li>
+          <li><strong>Broad adoption:</strong> JPA and Hibernate <code>@Version</code>, HTTP <code>ETag</code> with <code>If-Match</code>, DynamoDB conditional writes and compare-and-swap loops in lock-free data structures all use the same idea.</li>
+        </ul>
+        <p>A solid implementation uses an <strong>atomic conditional write</strong>, <strong>bounded retries with jittered backoff</strong>, <strong>side effects after commit</strong>, and a <strong>fallback to pessimistic locking or per-key serialization for hot records</strong>. Track the conflict rate and retry count: a rising conflict rate is the signal that contention has outgrown OCC.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Locking</h4>
+          </div>
+          <p>Locks provide strong consistency, but threads or transactions wait in line, so throughput falls as concurrency rises, and lock-ordering mistakes lead to deadlocks. The requirement is maximum throughput, and locking everything uniformly makes that impossible. <strong>Caveat:</strong> pessimistic locks (for example <code>SELECT ... FOR UPDATE</code>) are the right tool for genuinely hot records where optimistic retries would thrash.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📨</span>
+            <h4>C — Event-Driven Async Queues</h4>
+          </div>
+          <p>Queues decouple producers from consumers and scale well, but this option explicitly trades away strict consistency: state is updated later, readers can see stale data, and the caller does not get an immediate, consistent answer. That conflicts with the stated requirement. <strong>Caveat:</strong> routing writes for one key through a partitioned queue (a single-writer-per-key design) can deliver consistency and throughput for hot keys, at the cost of latency and complexity.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>D — Distributed Locking</h4>
+          </div>
+          <p>A distributed lock (Redis, ZooKeeper, etcd) coordinates access across nodes but adds a network round trip to every operation, a new failure mode (lock service outage, expired leases) and subtle correctness hazards: a paused client can act after its lease expired, so safe use requires fencing tokens. It increases both latency and complexity compared with a conditional write in the datastore. <strong>Caveat:</strong> it is justified when the protected resource has no atomic conditional operation of its own, such as coordinating work across external systems.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Version-Based Optimistic Concurrency ✓</h4>
+          </div>
+          <p>Apply version-based optimistic concurrency to permit non-blocking parallel execution, handling conflicts as they arise.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Strict Consistency</th><th>Throughput (Low Contention)</th><th>Throughput (High Contention)</th><th>Deadlock / Blocking Risk</th><th>Implementation Complexity</th><th>Cross-Node Suitability</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Locking</td><td>Strong ✅</td><td>Moderate (lock waits) ⚠</td><td>Predictable but serialized ⚠</td><td>Deadlocks and waits ❌</td><td>Medium ⚠</td><td>Single database or node ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Optimistic Concurrency ✓</td><td>Strong (conflicts detected) ✅</td><td>High ✅</td><td>Low (retry storms) ❌</td><td>None (no locks held) ✅</td><td>Low–Medium ✅</td><td>Good (check lives in the datastore) ✅</td></tr>
+            <tr><td class="tt-option">C — Async Queues</td><td>Eventual ❌</td><td>High ✅</td><td>High ✅</td><td>Low ✅</td><td>Medium–High ⚠</td><td>Good ✅</td></tr>
+            <tr><td class="tt-option">D — Distributed Locking</td><td>Strong if fenced ⚠</td><td>Low–Moderate (extra round trips) ⚠</td><td>Low (global serialization) ❌</td><td>Lease expiry and deadlock risk ❌</td><td>High ❌</td><td>Yes, by design ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Locking</h4>
+          </div>
+          <p>Contention is high on specific records, critical sections are short, and the lock can be held in the same database (for example <code>SELECT ... FOR UPDATE</code> on account rows).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Optimistic Concurrency</h4>
+          </div>
+          <p>Many requests touch different records, conflicts are rare, and operations are short enough that a retry is cheap: typical CRUD, profile edits, document updates and cart updates.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Async Queues</h4>
+          </div>
+          <p>Work that tolerates delay and eventual consistency: notifications, analytics, fan-out, background processing, or per-key serialization for hot entities.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Distributed Locking</h4>
+          </div>
+          <p>Coordinating exclusive access to a resource that has no atomic conditional operation of its own (leader election, singleton scheduled jobs, external system access), with fencing tokens and short leases.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Optimistic Concurrency with Version Check</h3>
+        <p>Two requests read the same version. Only the first conditional write succeeds, and the second detects the conflict and retries:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant A as Request A
+    participant B as Request B
+    participant D as Database
+    A-&gt;&gt;D: 1. Read row (version 5)
+    B-&gt;&gt;D: 2. Read row (version 5)
+    A-&gt;&gt;D: 3. UPDATE where version = 5, set version 6
+    D--&gt;&gt;A: 4. 1 row updated, success
+    B-&gt;&gt;D: 5. UPDATE where version = 5, set version 6
+    D--&gt;&gt;B: 6. 0 rows updated, conflict
+    B-&gt;&gt;D: 7. Re-read row (version 6)
+    B-&gt;&gt;D: 8. UPDATE where version = 6, set version 7
+    D--&gt;&gt;B: 9. 1 row updated, success">sequenceDiagram
+    participant A as Request A
+    participant B as Request B
+    participant D as Database
+    A-&gt;&gt;D: 1. Read row (version 5)
+    B-&gt;&gt;D: 2. Read row (version 5)
+    A-&gt;&gt;D: 3. UPDATE where version = 5, set version 6
+    D--&gt;&gt;A: 4. 1 row updated, success
+    B-&gt;&gt;D: 5. UPDATE where version = 5, set version 6
+    D--&gt;&gt;B: 6. 0 rows updated, conflict
+    B-&gt;&gt;D: 7. Re-read row (version 6)
+    B-&gt;&gt;D: 8. UPDATE where version = 6, set version 7
+    D--&gt;&gt;B: 9. 1 row updated, success</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Optimistic Update with Bounded Retries</h3>
+        <p>A compare-and-set update with a version column, jittered backoff and a bounded retry count. Side effects run only after the commit, and hot counters use a single atomic statement instead:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">MAX_ATTEMPTS <span class="tk-op">=</span> <span class="tk-num">5</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">updateWithOptimisticLock</span>(id, mutate):</span>
+<span class="line">    <span class="tk-kw">for</span> attempt <span class="tk-kw">in</span> <span class="tk-num">1</span> .. MAX_ATTEMPTS:</span>
+<span class="line">        row <span class="tk-op">=</span> db.<span class="tk-fn">queryOne</span>(<span class="tk-str">&#x27;SELECT id, balance, version FROM accounts WHERE id = ?&#x27;</span>, id)</span>
+<span class="line">        updated <span class="tk-op">=</span> <span class="tk-fn">mutate</span>(row)                               <span class="tk-com">// pure function: no side effects in here</span></span>
+<span class="line"></span>
+<span class="line">        affected <span class="tk-op">=</span> db.<span class="tk-fn">execute</span>(</span>
+<span class="line">            <span class="tk-str">&#x27;UPDATE accounts SET balance = ?, version = version + 1 WHERE id = ? AND version = ?&#x27;</span>,</span>
+<span class="line">            updated.balance, id, row.version)               <span class="tk-com">// atomic compare-and-set</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-kw">if</span> affected <span class="tk-op">==</span> <span class="tk-num">1</span>:</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">Success</span>(updated)                         <span class="tk-com">// we won: safe to publish events or send emails now</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// Another request committed first: back off briefly, then re-read and retry</span></span>
+<span class="line">        <span class="tk-fn">sleep</span>(<span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-num">10ms</span> <span class="tk-op">*</span> <span class="tk-num">2</span>^attempt))                  <span class="tk-com">// jittered exponential backoff</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">Conflict</span>()                                       <span class="tk-com">// surface as HTTP 409 or 412, never loop forever</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">withdraw</span>(id, amount):</span>
+<span class="line">    result <span class="tk-op">=</span> <span class="tk-fn">updateWithOptimisticLock</span>(id, row <span class="tk-op">=&gt;</span></span>
+<span class="line">        <span class="tk-kw">if</span> row.balance <span class="tk-op">&lt;</span> amount:</span>
+<span class="line">            <span class="tk-kw">throw</span> InsufficientFunds</span>
+<span class="line">        <span class="tk-kw">return</span> row.<span class="tk-kw">with</span>(balance <span class="tk-op">=</span> row.balance <span class="tk-op">-</span> amount))</span>
+<span class="line">    <span class="tk-kw">if</span> result is Success:</span>
+<span class="line">        outbox.<span class="tk-fn">publish</span>(<span class="tk-fn">WithdrawalCompleted</span>(id, amount))     <span class="tk-com">// side effects only after the commit</span></span>
+<span class="line">    <span class="tk-kw">return</span> result</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Hot-record fallback: one atomic statement, no read-modify-write cycle</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">decrementHotCounter</span>(sku):</span>
+<span class="line">    <span class="tk-kw">return</span> db.<span class="tk-fn">execute</span>(<span class="tk-str">&#x27;UPDATE stock SET qty = qty - 1 WHERE sku = ? AND qty &gt; 0&#x27;</span>, sku) <span class="tk-op">==</span> <span class="tk-num">1</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Check-then-write without atomicity:</strong> Reading the version in one step and updating in another allows a race. The version comparison must be part of the same atomic write (<code>WHERE version = ?</code>), and you must check the affected-row count.</li>
+          <li><strong>Unbounded immediate retries:</strong> Under contention, tight retry loops amplify load. Cap attempts and add jittered backoff.</li>
+          <li><strong>Using OCC on hot rows:</strong> A single counter updated by thousands of requests will mostly fail. Use atomic increments, row locks or sharded counters.</li>
+          <li><strong>Side effects before commit:</strong> Sending notifications or charging payments inside the retry loop repeats them. Perform side effects after a successful commit (or via an outbox).</li>
+          <li><strong>Ignoring write skew:</strong> Per-row versions do not protect rules that span multiple rows. Use serializable isolation or lock and verify the full set.</li>
+          <li><strong>Swallowing conflicts:</strong> Dropping a failed update silently loses user intent. Surface a conflict (409 or 412) or merge deliberately.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, systems <strong>pick the concurrency mechanism per workload and per record type</strong> rather than one mechanism for everything. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Measure contention:</strong> Find which records are hot and how often two writers collide. The contention rate drives the choice.</li>
+          <li><strong>Step 1 — Optimistic version checks by default:</strong> Add a version column or use conditional writes for ordinary entities (the best fit for this scenario).</li>
+          <li><strong>Step 2 — Atomic operations where possible:</strong> Use <code>UPDATE ... SET qty = qty - 1 WHERE qty > 0</code> or atomic increments instead of read-modify-write cycles.</li>
+          <li><strong>Step 3 — Pessimistic locks or single-writer partitions for hot rows:</strong> Counters, the stock of a hot SKU, or balances under heavy contention.</li>
+          <li><strong>Step 4 — Queues for work that tolerates delay:</strong> Offload non-critical, order-insensitive work to asynchronous processing, keeping the strongly consistent core small.</li>
+          <li><strong>Step 5 — Distributed locks only when nothing else works:</strong> Use fencing tokens, short leases and a design that stays correct even if the lock is lost.</li>
+        </ul>
+        <p>Default to the cheapest mechanism that preserves the invariant, and escalate only where measurements show conflicts.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When you need <strong>strict consistency and maximum throughput</strong> and conflicts are uncommon, use <strong>version-based optimistic concurrency</strong>: parallel, lock-free execution with an atomic conflict check and retry. Escalate to pessimistic locks or per-key serialization for hot records, and treat queues and distributed locks as special-purpose tools rather than the default.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

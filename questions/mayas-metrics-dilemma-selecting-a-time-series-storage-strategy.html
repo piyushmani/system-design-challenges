@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya&#x27;s Metrics Dilemma: Selecting a Time-Series Storage Strategy — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">30 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Time-Series</span>
+      <span class="tag tag--green">Metrics</span>
+      <span class="tag tag--amber">Architecture</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya&#x27;s Metrics Dilemma: Selecting a Time-Series Storage Strategy</h1>
+      <p class="q-scenario"><strong>Maya</strong>, a backend architect, is building a <strong>multi-tenant telemetry platform</strong> that ingests <strong>100k samples per second</strong> across <strong>500 tenants</strong>. Raw data is kept for <strong>90 days</strong> and aggregated data for <strong>one year</strong>. Queries range from <strong>sub-second real-time dashboards</strong> on recent data to <strong>large analytical scans</strong> that may run for minutes or hours. The SLOs are <strong>99.95% read availability</strong> for dashboards, <strong>99.9% write availability</strong>, and <strong>under 5 seconds</strong> for standard aggregates. Telemetry is <em>append-only</em> (samples are never updated), and dashboards that trail reality by a few seconds are acceptable. At this rate the raw tier alone holds about <strong>778 billion samples</strong> (100k &times; 86,400 s &times; 90 days), so cost matters. She must choose the data model and storage architecture that best balances ingestion throughput, query latency, availability, consistency and cost.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Deploy a single managed relational database (like Postgres) utilizing time-based partitioning and indexes (partitioning by day, using B-tree for time and GIN for tags). Perform synchronous writes via a transactional API to maintain strong consistency, and depend on read replicas to scale query processing.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Implement a hybrid, append-only architecture: capture/accept samples locally, remote-write into a durable message queue (such as Kafka), then stream into a distributed, write-optimized TSDB (hot store) for recent data, alongside a columnar/cold store (like ClickHouse or object storage with an OLAP engine) for long-term queries. Partition by tenant/time, execute asynchronous downsampling and compaction, and prioritize eventual consistency to boost availability and throughput.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Operate a CP-oriented distributed TSDB featuring synchronous replication for all writes (majority quorum) to ensure all nodes share a strongly consistent view. Maintain all data within this single distributed cluster, relying on its built-in compaction and retention policies.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Establish dedicated per-tenant clusters (one distinct TSDB instance for each tenant) on containerized VMs for strict data isolation. Scale the system by spinning up new tenant clusters and perform cross-cluster queries for aggregated analytics.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Hybrid Queue + Hot/Cold Storage</h3>
+        <p>Telemetry is <strong>append-only, write-heavy, time-ordered and tolerant of seconds of lag</strong>. The hybrid architecture is the only option that matches storage to that shape: a <strong>durable queue</strong> absorbs bursts and decouples ingestion from storage, a <strong>hot TSDB</strong> serves recent dashboards in sub-second time, and a <strong>compressed columnar/cold tier</strong> makes 90 days of raw data and a year of rollups affordable. Each layer is scaled and tuned for exactly one job. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Ingestion throughput and burst absorption:</strong> 100k samples/s at roughly 100 bytes each is only about 10 MB/s, trivial for a replicated Kafka topic. Storage nodes can restart, rebalance or fall behind without dropping samples or pushing back on producers, and consumers write in the large batches that TSDBs and columnar engines are built for.</li>
+          <li><strong>Query latency by tier:</strong> The last hours or days live in a small hot store, so dashboards stay sub-second. Wide scans go to the columnar tier, which uses compression and vectorized execution. Long analytics can no longer starve dashboards because the two workloads run on different hardware.</li>
+          <li><strong>Cost control:</strong> At 50&ndash;100 bytes per row (including indexes), 778 billion samples would need roughly 40&ndash;80 TB in a row store. TSDB and columnar codecs (delta, Gorilla-style, ZSTD) commonly reach a few bytes per sample, so the same data fits in low single-digit TB depending on cardinality, with cold data on cheap object storage.</li>
+          <li><strong>Availability:</strong> The write path depends only on the queue being up, and each read tier fails independently. Because samples are immutable, eventual consistency costs nothing, and avoiding synchronous cross-node coordination is what makes the 99.9% write and 99.95% read SLOs realistic.</li>
+          <li><strong>Tenant fairness at 500 tenants:</strong> Per-tenant quotas at the gateway, per-tenant query limits, and partitioning by tenant/time keep one noisy tenant from degrading the others without paying for 500 separate clusters.</li>
+        </ul>
+        <p>Make every stage <strong>idempotent</strong> (dedupe on tenant + series + timestamp) so queue replays are harmless, and track <strong>consumer lag</strong>, <strong>ingest-to-visible latency</strong>, <strong>per-tenant cardinality</strong> and <strong>hot-store query p99</strong>. If those stay healthy, the extra tiers are paying for themselves.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🐘</span>
+            <h4>A — Single Relational Database (Postgres)</h4>
+          </div>
+          <p>Time partitioning helps retention (drop a partition) and pruning, but <strong>synchronous per-sample transactional writes</strong> with a B-tree and a GIN index on tags make every insert expensive (GIN maintenance in particular). Row storage carries per-row overhead, so 90 days of raw data lands in the tens of TB and analytics scans are slow. Read replicas scale reads only: there is still <strong>one primary</strong> absorbing 100k writes/s, and replicas add lag. Strong consistency buys nothing for immutable samples. <strong>Caveat:</strong> at a few thousand samples/s with short retention, Postgres (or TimescaleDB) is an excellent, simple choice.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>C — CP Distributed TSDB with Synchronous Quorum Writes</h4>
+          </div>
+          <p>Linearizable writes protect against problems this workload does not have. Every write waits for a majority, which raises write latency, and a node in the minority during a partition <strong>rejects writes</strong>, directly threatening the 99.9% write SLO. Keeping all 90 days of raw data on the same replicated hot nodes is the most expensive layout, and heavy analytics compete with dashboards for the same CPU and disk. <strong>Caveat:</strong> CP stores are the right choice for state that needs linearizability (alert state, billing ledgers), not for bulk metrics.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏢</span>
+            <h4>D — Per-Tenant Clusters</h4>
+          </div>
+          <p>Isolation is excellent, but the average tenant sends only <strong>~200 samples/s</strong> (100k / 500). Giving each a highly available cluster (3+ nodes) means 1,500+ mostly idle nodes, and upgrades, monitoring, backups and capacity planning are multiplied by 500. Cross-cluster aggregate queries are slow and fragile, and skewed tenants still need their own scaling work. <strong>Caveat:</strong> dedicated clusters make sense as a premium tier for a handful of regulated or very large tenants, alongside a shared pool.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Hybrid Queue + Hot/Cold Storage ✓</h4>
+          </div>
+          <p>Implement a hybrid, append-only architecture: capture/accept samples locally, remote-write into a durable message queue (such as Kafka), then stream into a distributed, write-optimized TSDB (hot store</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Ingestion Throughput</th><th>Recent-Query Latency</th><th>Long-Range Analytics Cost</th><th>Write Availability</th><th>Operational Complexity</th><th>Tenant Isolation vs Efficiency</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Single Postgres</td><td>Low (indexes, sync commits) ❌</td><td>Good until data grows ⚠</td><td>Very high ❌</td><td>Medium (one primary) ⚠</td><td>Low ✅</td><td>Weak (shared tables) ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Hybrid Queue + Hot/Cold ✓</td><td>Very high ✅</td><td>Sub-second on hot tier ✅</td><td>Low (compressed cold tier) ✅</td><td>High (queue buffers) ✅</td><td>High ⚠</td><td>Good (quotas + partitioning) ✅</td></tr>
+            <tr><td class="tt-option">C — CP TSDB, Sync Quorum</td><td>Medium (quorum per write) ⚠</td><td>Good ✅</td><td>High (hot nodes hold everything) ❌</td><td>Reduced under partitions ⚠</td><td>Medium ⚠</td><td>Shared cluster ⚠</td></tr>
+            <tr><td class="tt-option">D — Per-Tenant Clusters</td><td>High per tenant ✅</td><td>Good ✅</td><td>High (500 mostly idle clusters) ❌</td><td>High per tenant, but ops risk ⚠</td><td>Very high ❌</td><td>Excellent isolation, poor efficiency ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Postgres</h4>
+          </div>
+          <p>Small scale (up to a few thousand samples/s), short retention, a team that already runs Postgres, and a need for relational joins with metadata. TimescaleDB-style extensions stretch this further.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Hybrid Queue + Hot/Cold</h4>
+          </div>
+          <p>Sustained high ingest, mixed real-time and analytical queries, long retention with cost pressure, and a need for burst tolerance and tenant fairness, as in this scenario.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — CP TSDB, Sync Quorum</h4>
+          </div>
+          <p>Smaller volumes of data where linearizable reads and no acknowledged-write loss matter (alert state, billing events, configuration), not bulk metrics.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Per-Tenant Clusters</h4>
+          </div>
+          <p>A handful of tenants with regulatory, data-residency or extreme-scale requirements, offered as a premium tier next to a shared multi-tenant pool.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Hybrid Telemetry Pipeline</h3>
+        <p>Samples flow through a durable queue into a hot store and a cold store; a query router picks the right tier by time range and resolution:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    P[Agents and Exporters] --&gt;|remote write| G[Ingest Gateway - auth and tenant quotas]
+    G --&gt; K[(Kafka - partitioned by tenant and series hash)]
+    K --&gt; H[Hot Writer - batched idempotent inserts]
+    K --&gt; C[Cold Writer - columnar or Parquet batches]
+    H --&gt; HS[(Hot TSDB - last 1 to 3 days)]
+    C --&gt; CS[(Columnar or Object Storage - 90 days raw)]
+    CS --&gt; D[Downsampler - 1m, 5m, 1h rollups]
+    D --&gt; RS[(Rollup Tables - 1 year)]
+    U[Dashboards] --&gt; QR[Query Router]
+    A[Analytics] --&gt; QR
+    QR --&gt; HS
+    QR --&gt; CS
+    QR --&gt; RS">flowchart LR
+    P[Agents and Exporters] --&gt;|remote write| G[Ingest Gateway - auth and tenant quotas]
+    G --&gt; K[(Kafka - partitioned by tenant and series hash)]
+    K --&gt; H[Hot Writer - batched idempotent inserts]
+    K --&gt; C[Cold Writer - columnar or Parquet batches]
+    H --&gt; HS[(Hot TSDB - last 1 to 3 days)]
+    C --&gt; CS[(Columnar or Object Storage - 90 days raw)]
+    CS --&gt; D[Downsampler - 1m, 5m, 1h rollups]
+    D --&gt; RS[(Rollup Tables - 1 year)]
+    U[Dashboards] --&gt; QR[Query Router]
+    A[Analytics] --&gt; QR
+    QR --&gt; HS
+    QR --&gt; CS
+    QR --&gt; RS</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Tenant-Guarded Ingest, Idempotent Consumer and Tier-Aware Query Router</h3>
+        <p>The gateway protects the store from noisy tenants, the consumer makes replays harmless, and the router sends each query to exactly one authoritative tier:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Ingest gateway ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleRemoteWrite</span>(tenantId, samples):</span>
+<span class="line">    limits <span class="tk-op">=</span> quotaStore.<span class="tk-fn">get</span>(tenantId)</span>
+<span class="line">    <span class="tk-kw">if</span> rateLimiter.<span class="tk-fn">exceeded</span>(tenantId, <span class="tk-fn">count</span>(samples), limits.samplesPerSec):</span>
+<span class="line">        <span class="tk-kw">return</span> HTTP <span class="tk-num">429</span>                                    <span class="tk-com">// back-pressure only the noisy tenant</span></span>
+<span class="line">    <span class="tk-kw">if</span> cardinalityGuard.<span class="tk-fn">newSeries</span>(tenantId, samples) <span class="tk-op">+</span> <span class="tk-fn">activeSeries</span>(tenantId) <span class="tk-op">&gt;</span> limits.maxActiveSeries:</span>
+<span class="line">        <span class="tk-kw">return</span> HTTP <span class="tk-num">422</span>                                    <span class="tk-com">// protect indexes from label explosions</span></span>
+<span class="line">    <span class="tk-kw">for</span> batch <span class="tk-kw">in</span> <span class="tk-fn">chunk</span>(samples, <span class="tk-num">5000</span>):</span>
+<span class="line">        kafka.<span class="tk-fn">produce</span>(<span class="tk-str">&#x27;samples&#x27;</span>, key <span class="tk-op">=</span> tenantId <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> <span class="tk-fn">seriesHash</span>(batch), value <span class="tk-op">=</span> batch, acks <span class="tk-op">=</span> <span class="tk-str">&#x27;all&#x27;</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> HTTP <span class="tk-num">204</span>                                        <span class="tk-com">// acknowledged only after the durable append</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Hot-store consumer (cold writer is the same loop with a columnar sink) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">runHotWriter</span>():</span>
+<span class="line">    <span class="tk-kw">loop</span>:</span>
+<span class="line">        records <span class="tk-op">=</span> kafka.<span class="tk-fn">poll</span>(maxRecords <span class="tk-op">=</span> <span class="tk-num">20000</span>, maxWait <span class="tk-op">=</span> <span class="tk-num">200ms</span>)</span>
+<span class="line">        rows <span class="tk-op">=</span> [ <span class="tk-fn">toRow</span>(r) <span class="tk-kw">for</span> r <span class="tk-kw">in</span> records ]</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            <span class="tk-com">// dedupe key (tenant, series, ts) + batch token make a replay harmless</span></span>
+<span class="line">            hotStore.<span class="tk-fn">insertBatch</span>(rows, dedupToken <span class="tk-op">=</span> <span class="tk-fn">hash</span>(records.firstOffset, records.lastOffset))</span>
+<span class="line">            kafka.<span class="tk-fn">commit</span>(records.lastOffset)               <span class="tk-com">// commit offsets only AFTER the insert succeeded</span></span>
+<span class="line">        <span class="tk-kw">catch</span> TransientError:</span>
+<span class="line">            <span class="tk-fn">sleep</span>(<span class="tk-fn">backoffWithJitter</span>())                     <span class="tk-com">// consumer lag grows, nothing is lost</span></span>
+<span class="line">        <span class="tk-kw">catch</span> PoisonRecord:</span>
+<span class="line">            deadLetterQueue.<span class="tk-fn">send</span>(records)                  <span class="tk-com">// do not block the partition</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Query router ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">query</span>(tenantId, metric, <span class="tk-kw">from</span>, to, step):</span>
+<span class="line">    hotBoundary <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> <span class="tk-num">3</span> days                           <span class="tk-com">// hot is authoritative at or after this instant</span></span>
+<span class="line">    plans <span class="tk-op">=</span> []</span>
+<span class="line">    <span class="tk-kw">if</span> to <span class="tk-op">&gt;</span> hotBoundary:</span>
+<span class="line">        plans.<span class="tk-fn">add</span>(hotStore.<span class="tk-fn">query</span>(tenantId, metric, <span class="tk-fn">max</span>(<span class="tk-kw">from</span>, hotBoundary), to, step))</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">from</span> <span class="tk-op">&lt;</span> hotBoundary:</span>
+<span class="line">        olderTo <span class="tk-op">=</span> <span class="tk-fn">min</span>(to, hotBoundary)</span>
+<span class="line">        <span class="tk-kw">if</span> step <span class="tk-op">&gt;=</span> <span class="tk-num">1</span> hour <span class="tk-kw">or</span> olderTo <span class="tk-op">-</span> <span class="tk-kw">from</span> <span class="tk-op">&gt;</span> <span class="tk-num">14</span> days:</span>
+<span class="line">            plans.<span class="tk-fn">add</span>(rollupStore.<span class="tk-fn">query</span>(tenantId, metric, <span class="tk-kw">from</span>, olderTo, step))   <span class="tk-com">// cheap pre-aggregated path</span></span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            plans.<span class="tk-fn">add</span>(coldStore.<span class="tk-fn">query</span>(tenantId, metric, <span class="tk-kw">from</span>, olderTo, step))     <span class="tk-com">// raw columnar scan</span></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">stitch</span>(plans)                                   <span class="tk-com">// ranges never overlap, so no double counting</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Unbounded label cardinality:</strong> Letting tenants use high-cardinality values (user IDs, request IDs) as labels creates millions of series and crushes indexes and memory. Enforce per-tenant active-series limits.</li>
+          <li><strong>Non-idempotent consumers:</strong> Queues deliver at-least-once, so a replay can double count. Dedupe on (tenant, series, timestamp) or use insert deduplication tokens.</li>
+          <li><strong>Tiny inserts into the columnar store:</strong> Columnar engines like ClickHouse want batches of thousands of rows. Many small inserts create too many parts and degrade merges and queries. Batch in the consumer.</li>
+          <li><strong>Double counting at the hot/cold boundary:</strong> If both tiers hold the last day and the router queries both, sums are wrong. Define one authoritative store per time range.</li>
+          <li><strong>Rollups that cannot be re-aggregated:</strong> An average of averages or a stored percentile is wrong at coarser levels. Store sum + count, min, max or mergeable sketches.</li>
+          <li><strong>Partitioning only by tenant:</strong> The largest tenant becomes a hot partition. Partition by tenant + series hash + time bucket.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Large metrics platforms (Mimir/Cortex, Thanos, M3, VictoriaMetrics, ClickHouse-based observability stacks) converge on the same ideas: <strong>decouple ingestion from storage, keep recent data hot, push history to cheap columnar or object storage</strong>. A typical build-out looks like this:</p>
+        <ul>
+          <li><strong>Step 0 &mdash; Model the load:</strong> Samples/s, active series (cardinality), bytes per sample, query mix and retention math. Most capacity surprises come from cardinality, not rate.</li>
+          <li><strong>Step 1 &mdash; Ingest gateway:</strong> Authenticate tenants, enforce rate and cardinality quotas, then produce to Kafka (acks=all, replication factor 3) keyed by tenant + series hash.</li>
+          <li><strong>Step 2 &mdash; Hot store:</strong> Consumers write large idempotent batches to a TSDB or ClickHouse and keep only the last 1&ndash;3 days there for sub-second dashboards.</li>
+          <li><strong>Step 3 &mdash; Cold store:</strong> Columnar tables or Parquet on object storage, partitioned by tenant and day. Raw 90-day retention is enforced by dropping partitions or TTL rules.</li>
+          <li><strong>Step 4 &mdash; Downsampling:</strong> Asynchronous 1m / 5m / 1h rollups that store sum, count, min and max (or sketches) so they can be re-aggregated. A query router picks the resolution by time range.</li>
+          <li><strong>Step 5 &mdash; Tenant tiers and DR:</strong> Quotas for everyone, dedicated partitions or clusters for outliers, and cross-zone or cross-region replication of the queue and object storage.</li>
+        </ul>
+        <p>Start with the simplest tier layout that meets the SLOs and add stores only when measurements demand them.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For <strong>append-only, write-heavy telemetry</strong>, spend consistency where it matters and buy availability and cost efficiency with <strong>eventual consistency</strong>: buffer in a durable queue, keep recent data hot, move history into compressed columnar storage and downsample asynchronously. Keep tenant isolation <strong>logical</strong> (quotas, partitions) unless a tenant truly needs dedicated infrastructure.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

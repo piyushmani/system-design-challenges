@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Designing Scalable Systems with Database Partitioning — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">04 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Sharding</span>
+      <span class="tag tag--green">Scalability</span>
+      <span class="tag tag--amber">Architecture</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Designing Scalable Systems with Database Partitioning</h1>
+      <p class="q-scenario"><strong>Sarah</strong> is building a <strong>massively scalable social media</strong> platform whose single database has reached capacity as the user base grows quickly, so she must shard the data horizontally. The dominant access patterns are <strong>point reads and writes keyed by user or post ID</strong> (profiles, posts, follows, feed items), activity is spread across millions of accounts, nodes will be <strong>added regularly</strong> as the platform grows, and the primary goal is to <strong>spread traffic evenly</strong> while keeping routing simple and rebalancing cheap. Large cross-user range scans on the shard key are not part of the hot path. She needs to choose the partitioning strategy to investigate first.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Applying hash-based partitioning to spread data uniformly using consistent hashing.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Adopting range-based partitioning to divide data across fixed intervals like dates or IDs.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Using a mixed model of range and hash sharding to achieve better load distribution and flexibility.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Choosing a round-robin strategy to distribute data smoothly across nodes without intricate segmentation.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Hash-Based Partitioning with Consistent Hashing</h3>
+        <p><strong>Hash-based partitioning with consistent hashing</strong> is the best fit. Hashing the shard key (such as user ID) scrambles sequential and skewed key patterns into a uniform spread across nodes, so load is balanced by construction, and consistent hashing ensures that adding or removing a node moves only a small fraction of the keys. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Even distribution by design:</strong> A good hash function maps keys uniformly, so no node is overloaded just because of how IDs or timestamps are assigned. Virtual nodes (many ring positions per physical node) smooth out any remaining imbalance.</li>
+          <li><strong>Cheap elasticity:</strong> With consistent hashing, adding a node moves roughly 1/N of the keys instead of nearly all of them. Naive <code>hash(key) mod N</code> reshuffles most keys whenever N changes.</li>
+          <li><strong>Simple, stateless routing:</strong> Any router or client can compute the owning node directly from the key, with no central lookup table on the hot path.</li>
+          <li><strong>Fits the workload:</strong> Social workloads are dominated by keyed reads and writes (load a profile, a post or a follower list), which hash partitioning serves with a single-shard access.</li>
+          <li><strong>Why not range-based sharding?</strong> Range partitions suit ordered scans but concentrate new writes on the latest range (newest IDs or dates), creating a hot shard on a fast-growing social platform.</li>
+          <li><strong>Proven at scale:</strong> Amazon's Dynamo paper (DeCandia et al., SOSP 2007) popularized consistent hashing with virtual nodes for partitioning. Cassandra and DynamoDB distribute data by hashing the partition key, and Redis Cluster uses fixed hash slots, a closely related idea.</li>
+        </ul>
+        <p>A solid sharding design includes a <strong>carefully chosen shard key</strong>, <strong>virtual nodes</strong> (or many logical shards mapped to fewer physical nodes), <strong>hot-key mitigation</strong> and a <strong>tested online rebalancing procedure</strong>. Monitor per-shard QPS, storage and p99 latency to catch skew early.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📏</span>
+            <h4>B — Range-Based Partitioning</h4>
+          </div>
+          <p>Range partitioning keeps adjacent keys together, which makes <strong>range scans and ordered queries</strong> efficient and shard boundaries easy to reason about. But with monotonically increasing keys (timestamps, auto-increment IDs) all new writes go to the last range, creating a <strong>hot shard</strong>, and ranges need splitting as they grow unevenly. <strong>Caveat:</strong> it is the right choice for time-series or scan-heavy data, and systems such as HBase and Spanner split ranges automatically.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔀</span>
+            <h4>C — Hybrid Range and Hash</h4>
+          </div>
+          <p>A mixed model, such as hashing the partition key and ordering rows by a range key within it (Cassandra's partition and clustering keys, DynamoDB's partition and sort keys), combines even spread with efficient per-entity range queries. It is more flexible but also <strong>more complex to design and operate</strong>, and it is usually a refinement applied once the base strategy is chosen rather than the first thing to adopt. <strong>Caveat:</strong> if per-user timelines or time-window queries dominate, adopting it from the start is reasonable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔁</span>
+            <h4>D — Round-Robin</h4>
+          </div>
+          <p>Round-robin assigns each new row to the next node in turn. It balances insert volume but <strong>destroys key-based routing</strong>: nothing tells you where a given row lives, so every read must query all shards or consult a huge lookup map, and updates or deletes of a record cannot be routed. It is mainly used for temporary or append-only data, not for operational data read by key. <strong>Caveat:</strong> acceptable for staging or bulk-load targets where lookups by key are not required.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Hash-Based Partitioning with Consistent Hashing ✓</h4>
+          </div>
+          <p>Applying hash-based partitioning to spread data uniformly using consistent hashing.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Load Distribution</th><th>Range Query Efficiency</th><th>Cost of Adding Nodes</th><th>Routing Simplicity</th><th>Implementation Complexity</th><th>Hot-Spot Risk</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Hash + Consistent Hashing ✓</td><td>Even ✅</td><td>Poor (scatter-gather) ❌</td><td>Low (about 1/N of keys move) ✅</td><td>Simple, computed from the key ✅</td><td>Medium ⚠</td><td>Low for keys, high for hot entities ⚠</td></tr>
+            <tr><td class="tt-option">B — Range-Based</td><td>Uneven, depends on the key ⚠</td><td>Excellent ✅</td><td>Medium (split and move ranges) ⚠</td><td>Needs a range map ⚠</td><td>Medium ⚠</td><td>High with sequential keys ❌</td></tr>
+            <tr><td class="tt-option">C — Hybrid Range and Hash</td><td>Even across partitions ✅</td><td>Good within a partition ✅</td><td>Low–Medium ⚠</td><td>Medium ⚠</td><td>High ❌</td><td>Low–Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Round-Robin</td><td>Even for inserts ✅</td><td>Poor ❌</td><td>Low for new rows, old data needs rebalancing ⚠</td><td>None, every read fans out ❌</td><td>Low ✅</td><td>Low for inserts ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Hash + Consistent Hashing</h4>
+          </div>
+          <p>High-volume keyed reads and writes where uniform load is the goal and nodes are added or removed over time (user profiles, sessions, posts by ID, key-value access).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Range-Based</h4>
+          </div>
+          <p>Ordered scans and range queries dominate (time series, logs, leaderboards, geo ranges) and write hotspots can be avoided or managed with automatic range splitting.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hybrid Range and Hash</h4>
+          </div>
+          <p>You need even distribution across entities and efficient ordered queries within each entity (per-user timelines, per-device telemetry, per-tenant event history).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Round-Robin</h4>
+          </div>
+          <p>Temporary, staging or append-only datasets processed in bulk where lookups by key are not required (for example bulk-load targets in MPP warehouses).</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Consistent Hashing Ring with Virtual Nodes</h3>
+        <p>A router hashes the shard key onto a ring and picks the next virtual node clockwise, which maps to a physical node. Adding a node only reassigns the ring arcs its virtual nodes take over:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant R as Router
+    participant M as Ring Metadata
+    participant N as Owning Shard Node
+    C-&gt;&gt;R: Read user 42
+    R-&gt;&gt;R: 1. Compute hash of the shard key
+    R-&gt;&gt;M: 2. Find first virtual node clockwise from the hash
+    M--&gt;&gt;R: 3. Virtual node 17 maps to Node B
+    R-&gt;&gt;N: 4. Query the shard on Node B
+    N--&gt;&gt;R: 5. Row
+    R--&gt;&gt;C: Response
+    Note over R,M: Adding a node only reassigns the ring arcs its virtual nodes take over">sequenceDiagram
+    participant C as Client
+    participant R as Router
+    participant M as Ring Metadata
+    participant N as Owning Shard Node
+    C-&gt;&gt;R: Read user 42
+    R-&gt;&gt;R: 1. Compute hash of the shard key
+    R-&gt;&gt;M: 2. Find first virtual node clockwise from the hash
+    M--&gt;&gt;R: 3. Virtual node 17 maps to Node B
+    R-&gt;&gt;N: 4. Query the shard on Node B
+    N--&gt;&gt;R: 5. Row
+    R--&gt;&gt;C: Response
+    Note over R,M: Adding a node only reassigns the ring arcs its virtual nodes take over</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Consistent Hash Ring with Virtual Nodes</h3>
+        <p>Each physical node owns many positions on the ring. A key is served by the first position clockwise from its hash, so adding or removing a node moves only the keys in the affected arcs:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">VNODES_PER_NODE <span class="tk-op">=</span> <span class="tk-num">128</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">class</span> HashRing:</span>
+<span class="line">    ring <span class="tk-op">=</span> SortedMap<span class="tk-op">&lt;</span>long, Node<span class="tk-op">&gt;</span>()                          <span class="tk-com">// hash position -&gt; owning physical node</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">addNode</span>(node):</span>
+<span class="line">        <span class="tk-kw">for</span> i <span class="tk-kw">in</span> <span class="tk-num">0</span> .. VNODES_PER_NODE <span class="tk-op">-</span> <span class="tk-num">1</span>:</span>
+<span class="line">            position <span class="tk-op">=</span> <span class="tk-fn">hash64</span>(node.id <span class="tk-op">+</span> <span class="tk-str">&#x27;#&#x27;</span> <span class="tk-op">+</span> i)            <span class="tk-com">// stable 64-bit hash, e.g. Murmur3 or xxHash</span></span>
+<span class="line">            ring.<span class="tk-fn">put</span>(position, node)</span>
+<span class="line">        <span class="tk-com">// Only keys whose hashes fall in the newly claimed arcs move (about 1/N of all keys)</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">removeNode</span>(node):</span>
+<span class="line">        <span class="tk-kw">for</span> i <span class="tk-kw">in</span> <span class="tk-num">0</span> .. VNODES_PER_NODE <span class="tk-op">-</span> <span class="tk-num">1</span>:</span>
+<span class="line">            ring.<span class="tk-fn">remove</span>(<span class="tk-fn">hash64</span>(node.id <span class="tk-op">+</span> <span class="tk-str">&#x27;#&#x27;</span> <span class="tk-op">+</span> i))</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">function</span> <span class="tk-fn">nodeFor</span>(key):</span>
+<span class="line">        position <span class="tk-op">=</span> <span class="tk-fn">hash64</span>(key)</span>
+<span class="line">        entry <span class="tk-op">=</span> ring.<span class="tk-fn">ceilingEntry</span>(position)                 <span class="tk-com">// first virtual node clockwise from the key</span></span>
+<span class="line">        <span class="tk-kw">if</span> entry <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">            entry <span class="tk-op">=</span> ring.<span class="tk-fn">firstEntry</span>()                       <span class="tk-com">// wrap around the ring</span></span>
+<span class="line">        <span class="tk-kw">return</span> entry.value</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getUser</span>(userId):</span>
+<span class="line">    node <span class="tk-op">=</span> ring.<span class="tk-fn">nodeFor</span>(<span class="tk-str">&#x27;user:&#x27;</span> <span class="tk-op">+</span> userId)                   <span class="tk-com">// shard key: user id keeps a user&#x27;s data together</span></span>
+<span class="line">    <span class="tk-kw">return</span> node.<span class="tk-fn">query</span>(<span class="tk-str">&#x27;SELECT * FROM users WHERE id = ?&#x27;</span>, userId)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getHotProfile</span>(userId):                             <span class="tk-com">// mitigate hot keys such as celebrity accounts</span></span>
+<span class="line">    cached <span class="tk-op">=</span> cache.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;profile:&#x27;</span> <span class="tk-op">+</span> userId)</span>
+<span class="line">    <span class="tk-kw">if</span> cached <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> cached                                       <span class="tk-com">// serve from a replicated cache, not the single owning shard</span></span>
+<span class="line">    profile <span class="tk-op">=</span> <span class="tk-fn">getUser</span>(userId)</span>
+<span class="line">    cache.<span class="tk-fn">set</span>(<span class="tk-str">&#x27;profile:&#x27;</span> <span class="tk-op">+</span> userId, profile, ttl <span class="tk-op">=</span> <span class="tk-num">30s</span>)</span>
+<span class="line">    <span class="tk-kw">return</span> profile</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Using hash(key) mod N:</strong> Changing N remaps nearly every key and forces a near-total data migration. Use consistent hashing, rendezvous hashing or fixed logical shards.</li>
+          <li><strong>Skipping virtual nodes:</strong> With few ring positions per node, distribution is lumpy and a node failure dumps its whole load on one neighbor. Use many virtual nodes per server.</li>
+          <li><strong>Choosing a low-cardinality or skewed shard key:</strong> Sharding by country or by a boolean produces unbalanced shards. Pick a high-cardinality key such as user ID.</li>
+          <li><strong>Ignoring hot keys:</strong> Even a perfect hash puts one celebrity account on one shard. Plan caching and key splitting for them.</li>
+          <li><strong>Designing cross-shard joins and transactions into hot paths:</strong> They are slow and fragile. Keep related data (a user's profile, posts and settings) colocated under the same shard key.</li>
+          <li><strong>No rebalancing plan:</strong> Moving data while serving live traffic needs dual reads or writes, throttling and verification. Design and rehearse it before it is urgent.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, large platforms <strong>choose the shard key from the query patterns</strong> and add indirection so they can rebalance later. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Profile the workload:</strong> List the top queries, their keys and their read/write ratios. Identify what must be a single-shard operation.</li>
+          <li><strong>Step 1 — Cheap relief first:</strong> Add caching and read replicas, and move heavy analytics off the primary. These buy time before sharding.</li>
+          <li><strong>Step 2 — Pick the shard key and hash it:</strong> Choose a high-cardinality key such as user ID and hash-partition it with consistent hashing (the core choice for this scenario).</li>
+          <li><strong>Step 3 — Use many logical shards:</strong> Create far more logical shards than physical nodes and map them to nodes, so rebalancing means moving whole logical shards rather than re-splitting data.</li>
+          <li><strong>Step 4 — Handle hot keys and cross-shard queries:</strong> Cache hot entities, replicate or split hot keys, and build secondary indexes or a search tier for cross-shard queries.</li>
+          <li><strong>Step 5 — Add range ordering inside partitions where needed:</strong> Use a hybrid key (hashed partition key plus ordered clustering key) for timelines and time-window queries.</li>
+        </ul>
+        <p>Start from the dominant query pattern, shard by a hashed high-cardinality key, and add range structure only where queries demand it.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>To spread traffic evenly across a growing fleet, <strong>hash the shard key and use consistent hashing</strong> with virtual nodes. It balances load, makes adding nodes cheap and keeps routing stateless. It does not remove hot keys or make range queries cheap, so pair it with caching, secondary indexes and, where needed, ordered clustering keys inside each partition.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

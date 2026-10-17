@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Enhancing RESTful Services for High Availability — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">06 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">REST API</span>
+      <span class="tag tag--green">Availability</span>
+      <span class="tag tag--amber">Optimization</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Enhancing RESTful Services for High Availability</h1>
+      <p class="q-scenario">Alex is an architect at a booming tech startup designing an inter-service communication strategy for critical RESTful APIs. As the system scales to millions of requests across dozens of distributed microservices, service-to-service calls risk creating deep dependency chains. If a downstream service slows down or becomes temporarily unavailable, upstream services risk thread pool starvation, resource exhaustion, and catastrophic cascading outages. Alex's team is debating whether inter-service interactions should prioritize synchronous request-response calls or asynchronous communication to ensure maximum system uptime and high availability.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Utilize synchronous communication because it is straightforward and simplifies debugging.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Choose asynchronous communication to isolate services and enhance fault tolerance.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Employ synchronous communication paired with extended timeout durations to manage occasional lag.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Select asynchronous communication utilizing message queues to achieve superior scalability.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Asynchronous Communication for Service Isolation and Fault Tolerance</h3>
+        <p>In distributed architectures, <strong>asynchronous communication</strong> decouples services across both time and space, providing the foundation for <strong>high availability and fault tolerance</strong>. In synchronous REST setups, services are tightly temporally coupled: the caller must block and wait for the callee to respond. If a downstream service suffers an outage or performance degradation, upstream HTTP threads and connection pools quickly become exhausted, precipitating a cascading failure across the entire platform. By shifting inter-service interactions to asynchronous patterns (e.g., event-driven message brokers or transactional outbox patterns), the producer publishes an event and immediately resumes handling client traffic. Downstream failures or maintenance windows are absorbed by durable queues, isolating blast radiuses and allowing the system to remain fully operational.</p>
+        <ul>
+          <li><strong>Temporal Decoupling & Blast Radius Isolation:</strong> Upstream services do not depend on the instantaneous availability or response latency of downstream services, preventing isolated failures from bringing down the entire API.</li>
+          <li><strong>Cascading Failure Prevention:</strong> Eliminates blocking I/O threads and connection pool starvation that typically cripple synchronous request-response call graphs during downstream slowdowns.</li>
+          <li><strong>Resilient Outage Buffering:</strong> If a downstream service crashes or is deployed, messages buffer durably in message brokers (e.g., Kafka, RabbitMQ, SQS) and are safely processed once the service recovers, resulting in zero data loss.</li>
+          <li><strong>Graceful Degradation:</strong> Upstream APIs can acknowledge customer requests immediately (e.g., <code>202 Accepted</code>) and fulfill non-critical side effects in the background, maintaining near-100% availability for end users.</li>
+        </ul>
+        <p>Adopt asynchronous communication for non-query state changes and inter-service side effects, while reserving synchronous REST/gRPC strictly for low-latency read queries, protected by circuit breakers and strict timeouts.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📞</span>
+            <h4>A — Synchronous Communication for Simplicity</h4>
+          </div>
+          <p>While synchronous REST (HTTP request-response) is intuitive and easy to trace in local development, it creates tight temporal coupling in production. If Service A synchronously calls Service B, Service A's availability is bounded by Service B ($A_{total} = A_A \times A_B$). In deep service call chains, any transient network hiccup or downstream downtime directly impacts end-user availability, causing widespread HTTP 504 Gateway Timeouts.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⏳</span>
+            <h4>C — Synchronous Communication with Extended Timeouts</h4>
+          </div>
+          <p>Extending timeout durations to handle downstream latency is an anti-pattern that drastically accelerates catastrophic system collapse. When a downstream dependency degrades, long timeouts cause upstream worker threads to sit idle waiting for slow responses. Thread pools and socket connections are quickly exhausted, preventing the API gateway from accepting new incoming requests and causing a total system brownout.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📈</span>
+            <h4>D — Asynchronous Communication for Scalability</h4>
+          </div>
+          <p>While message queues do improve scalability through load leveling and backpressure, this option misidentifies the primary architectural objective of Alex's mandate: High Availability. Scalability addresses throughput under increased load, whereas High Availability specifically requires fault isolation, bulkheading, and resilience against node failures. Framing the decision around fault tolerance and service isolation (Option B) directly satisfies the core requirement of API availability.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Asynchronous Communication for Service Isolation and Fault Tolerance ✓</h4>
+          </div>
+          <p>Choose asynchronous communication to isolate services and enhance fault tolerance.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Availability / Fault Isolation</th><th>Implementation Complexity</th><th>Latency / Responsiveness</th><th>Operational Overhead</th><th>Failure Blast Radius</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">Asynchronous Communication for Isolation (B)</td><td>Very High</td><td>Moderate</td><td>Eventual (Decoupled)</td><td>Moderate</td><td>Isolated to Consumer</td></tr>
+            <tr><td class="tt-option">Synchronous for Simplicity (A)</td><td>Low (Coupled)</td><td>Low</td><td>Immediate (Blocking)</td><td>Low</td><td>Cascades Across Chain</td></tr>
+            <tr><td class="tt-option">Synchronous with Extended Timeouts (C)</td><td>Critically Low</td><td>Low</td><td>Very High (Thread Starvation)</td><td>Low</td><td>Total System Outage</td></tr>
+            <tr><td class="tt-option">Asynchronous for Scalability (D)</td><td>High</td><td>Moderate</td><td>Eventual (Decoupled)</td><td>Moderate</td><td>Isolated to Consumer</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>Asynchronous Communication for Isolation (Option B)</h4>
+          </div>
+          <p>Recommended for inter-service mutations, cross-domain notifications, state updates, and background workflows where high availability and resilient fault isolation are paramount.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>Synchronous Communication for Simplicity (Option A)</h4>
+          </div>
+          <p>Best suited for low-latency read queries, simple monolithic applications, or early-stage MVPs where operational simplicity outweighs distributed resilience requirements.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>Synchronous with Extended Timeouts (Option C)</h4>
+          </div>
+          <p>Generally an architectural anti-pattern; acceptable only in dedicated, non-user-facing offline batch ETL migration scripts where long-running processes must execute sequentially.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>Asynchronous Communication for Scalability (Option D)</h4>
+          </div>
+          <p>Ideal when traffic arrives in bursty, unpredictable spikes (e.g., ticket drops or IoT telemetry ingest) requiring queue-based load leveling to protect backend capacity.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Synchronous Cascading Failure vs. Asynchronous Resilient Isolation</h3>
+        <p>Architecture diagram showing how synchronous REST calls cascade downstream outages compared to asynchronous message buffering.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TD
+subgraph Synchronous_Failure[&quot;Synchronous Coupling (Cascading Failure)&quot;]
+  Client1[&quot;Web Client&quot;] --&gt;|HTTP POST| SvcA1[&quot;API Gateway (Threads Blocked)&quot;]
+  SvcA1 --&gt;|HTTP POST| SvcB1[&quot;Order Service (Waiting)&quot;]
+  SvcB1 --&gt;|HTTP POST (Timeout)| SvcC1[&quot;Inventory Service (DOWN 💥)&quot;]
+  classDef down fill:#ffcccc,stroke:#cc0000,stroke-width:2px;
+  class SvcC1,SvcB1,SvcA1 down;
+end
+subgraph Asynchronous_Resilience[&quot;Asynchronous Isolation (High Availability)&quot;]
+  Client2[&quot;Web Client&quot;] --&gt;|HTTP 202 Accepted| SvcA2[&quot;API Gateway (Fast Return)&quot;]
+  SvcA2 --&gt;|Publish Event| MQ[(&quot;Message Broker / Queue&quot;)]
+  MQ -.-&gt;|Buffered Event| SvcB2[&quot;Inventory Consumer (Replays when Recovered)&quot;]
+  classDef healthy fill:#ccffcc,stroke:#009900,stroke-width:2px;
+  class SvcA2,MQ healthy;
+end">flowchart TD
+subgraph Synchronous_Failure[&quot;Synchronous Coupling (Cascading Failure)&quot;]
+  Client1[&quot;Web Client&quot;] --&gt;|HTTP POST| SvcA1[&quot;API Gateway (Threads Blocked)&quot;]
+  SvcA1 --&gt;|HTTP POST| SvcB1[&quot;Order Service (Waiting)&quot;]
+  SvcB1 --&gt;|HTTP POST (Timeout)| SvcC1[&quot;Inventory Service (DOWN 💥)&quot;]
+  classDef down fill:#ffcccc,stroke:#cc0000,stroke-width:2px;
+  class SvcC1,SvcB1,SvcA1 down;
+end
+subgraph Asynchronous_Resilience[&quot;Asynchronous Isolation (High Availability)&quot;]
+  Client2[&quot;Web Client&quot;] --&gt;|HTTP 202 Accepted| SvcA2[&quot;API Gateway (Fast Return)&quot;]
+  SvcA2 --&gt;|Publish Event| MQ[(&quot;Message Broker / Queue&quot;)]
+  MQ -.-&gt;|Buffered Event| SvcB2[&quot;Inventory Consumer (Replays when Recovered)&quot;]
+  classDef healthy fill:#ccffcc,stroke:#009900,stroke-width:2px;
+  class SvcA2,MQ healthy;
+end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Transactional Outbox Pattern for Resilient Inter-Service Communication</h3>
+        <p>Demonstrating atomic event dispatch in an API service to ensure high availability without distributed transaction locks.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">typescript</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">import</span> { Request, Response } <span class="tk-kw">from</span> <span class="tk-str">&#x27;express&#x27;</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Controller: Fast asynchronous response with zero temporal coupling</span></span>
+<span class="line"><span class="tk-kw">async</span> <span class="tk-kw">function</span> <span class="tk-fn">handleCreateOrder</span>(req: Request, res: Response): Promise<span class="tk-op">&lt;</span>void<span class="tk-op">&gt;</span> {</span>
+<span class="line">  <span class="tk-kw">const</span> { customerId, items, orderTotal } <span class="tk-op">=</span> req.body;</span>
+<span class="line">  <span class="tk-kw">const</span> orderId <span class="tk-op">=</span> crypto.<span class="tk-fn">randomUUID</span>();</span>
+<span class="line"></span>
+<span class="line">  <span class="tk-kw">await</span> db.<span class="tk-fn">transaction</span>(<span class="tk-kw">async</span> (tx) <span class="tk-op">=&gt;</span> {</span>
+<span class="line">    <span class="tk-com">// 1. Persist core domain entity locally</span></span>
+<span class="line">    <span class="tk-kw">await</span> tx.<span class="tk-fn">query</span>(</span>
+<span class="line">      <span class="tk-str">&#x27;INSERT INTO orders (id, customer_id, total, status) VALUES ($1, $2, $3, $4)&#x27;</span>,</span>
+<span class="line">      [orderId, customerId, orderTotal, <span class="tk-str">&#x27;PENDING&#x27;</span>]</span>
+<span class="line">    );</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 2. Persist integration event to Outbox table within the SAME transaction</span></span>
+<span class="line">    <span class="tk-kw">await</span> tx.<span class="tk-fn">query</span>(</span>
+<span class="line">      `INSERT INTO <span class="tk-fn">outbox_events</span> (id, aggregate_type, aggregate_id, event_type, payload)</span>
+<span class="line">       <span class="tk-fn">VALUES</span> ($<span class="tk-num">1</span>, $<span class="tk-num">2</span>, $<span class="tk-num">3</span>, $<span class="tk-num">4</span>, $<span class="tk-num">5</span>)`,</span>
+<span class="line">      [</span>
+<span class="line">        crypto.<span class="tk-fn">randomUUID</span>(),</span>
+<span class="line">        <span class="tk-str">&#x27;ORDER&#x27;</span>,</span>
+<span class="line">        orderId,</span>
+<span class="line">        <span class="tk-str">&#x27;OrderCreated&#x27;</span>,</span>
+<span class="line">        JSON.<span class="tk-fn">stringify</span>({ orderId, customerId, items, orderTotal })</span>
+<span class="line">      ]</span>
+<span class="line">    );</span>
+<span class="line">  });</span>
+<span class="line"></span>
+<span class="line">  <span class="tk-com">// 3. Immediately return 202 Accepted; downstream services consume asynchronously</span></span>
+<span class="line">  res.<span class="tk-fn">status</span>(<span class="tk-num">202</span>).<span class="tk-fn">json</span>({</span>
+<span class="line">    orderId,</span>
+<span class="line">    status: <span class="tk-str">&#x27;ACCEPTED&#x27;</span>,</span>
+<span class="line">    pollUrl: `<span class="tk-op">/</span>api<span class="tk-op">/</span>v1<span class="tk-op">/</span>orders<span class="tk-op">/</span>${orderId}<span class="tk-op">/</span>status`</span>
+<span class="line">  });</span>
+<span class="line">}</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Dual-Write Anti-Pattern:</strong> Writing to the database and publishing to the message broker in two uncoordinated steps without the Transactional Outbox pattern, leading to message loss if the process crashes between writes.</li>
+          <li><strong>Non-Idempotent Consumers:</strong> Assuming message brokers deliver messages exactly once; network retries will deliver duplicates, causing duplicate charges or double mutations if idempotency keys are omitted.</li>
+          <li><strong>Missing Dead-Letter Queues (DLQs):</strong> Allowing corrupted or schema-incompatible 'poison pill' messages to block partition consumption indefinitely without routing to a DLQ.</li>
+          <li><strong>Unmonitored Consumer Lag:</strong> Failing to alert on queue lag metrics, allowing consumer backlogs to grow until message retention limits expire and data is lost.</li>
+          <li><strong>Applying Asynchronous Patterns to Read-Heavy Queries:</strong> Forcing simple, real-time read lookups through message brokers instead of using direct cached synchronous reads, introducing unnecessary latency and architectural bloat.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>To build highly available microservice platforms using asynchronous messaging, engineering teams implement proven resilience patterns:</p>
+        <ul>
+          <li><strong>Transactional Outbox Pattern:</strong> Persist business events into an outbox table in the same local database transaction as the business entity, using Change Data Capture (Debezium) or a relay service to publish events to the broker without dual-write inconsistencies.</li>
+          <li><strong>Asynchronous API Contract (HTTP 202 Accepted):</strong> Design write-heavy REST endpoints to return <code>202 Accepted</code> with a <code>Location</code> header pointing to a status polling resource, or use WebSockets/SSE for push updates.</li>
+          <li><strong>Idempotent Consumer Processing:</strong> Guarantee safe message replays by storing processed message UUIDs in a distributed cache or unique database constraint, ensuring exactly-once business semantics.</li>
+          <li><strong>Dead-Letter Queue (DLQ) & Poison Pill Handling:</strong> Route unprocessable messages to a DLQ after exponential retries, accompanied by automated alerting and replay tooling.</li>
+          <li><strong>Circuit Breakers for Inevitable Synchronous Reads:</strong> For mandatory synchronous read calls, wrap clients in circuit breakers (e.g., Resilience4j) with fast fallbacks and aggressive (e.g., <500ms) timeouts.</li>
+        </ul>
+        <p>Architecting inter-service boundaries with asynchronous messaging provides the structural isolation required to deliver five-nines (99.999%) availability in distributed cloud environments.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p><strong>Asynchronous communication</strong> enhances <strong>high availability</strong> by eliminating temporal coupling and thread starvation, ensuring downstream service outages are buffered safely without triggering cascading failures.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

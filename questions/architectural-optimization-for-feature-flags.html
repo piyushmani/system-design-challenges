@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architectural Optimization for Feature Flags — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">03 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Feature Flags</span>
+      <span class="tag tag--green">Architecture</span>
+      <span class="tag tag--amber">Optimization</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Architectural Optimization for Feature Flags</h1>
+      <p class="q-scenario"><strong>Alex</strong>, a backend engineer, is assigned to architect a feature flag management system for a heavily used application built from many services. Flag checks sit on the <strong>hot path of nearly every request</strong> (often several per request), so the design must process them effectively with <strong>as little latency impact as possible</strong> and must not make flag-backend availability a dependency of request serving. Product teams want flag changes to take effect within seconds, and a given user should see <strong>consistent</strong> variants across services. He needs to choose the best architecture.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Create a centralized feature flag evaluation service to maintain uniform flag checks across the entire system.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Select a decentralized design allowing each service to handle its own feature flag evaluations on its own.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Go with an asynchronous architecture that caches flag checks locally within each service, minimizing reliance on external components.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Use a third-party feature flag service to handle both the evaluation logic and any scalability issues.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Local Evaluation with Asynchronously Cached Flag Rules</h3>
+        <p>The key idea is to <strong>separate the control plane from the data plane</strong>. Flag definitions are changed and distributed centrally, but every check is evaluated <strong>in-process</strong> against a locally cached ruleset that is kept fresh asynchronously (streaming, with polling as a fallback). A flag check then costs microseconds with no network call, and request serving no longer depends on the flag backend being up. Note that what is cached is the <em>rules</em> (flag configuration), evaluated locally per request, not the individual evaluation results. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Microsecond latency:</strong> Evaluation is an in-memory rule match instead of a network round trip, and the cost does not multiply when a request checks several flags.</li>
+          <li><strong>Resilient by design:</strong> If the flag backend is down or slow, services keep evaluating against the last known good snapshot. On startup they can fall back to a persisted snapshot or to safe defaults.</li>
+          <li><strong>Backend load scales with instances, not traffic:</strong> The flag backend serves a long-lived stream or a periodic poll per service instance, not one call per request.</li>
+          <li><strong>Consistent rollouts without coordination:</strong> Deterministic bucketing, such as <code>hash(flagKey + userId) mod 100</code>, gives every service the same answer for the same user as long as they run the same ruleset version.</li>
+          <li><strong>Matches industry practice:</strong> LaunchDarkly and Unleash server-side SDKs evaluate locally from a streamed or polled ruleset, and OpenFeature offers a vendor-neutral API in front of such providers. This is why option D is usually implemented as option C.</li>
+        </ul>
+        <p>A robust design includes a <strong>versioned ruleset</strong>, <strong>streaming updates with a polling fallback</strong>, a <strong>persisted last-known-good snapshot</strong>, <strong>deterministic bucketing</strong>, per-flag <strong>safe defaults</strong>, and metrics for <strong>evaluation counts and propagation delay</strong>. Treat flags as short-lived and remove them once a rollout is complete.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏢</span>
+            <h4>A — Centralized Evaluation Service</h4>
+          </div>
+          <p>It gives uniform results and a single place to audit, but every check becomes a <strong>network call on the hot path</strong>. Latency adds up with several flags per request, the service must scale with <em>request</em> volume, and a slowdown or outage cascades into every dependent service. <strong>Caveat:</strong> a thin evaluation endpoint is the right answer for clients that cannot hold rules (browsers, mobile), returning precomputed results that can be cached at the edge.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>B — Decentralized Per-Service Evaluation</h4>
+          </div>
+          <p>If each service owns its own flag logic and configuration there is no shared source of truth. The same user can get different variants in different services, audit and governance are weak, and flags drift over time. Latency is excellent, but <strong>consistency, auditability and operability</strong> are lost. Note that option C also evaluates locally, but from a <em>shared, centrally managed, versioned</em> ruleset.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">☁️</span>
+            <h4>D — Third-Party Feature Flag Service</h4>
+          </div>
+          <p>It buys features (UI, targeting, audit trail, experimentation) and offloads the control plane, but it is a <strong>vendor and cost decision rather than an architecture</strong>. If checks are evaluated remotely per request it recreates option A's latency and availability coupling, and its SDKs usually evaluate locally anyway, which is option C. It also brings lock-in (reduced by OpenFeature), usage-based pricing and data-residency questions for user attributes.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Local Evaluation with Asynchronously Cached Flag Rules ✓</h4>
+          </div>
+          <p>Go with an asynchronous architecture that caches flag checks locally within each service, minimizing reliance on external components.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Per-Check Latency</th><th>Availability Coupling</th><th>Cross-Service Consistency</th><th>Backend Load Scales With</th><th>Speed of Flag Changes</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Centralized Evaluation Service</td><td>High (network hop) ❌</td><td>Tight ❌</td><td>Strong ✅</td><td>Requests ❌</td><td>Instant ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — Decentralized Per-Service</td><td>Very low ✅</td><td>None ✅</td><td>Weak ❌</td><td>Nothing shared ✅</td><td>Per-service changes ❌</td><td>High ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Local Evaluation, Cached Rules ✓</td><td>Very low ✅</td><td>Loose ✅</td><td>Strong (same ruleset version) ✅</td><td>Service instances ✅</td><td>Seconds ⚠</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Third-Party Service</td><td>Low if SDK is local, high if remote ⚠</td><td>Depends on SDK mode ⚠</td><td>Strong ✅</td><td>Vendor-managed ✅</td><td>Seconds ⚠</td><td>Low ✅ (cost and lock-in ⚠)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Centralized Evaluation Service</h4>
+          </div>
+          <p>A thin client-facing endpoint for browsers and mobile apps, or a small system with few checks per request where simplicity matters more than latency. Cache results at the edge.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Decentralized Per-Service</h4>
+          </div>
+          <p>Single-service applications, or flags that are truly service-local (internal operational toggles). Not suitable for cross-service rollouts.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Local Evaluation, Cached Rules</h4>
+          </div>
+          <p>The default for high-traffic, multi-service systems with many flag checks per request, where latency and availability matter.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Third-Party Service</h4>
+          </div>
+          <p>Teams that want a managed control plane (UI, targeting, experimentation, audit) and accept the vendor cost. Choose one whose SDK evaluates locally.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Hot Path: Local Flag Evaluation</h3>
+        <p>A flag check never leaves the process. It reads the in-memory ruleset and returns in microseconds:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant S as Service
+    participant M as In-Memory Ruleset
+    C-&gt;&gt;S: Request
+    S-&gt;&gt;M: 1. Evaluate flagKey for this user
+    M--&gt;&gt;S: 2. Variant returned, no network call
+    S-&gt;&gt;M: 3. Evaluate a second flag
+    M--&gt;&gt;S: 4. Variant returned
+    S--&gt;&gt;C: Response">sequenceDiagram
+    participant C as Client
+    participant S as Service
+    participant M as In-Memory Ruleset
+    C-&gt;&gt;S: Request
+    S-&gt;&gt;M: 1. Evaluate flagKey for this user
+    M--&gt;&gt;S: 2. Variant returned, no network call
+    S-&gt;&gt;M: 3. Evaluate a second flag
+    M--&gt;&gt;S: 4. Variant returned
+    S--&gt;&gt;C: Response</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Local Evaluation with Asynchronous Snapshot Refresh</h3>
+        <p>Requests only read an in-memory snapshot. A background loop keeps it fresh through streaming with a polling fallback, and bucketing is deterministic:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">snapshot <span class="tk-op">=</span> <span class="tk-fn">loadPersistedSnapshot</span>() <span class="tk-kw">or</span> EMPTY      <span class="tk-com">// last known good from disk, survives restarts</span></span>
+<span class="line">DEFAULTS <span class="tk-op">=</span> { <span class="tk-str">&quot;new-checkout&quot;</span>: <span class="tk-lit">false</span> }              <span class="tk-com">// safe default per flag</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- background: keeps rules fresh and never blocks requests ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">refreshLoop</span>():</span>
+<span class="line">    <span class="tk-kw">while</span> <span class="tk-lit">true</span>:</span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            <span class="tk-kw">for</span> update <span class="tk-kw">in</span> stream.<span class="tk-fn">subscribe</span>(sinceVersion <span class="tk-op">=</span> snapshot.version):   <span class="tk-com">// streaming first</span></span>
+<span class="line">                <span class="tk-kw">if</span> update.version <span class="tk-op">&gt;</span> snapshot.version:</span>
+<span class="line">                    snapshot <span class="tk-op">=</span> update.ruleset          <span class="tk-com">// atomic reference swap, readers are lock-free</span></span>
+<span class="line">                    <span class="tk-fn">persistSnapshot</span>(snapshot)</span>
+<span class="line">        <span class="tk-kw">catch</span> ConnectionError:</span>
+<span class="line">            <span class="tk-fn">sleep</span>(<span class="tk-num">30s</span> <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, <span class="tk-num">5s</span>))                 <span class="tk-com">// polling fallback with jitter</span></span>
+<span class="line">            latest <span class="tk-op">=</span> http.<span class="tk-fn">get</span>(<span class="tk-str">&quot;/flags&quot;</span>, ifVersionNewerThan <span class="tk-op">=</span> snapshot.version)</span>
+<span class="line">            <span class="tk-kw">if</span> latest <span class="tk-op">!=</span> <span class="tk-lit">null</span>: snapshot <span class="tk-op">=</span> latest</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- hot path: in-memory only, no I/O ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">isEnabled</span>(flagKey, user):</span>
+<span class="line">    flag <span class="tk-op">=</span> snapshot.flags[flagKey]</span>
+<span class="line">    <span class="tk-kw">if</span> flag <span class="tk-op">==</span> <span class="tk-lit">null</span>: <span class="tk-kw">return</span> DEFAULTS[flagKey] ?? <span class="tk-lit">false</span></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> flag.enabled: <span class="tk-kw">return</span> <span class="tk-lit">false</span></span>
+<span class="line">    <span class="tk-kw">for</span> rule <span class="tk-kw">in</span> flag.rules:                            <span class="tk-com">// targeting rules, e.g. country == IN</span></span>
+<span class="line">        <span class="tk-kw">if</span> rule.<span class="tk-fn">matches</span>(user):</span>
+<span class="line">            <span class="tk-kw">return</span> rule.variant</span>
+<span class="line">    bucket <span class="tk-op">=</span> <span class="tk-fn">hash</span>(flagKey <span class="tk-op">+</span> <span class="tk-str">&quot;:&quot;</span> <span class="tk-op">+</span> user.id) mod <span class="tk-num">100</span>      <span class="tk-com">// deterministic across services</span></span>
+<span class="line">    <span class="tk-kw">return</span> bucket <span class="tk-op">&lt;</span> flag.rolloutPercent</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Caching results instead of rules:</strong> Caching per-user results for long periods hides rule changes and bloats memory. Cache the ruleset and evaluate per request, or keep result caches very short-lived.</li>
+          <li><strong>No safe defaults:</strong> If the backend is unreachable at startup, an unsafe default can switch on a half-finished feature. Define the default per flag and persist a last-known-good snapshot.</li>
+          <li><strong>Treating the kill switch as instant:</strong> Propagation takes time. Measure it, set a target, and keep a second mitigation (such as a circuit breaker) for critical failures.</li>
+          <li><strong>Non-deterministic bucketing:</strong> Random assignment per request makes users flicker between variants. Hash a stable user id together with the flag key.</li>
+          <li><strong>Shipping targeting rules to clients:</strong> Raw rules and segments in a browser or mobile app leak business logic and user attributes. Send only evaluated results.</li>
+          <li><strong>Never removing flags:</strong> Flags that live for years become untested branches and hidden configuration. Add owners and expiry dates.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice the build-versus-buy question applies to the <strong>control plane</strong>. Teams keep <strong>evaluation local</strong> either way:</p>
+        <ul>
+          <li><strong>Step 0 — Define requirements:</strong> Latency budget, propagation target (for example under 10 seconds), consistency needs, client types (server, web, mobile) and audit or compliance rules.</li>
+          <li><strong>Step 1 — Local evaluation:</strong> Embed an SDK (or an OpenFeature-compatible provider) in each service that evaluates cached rules in memory.</li>
+          <li><strong>Step 2 — Asynchronous updates:</strong> Streaming as the primary channel, polling as a fallback, a persisted last-known-good snapshot and explicit default values.</li>
+          <li><strong>Step 3 — Choose the control plane:</strong> A managed vendor, an open-source system or an in-house service, with approvals, an audit log and per-environment configuration.</li>
+          <li><strong>Step 4 — Client and edge flags:</strong> Evaluate server-side or at the edge and send only the resulting variants to browsers and mobile apps.</li>
+          <li><strong>Step 5 — Hygiene:</strong> Give every flag an owner and an expiry date, remove stale flags and test both code paths.</li>
+        </ul>
+        <p>Keep the hot path local and the control plane central.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Make flag checks <strong>local and in-memory</strong>, and make flag changes <strong>central and asynchronous</strong>. This keeps latency near zero and removes the flag backend from the request path, at the cost of a short, measurable propagation delay that must be accepted and monitored.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

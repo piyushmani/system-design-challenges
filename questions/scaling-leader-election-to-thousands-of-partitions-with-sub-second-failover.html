@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scaling Leader Election to Thousands of Partitions With Sub-Second Failover — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">31 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Leader Election</span>
+      <span class="tag tag--green">Sharding</span>
+      <span class="tag tag--amber">Latency</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Scaling Leader Election to Thousands of Partitions With Sub-Second Failover</h1>
+      <p class="q-scenario"><strong>Ethan</strong> leads a multi-tenant streaming ingestion platform whose data is split into <strong>thousands of partitions</strong>. Every partition needs a single leader that orders writes, assigns offsets and commits, with <strong>strict per-partition ordering</strong> and <strong>sub-second failover</strong>. The partition count keeps growing, so <strong>per-partition operational overhead (heartbeats, timers, memory, metadata writes) must stay roughly constant</strong>, and operators need clear visibility during rebalances. Partitions hosted on the same brokers fail together anyway, and ordering is required <em>within</em> a partition, not across partitions. He must pick the leader-election pattern that best balances consistency, scalability, failover latency and operational complexity.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">One central ZooKeeper/etcd cluster holding an ephemeral node or lease per partition; whichever process claims the node leads that partition.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">A dedicated consensus group (for example a 3-node Raft group) for every single partition, with election and replication inside each group and clients routing straight to each partition&#x27;s leader.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">A hierarchical layout: partitions are grouped into broker cells, each running one Raft group (dozens to hundreds of groups in total). The cell leader coordinates leadership and ordering for all its partitions, giving rapid failover and strict per-partition order with far fewer consensus groups.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Leaderless, optimistic ingestion: any node accepts writes for a partition, and conflicts are resolved asynchronously (CRDTs, vector clocks, compaction) with periodic reconciliation and idempotent operations.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Hierarchical Raft Cells</h3>
+        <p>Failover speed comes from <strong>Raft's built-in election inside a small group</strong> (hundreds of milliseconds), while scalability comes from keeping the <strong>number of consensus groups bounded</strong>. Grouping partitions into cells gives both: each cell has one log, one leader and one heartbeat stream shared by all its partitions, and a single ordered log naturally gives each partition a strict order. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Sub-second failover:</strong> Raft election timeouts are typically a few hundred milliseconds, so a failed cell leader is replaced and serving again in about a second. Session-timeout schemes (ZooKeeper/etcd leases) are normally configured in whole seconds to avoid false positives.</li>
+          <li><strong>Bounded overhead:</strong> Heartbeats, election timers and log replication scale with the number of <em>cells</em> (dozens to hundreds), not the number of partitions (thousands or more). Adding partitions adds records to an existing log, not new consensus groups.</li>
+          <li><strong>Strict per-partition ordering for free:</strong> The cell leader appends all writes to one replicated log and assigns per-partition offsets from it, so commit order within a partition is the log order. Leader terms (epochs) fence deposed leaders.</li>
+          <li><strong>Clear failure domains and visibility:</strong> A cell is the unit of failover and the unit of dashboards: leader, term, commit lag and partition list per cell make rebalances and incidents easy to read.</li>
+          <li><strong>Elastic growth:</strong> Add capacity by adding cells and moving partitions between them through a directory service, instead of scaling one monolithic coordinator.</li>
+        </ul>
+        <p>A solid implementation combines <strong>Raft with pre-vote and tuned election timeouts</strong>, <strong>epoch fencing</strong> on every write, a <strong>partition directory</strong> (consistent hashing or an explicit map), <strong>client-side leader caching with redirect hints</strong>, and per-cell dashboards for leader changes, commit latency and partition counts. Load-test failover at the real partition count, because heartbeat and election behavior changes with scale.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🐘</span>
+            <h4>A — Central ZooKeeper / etcd</h4>
+          </div>
+          <p>Simple to reason about, but one metadata cluster must absorb thousands of ephemeral nodes, watches and lease renewals, and every election is a write through its single leader. When a broker dies, thousands of partitions lose leaders at once, producing a thundering herd of elections and watch notifications, and session timeouts are usually seconds, which strains the sub-second goal. This scaling pain is part of why some large log systems moved their metadata onto an internal Raft quorum. <strong>Caveat:</strong> for dozens of leaders (not thousands) and relaxed failover targets, it is a proven and excellent choice.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔁</span>
+            <h4>B — Raft Group per Partition</h4>
+          </div>
+          <p>Gives the strongest isolation and fast per-partition failover, and systems such as CockroachDB and TiKV do run huge numbers of Raft groups. But that works only with serious engineering: coalesced heartbeats, shared timers, batched I/O and group-aware placement. Without them, every partition adds its own heartbeats, elections and memory, so overhead grows linearly with partitions. <strong>Caveat:</strong> it is the right model when each partition must be an independent replicated state machine (for example a distributed SQL range) and the team can invest in a multi-Raft runtime.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>D — Leaderless Optimistic Ingestion</h4>
+          </div>
+          <p>Highest write availability, but it contradicts the requirement for <strong>strict commit ordering per partition</strong>: concurrent writers produce divergent histories that must be reconciled later, and offsets or sequence numbers cannot be assigned consistently. Reconciliation also adds read-time and background cost. <strong>Caveat:</strong> a good fit for mergeable data (counters, sets, presence) where order does not matter.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Hierarchical Raft Cells ✓</h4>
+          </div>
+          <p>A hierarchical layout: partitions are grouped into broker cells, each running one Raft group (dozens to hundreds of groups in total). The cell leader coordinates leadership and ordering for all its pa</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Failover Latency</th><th>Per-Partition Ordering</th><th>Overhead as Partitions Grow</th><th>Blast Radius</th><th>Operational Complexity</th><th>Central Metadata Bottleneck</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Central ZooKeeper / etcd</td><td>Seconds (session timeout) ⚠</td><td>Yes ✅</td><td>Grows on one cluster ❌</td><td>Large (global) ❌</td><td>Low–Medium ⚠</td><td>Yes ❌</td></tr>
+            <tr><td class="tt-option">B — Raft per Partition</td><td>Sub-second ✅</td><td>Yes ✅</td><td>Linear unless optimized ❌</td><td>Small (one partition) ✅</td><td>High ❌</td><td>No ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Hierarchical Raft Cells ✓</td><td>Sub-second ✅</td><td>Yes ✅</td><td>Flat ✅</td><td>Medium (one cell) ⚠</td><td>Medium ⚠</td><td>No ✅</td></tr>
+            <tr><td class="tt-option">D — Leaderless Optimistic</td><td>No election needed ✅</td><td>No ❌</td><td>Low ✅</td><td>Small ✅</td><td>High (reconciliation) ❌</td><td>No ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Central ZooKeeper / etcd</h4>
+          </div>
+          <p>Dozens (not thousands) of leaders, failover targets of several seconds, and a team that already operates the coordination service well.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Raft per Partition</h4>
+          </div>
+          <p>Each partition is an independent replicated state machine (distributed SQL ranges, KV regions) and you can run a multi-Raft runtime with coalesced heartbeats.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Hierarchical Raft Cells</h4>
+          </div>
+          <p>Many partitions with per-partition ordering, sub-second failover and a need for flat operational cost as the partition count grows.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Leaderless Optimistic</h4>
+          </div>
+          <p>Mergeable, commutative data (counters, sets, presence, metrics) where ordering is not required and write availability dominates.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Cell-Based Leadership Architecture</h3>
+        <p>Clients route by partition to a cell; each cell runs one Raft group whose leader orders writes for all of its partitions:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    Client[Producers] --&gt; Dir[Partition Directory]
+    Dir --&gt; Router[Cell Router with cached leaders]
+    Router --&gt; L1
+    Router --&gt; L2
+    subgraph Cell1[Cell 1 - one Raft group]
+        L1[Leader] --- F1[Follower]
+        L1 --- F2[Follower]
+        P1[Partitions 1 to 500 share one log]
+        L1 --&gt; P1
+    end
+    subgraph Cell2[Cell 2 - one Raft group]
+        L2[Leader] --- F3[Follower]
+        L2 --- F4[Follower]
+        P2[Partitions 501 to 1000 share one log]
+        L2 --&gt; P2
+    end">flowchart LR
+    Client[Producers] --&gt; Dir[Partition Directory]
+    Dir --&gt; Router[Cell Router with cached leaders]
+    Router --&gt; L1
+    Router --&gt; L2
+    subgraph Cell1[Cell 1 - one Raft group]
+        L1[Leader] --- F1[Follower]
+        L1 --- F2[Follower]
+        P1[Partitions 1 to 500 share one log]
+        L1 --&gt; P1
+    end
+    subgraph Cell2[Cell 2 - one Raft group]
+        L2[Leader] --- F3[Follower]
+        L2 --- F4[Follower]
+        P2[Partitions 501 to 1000 share one log]
+        L2 --&gt; P2
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Cell Leader Write Path with Epoch Fencing</h3>
+        <p>A cell leader assigns per-partition offsets from a single replicated log, redirects clients when it is not the serving leader, and only starts serving after committing a no-op in its own term:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onBecomeLeader</span>(term):</span>
+<span class="line">    state <span class="tk-op">=</span> <span class="tk-fn">replay</span>(snapshot, committedLog)             <span class="tk-com">// rebuild nextOffset[partition] and producer state</span></span>
+<span class="line">    raft.<span class="tk-fn">append</span>(<span class="tk-fn">NoOp</span>(term))                            <span class="tk-com">// commit an entry from this term first</span></span>
+<span class="line">    raft.<span class="tk-fn">waitUntilCommitted</span>(<span class="tk-fn">NoOp</span>(term))</span>
+<span class="line">    serving <span class="tk-op">=</span> <span class="tk-lit">true</span>                                     <span class="tk-com">// only now accept client writes</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">appendRecords</span>(partitionId, records, producerId, seq):</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> (raft.<span class="tk-fn">isLeader</span>() <span class="tk-kw">and</span> serving):</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">Redirect</span>(raft.<span class="tk-fn">leaderHint</span>())             <span class="tk-com">// client retries on the hinted node</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> producerState[producerId].lastSeq <span class="tk-op">&gt;=</span> seq:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">Duplicate</span>(producerState[producerId].lastOffset)   <span class="tk-com">// idempotent retry</span></span>
+<span class="line"></span>
+<span class="line">    baseOffset <span class="tk-op">=</span> nextOffset[partitionId]               <span class="tk-com">// single writer per cell, no races</span></span>
+<span class="line">    nextOffset[partitionId] <span class="tk-op">+</span><span class="tk-op">=</span> <span class="tk-fn">len</span>(records)            <span class="tk-com">// reserved at append time; rebuilt after failover</span></span>
+<span class="line"></span>
+<span class="line">    entry <span class="tk-op">=</span> <span class="tk-fn">LogEntry</span>(term <span class="tk-op">=</span> raft.currentTerm, partition <span class="tk-op">=</span> partitionId,</span>
+<span class="line">                     baseOffset <span class="tk-op">=</span> baseOffset, records <span class="tk-op">=</span> records,</span>
+<span class="line">                     producerId <span class="tk-op">=</span> producerId, seq <span class="tk-op">=</span> seq)</span>
+<span class="line">    index <span class="tk-op">=</span> raft.<span class="tk-fn">append</span>(entry)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> raft.<span class="tk-fn">waitUntilCommitted</span>(index, timeout <span class="tk-op">=</span> <span class="tk-num">200ms</span>):</span>
+<span class="line">        <span class="tk-kw">return</span> NotCommitted                            <span class="tk-com">// never ack uncommitted data; idempotent retry is safe</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">Ack</span>(baseOffset)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onApply</span>(entry):                               <span class="tk-com">// runs on every replica, in log order</span></span>
+<span class="line">    partitionLog[entry.partition].<span class="tk-fn">append</span>(entry.records)</span>
+<span class="line">    producerState[entry.producerId] <span class="tk-op">=</span> (entry.seq, entry.baseOffset)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Writes to any external storage carry entry.term as a fencing token,</span></span>
+<span class="line"><span class="tk-com">// so late writes from a deposed leader are rejected by the storage layer.</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Oversized cells:</strong> Putting too many partitions behind one leader makes it a throughput bottleneck and a large blast radius. Size cells from measured peak load with headroom.</li>
+          <li><strong>Election timeouts tuned too low:</strong> Aggressive timeouts cause spurious elections during GC pauses or network blips, and each election stalls every partition in the cell. Use pre-vote and measure real heartbeat jitter.</li>
+          <li><strong>No fencing on writes:</strong> A deposed leader that has not noticed it lost leadership can still accept writes. Include the term (epoch) in every write to external storage and reject lower terms.</li>
+          <li><strong>Serving before the new leader is ready:</strong> A fresh leader must commit an entry in its own term and rebuild offsets before acknowledging client writes, or it may expose uncommitted state.</li>
+          <li><strong>Ignoring noisy neighbors:</strong> One tenant's hot partition can degrade every partition in the cell. Add per-partition quotas and migrate hot partitions.</li>
+          <li><strong>Rebalancing without a handoff protocol:</strong> Moving a partition by just flipping routing can create two writers. Freeze, transfer, flip and fence the old owner.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams choose the <em>consensus granularity</em> deliberately and <strong>measure failover time at production scale</strong>. A typical evolution looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define the failure budget:</strong> Set the target failover time, the tolerated blast radius per failure and the ordering guarantee (per partition vs global).</li>
+          <li><strong>Step 1 — Group partitions into cells:</strong> Pick a cell size (for example a few hundred to a thousand partitions) so one leader handles peak load, and use a directory to map partition to cell.</li>
+          <li><strong>Step 2 — One Raft group per cell:</strong> Run 3 or 5 replicas across failure domains with tuned election timeouts, pre-vote enabled and epoch fencing on writes.</li>
+          <li><strong>Step 3 — Routing and caching:</strong> Let clients cache leader locations and follow redirect hints, so a failover causes one retry instead of a lookup storm.</li>
+          <li><strong>Step 4 — Rebalancing tooling:</strong> Automate partition moves and leader transfers with fencing, and expose progress and per-cell health.</li>
+          <li><strong>Step 5 — Revisit granularity:</strong> If a few partitions become independent, high-value state machines, promote them to their own groups (multi-Raft with coalesced heartbeats).</li>
+        </ul>
+        <p>Match consensus granularity to your failure domains, not to your partition count.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Consensus is expensive per group, so <strong>keep the number of groups small and let each group coordinate many partitions</strong>. A Raft-per-cell design delivers sub-second failover, strict per-partition ordering and flat operational cost as partitions grow, at the price of a larger blast radius per cell that you manage with cell sizing and migration tooling.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

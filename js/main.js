@@ -159,37 +159,70 @@ document.documentElement.setAttribute('data-style', STYLE_MAP[ACTIVE_STYLE_ID] |
       renderPagination(totalPages);
     }
 
+    function getPageItems(current, total) {
+      if (total <= 7) {
+        const pages = [];
+        for (let i = 1; i <= total; i++) pages.push(i);
+        return pages;
+      }
+
+      if (current <= 4) {
+        return [1, 2, 3, 4, 5, '...', total];
+      }
+
+      if (current >= total - 3) {
+        return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+      }
+
+      return [1, '...', current - 1, current, current + 1, '...', total];
+    }
+
     function renderPagination(totalPages) {
       if (!paginationEl) return;
       if (totalPages <= 1) {
         paginationEl.style.display = 'none';
+        paginationEl.innerHTML = '';
         return;
       }
 
       paginationEl.style.display = 'flex';
       let html = '';
 
-      // Prev
-      if (currentPage > 1) {
-        html += `<button class="page-btn" data-page="${currentPage - 1}">&laquo; Prev</button>`;
-      }
+      // Prev button: always rendered to preserve layout balance and prevent shifting
+      const isFirst = currentPage <= 1;
+      html += `<button class="page-btn page-btn--nav" ${isFirst ? 'disabled aria-disabled="true"' : `data-page="${currentPage - 1}"`} aria-label="Previous page">
+        <span class="nav-arrow">&larr;</span>
+        <span class="nav-text">Prev</span>
+      </button>`;
 
-      // Pages
-      for (let i = 1; i <= totalPages; i++) {
-        html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
-      }
+      // Page numbers with ellipsis
+      const items = getPageItems(currentPage, totalPages);
+      items.forEach(item => {
+        if (item === '...') {
+          html += `<span class="page-ellipsis" aria-hidden="true">&hellip;</span>`;
+        } else {
+          const isActive = item === currentPage;
+          html += `<button class="page-btn ${isActive ? 'active' : ''}" data-page="${item}" aria-label="Page ${item}" ${isActive ? 'aria-current="page"' : ''}>${item}</button>`;
+        }
+      });
 
-      // Next
-      if (currentPage < totalPages) {
-        html += `<button class="page-btn" data-page="${currentPage + 1}">Next &raquo;</button>`;
-      }
+      // Next button: always rendered to preserve layout balance and prevent shifting
+      const isLast = currentPage >= totalPages;
+      html += `<button class="page-btn page-btn--nav" ${isLast ? 'disabled aria-disabled="true"' : `data-page="${currentPage + 1}"`} aria-label="Next page">
+        <span class="nav-text">Next</span>
+        <span class="nav-arrow">&rarr;</span>
+      </button>`;
 
       paginationEl.innerHTML = html;
 
-      // Add events
+      // Add events using closest() to ensure clicks on child spans trigger correctly
       paginationEl.querySelectorAll('.page-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-          currentPage = parseInt(e.target.dataset.page, 10);
+          const targetBtn = e.target.closest('.page-btn');
+          if (!targetBtn || targetBtn.disabled || !targetBtn.dataset.page) return;
+          const targetPage = parseInt(targetBtn.dataset.page, 10);
+          if (isNaN(targetPage) || targetPage === currentPage) return;
+          currentPage = targetPage;
           filterAndPaginate();
           // Scroll back to grid top
           const grid = document.getElementById('problemGrid');

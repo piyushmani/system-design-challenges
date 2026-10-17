@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architectural Decision: Handling Race Conditions in a Distributed System — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">06 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Race Conditions</span>
+      <span class="tag tag--green">Distributed Systems</span>
+      <span class="tag tag--amber">Concurrency</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Architectural Decision: Handling Race Conditions in a Distributed System</h1>
+      <p class="q-scenario">Alex is a senior backend engineer at a rapidly scaling e-commerce platform preparing for major flash sale events. During checkout, thousands of concurrent shoppers may attempt to purchase the same inventory items simultaneously. If two or more checkout transactions read the identical remaining stock before writing their decrements, a classic <strong>check-then-act race condition</strong> (lost update) occurs, resulting in severe overselling and costly fulfillment cancellations. Alex must choose an architectural concurrency model that maintains strict inventory integrity while supporting massive horizontal throughput without crippling database performance or introducing single-point bottlenecks.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Deploying distributed locks on all inventory servers to guarantee sequential access.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Adopting an event-driven design utilizing message queues to separate inventory updates.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Using optimistic concurrency control alongside versioning to manage concurrent updates.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Establishing a centralized inventory service that acts as the sole point for write operations.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Optimistic Concurrency Control (OCC) with Versioning</h3>
+        <p><strong>Optimistic Concurrency Control (OCC) with versioning</strong> allows transactions to execute concurrently without holding expensive locks across network boundaries or database tables. Each inventory record maintains a monotonically increasing <code>version</code> or timestamp. During checkout, the application reads the inventory state, calculates the deduction, and executes an atomic conditional update: <code>UPDATE inventory SET quantity = quantity - :qty, version = version + 1 WHERE id = :id AND version = :read_version AND quantity >= :qty</code>. If another transaction modified the stock concurrently, the version mismatch causes zero rows to be updated, instantly detecting the conflict. The application can immediately handle the conflict by retrying with exponential backoff or alerting the user that the item is sold out. This delivers high read/write throughput, avoids deadlocks, and eliminates distributed lock contention while ensuring bulletproof consistency.</p>
+        <ul>
+          <li><strong>Lock-Free Scalability:</strong> Transactions read inventory records without acquiring pessimistic row locks or network-based distributed locks, keeping database read paths extremely fast and non-blocking.</li>
+          <li><strong>Atomic Conflict Detection:</strong> Enforces consistency at the datastore layer using atomic conditional writes (<code>WHERE version = :expected_version</code>), guaranteeing that lost updates and overselling are physically impossible.</li>
+          <li><strong>Deadlock Immunity:</strong> Because no multi-row or distributed locks are held across transaction boundaries, systems eliminate distributed deadlocks and lock escalation penalties.</li>
+          <li><strong>Stateless Application Tier:</strong> Stateless application nodes can scale horizontally behind load balancers without needing to coordinate distributed lock state or membership protocols.</li>
+        </ul>
+        <p>For high-volume retail checkouts, pair OCC version checks with an atomic predicate (<code>AND quantity >= :qty</code>) or token-based inventory reservations to ensure correctness without suffering distributed locking bottlenecks.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Distributed Locks on Inventory Servers</h4>
+          </div>
+          <p>Deploying distributed locks (e.g., via Redis Redlock, ZooKeeper, or etcd) across all inventory nodes serializes checkout requests and introduces high network latency, lock management overhead, and potential split-brain failure modes. In high-traffic scenarios, lock contention creates severe bottlenecks, and if a node holding a lock experiences a network partition, process pause, or GC stall past the lock's TTL, concurrent processes can acquire the lock simultaneously and cause the exact race condition it sought to prevent.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📬</span>
+            <h4>B — Event-Driven Message Queuing for Inventory Updates</h4>
+          </div>
+          <p>Using asynchronous message queues to decouple inventory updates turns checkout into an eventually consistent workflow. If the checkout service acknowledges a purchase before the queue consumer processes the inventory decrement, concurrent checkouts will read stale inventory counts and oversell out-of-stock items. While queues are excellent for post-purchase workflows (such as order fulfillment and notifications), inventory reservation at checkout requires immediate consistency or strict synchronous reservation.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏢</span>
+            <h4>D — Centralized Single-Point Inventory Write Service</h4>
+          </div>
+          <p>Funneling all write operations through a single centralized inventory service creates a critical single point of failure (SPOF) and a severe vertical scaling ceiling. Furthermore, centralization alone does not solve concurrency race conditions; if the centralized service handles requests concurrently across multiple worker threads or database connections, race conditions will still occur unless internal concurrency control (such as OCC or locking) is implemented.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Optimistic Concurrency Control (OCC) with Versioning ✓</h4>
+          </div>
+          <p>Using optimistic concurrency control alongside versioning to manage concurrent updates.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Throughput / Scalability</th><th>Consistency Guarantee</th><th>Latency Overhead</th><th>Operational Complexity</th><th>Deadlock Risk</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">Optimistic Concurrency Control (C)</td><td>High</td><td>Strong</td><td>Very Low</td><td>Moderate</td><td>None</td></tr>
+            <tr><td class="tt-option">Distributed Locks (A)</td><td>Low</td><td>Strong (if no TTL expiry)</td><td>High</td><td>Very High</td><td>High</td></tr>
+            <tr><td class="tt-option">Event-Driven Message Queues (B)</td><td>Very High</td><td>Eventual (Overselling Risk)</td><td>Low (Async)</td><td>High</td><td>None</td></tr>
+            <tr><td class="tt-option">Centralized Write Service (D)</td><td>Low (SPOF)</td><td>Moderate</td><td>Moderate</td><td>Moderate</td><td>Moderate</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>Optimistic Concurrency Control with Versioning (Option C)</h4>
+          </div>
+          <p>Recommended for high-concurrency e-commerce checkout and web applications where reads dominate or write collisions are manageable, ensuring strict ACID consistency without distributed lock overhead.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>Distributed Locks (Option A)</h4>
+          </div>
+          <p>Best suited for coarse-grained background tasks, batch reconciliation jobs, or singleton schedulers where only one worker must run globally and millisecond latency is not a priority.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>Event-Driven Queues (Option B)</h4>
+          </div>
+          <p>Ideal for asynchronous post-checkout operations (order confirmation emails, fulfillment orchestration, analytics streaming, and invoice generation) where eventual consistency is acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>Centralized Write Service (Option D)</h4>
+          </div>
+          <p>Acceptable for small-scale applications, internal enterprise back-offices, or low-throughput administrative domains where write volume is minimal and architectural simplicity is preferred.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Optimistic Concurrency Control vs. Race Conditions</h3>
+        <p>Sequence diagram illustrating how OCC atomically validates version numbers during concurrent checkout to prevent lost updates without holding locks.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+autonumber
+actor ClientA as Customer A
+actor ClientB as Customer B
+participant Svc as Checkout Service
+participant DB as Inventory Database
+Note over ClientA,DB: Step 1: Concurrent Reads (Version = 5, Stock = 1)
+ClientA-&gt;&gt;Svc: Checkout SKU-100 (qty: 1)
+ClientB-&gt;&gt;Svc: Checkout SKU-100 (qty: 1)
+Svc-&gt;&gt;DB: SELECT stock, version FROM inventory WHERE sku=&#x27;SKU-100&#x27;
+DB--&gt;&gt;Svc: stock=1, version=5
+Note over ClientA,DB: Step 2: Atomic Conditional Write (First Committer Wins)
+Svc-&gt;&gt;DB: UPDATE inventory SET stock=0, version=6 WHERE sku=&#x27;SKU-100&#x27; AND version=5 AND stock&gt;=1
+DB--&gt;&gt;Svc: 1 row affected (Customer A succeeds)
+Svc--&gt;&gt;ClientA: Order Placed Successfully
+Note over ClientB,DB: Step 3: Conflict Detected (Zero Rows Updated)
+Svc-&gt;&gt;DB: UPDATE inventory SET stock=0, version=6 WHERE sku=&#x27;SKU-100&#x27; AND version=5 AND stock&gt;=1
+DB--&gt;&gt;Svc: 0 rows affected (Version mismatch / Out of stock)
+Svc--&gt;&gt;ClientB: Item Sold Out (Clean Failure / Retry)">sequenceDiagram
+autonumber
+actor ClientA as Customer A
+actor ClientB as Customer B
+participant Svc as Checkout Service
+participant DB as Inventory Database
+Note over ClientA,DB: Step 1: Concurrent Reads (Version = 5, Stock = 1)
+ClientA-&gt;&gt;Svc: Checkout SKU-100 (qty: 1)
+ClientB-&gt;&gt;Svc: Checkout SKU-100 (qty: 1)
+Svc-&gt;&gt;DB: SELECT stock, version FROM inventory WHERE sku=&#x27;SKU-100&#x27;
+DB--&gt;&gt;Svc: stock=1, version=5
+Note over ClientA,DB: Step 2: Atomic Conditional Write (First Committer Wins)
+Svc-&gt;&gt;DB: UPDATE inventory SET stock=0, version=6 WHERE sku=&#x27;SKU-100&#x27; AND version=5 AND stock&gt;=1
+DB--&gt;&gt;Svc: 1 row affected (Customer A succeeds)
+Svc--&gt;&gt;ClientA: Order Placed Successfully
+Note over ClientB,DB: Step 3: Conflict Detected (Zero Rows Updated)
+Svc-&gt;&gt;DB: UPDATE inventory SET stock=0, version=6 WHERE sku=&#x27;SKU-100&#x27; AND version=5 AND stock&gt;=1
+DB--&gt;&gt;Svc: 0 rows affected (Version mismatch / Out of stock)
+Svc--&gt;&gt;ClientB: Item Sold Out (Clean Failure / Retry)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Inventory Deduction Using Atomic OCC and Conditional Write</h3>
+        <p>Production-ready implementation of an OCC inventory deduction with exponential backoff and idempotency.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">typescript</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">interface DeductResult {</span>
+<span class="line">  success: boolean;</span>
+<span class="line">  remainingStock?: number;</span>
+<span class="line">  error?: string;</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">async</span> <span class="tk-kw">function</span> <span class="tk-fn">deductInventoryWithOCC</span>(</span>
+<span class="line">  sku: string,</span>
+<span class="line">  quantity: number,</span>
+<span class="line">  maxRetries <span class="tk-op">=</span> <span class="tk-num">3</span></span>
+<span class="line">): Promise<span class="tk-op">&lt;</span>DeductResult<span class="tk-op">&gt;</span> {</span>
+<span class="line">  <span class="tk-kw">for</span> (<span class="tk-kw">let</span> attempt <span class="tk-op">=</span> <span class="tk-num">1</span>; attempt <span class="tk-op">&lt;=</span> maxRetries; attempt<span class="tk-op">+</span><span class="tk-op">+</span>) {</span>
+<span class="line">    <span class="tk-com">// 1. Read current stock and version from primary database</span></span>
+<span class="line">    <span class="tk-kw">const</span> item <span class="tk-op">=</span> <span class="tk-kw">await</span> db.<span class="tk-fn">query</span>(</span>
+<span class="line">      <span class="tk-str">&#x27;SELECT stock, version FROM inventory WHERE sku = $1&#x27;</span>,</span>
+<span class="line">      [sku]</span>
+<span class="line">    );</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> (!item || item.stock <span class="tk-op">&lt;</span> quantity) {</span>
+<span class="line">      <span class="tk-kw">return</span> { success: <span class="tk-lit">false</span>, error: <span class="tk-str">&#x27;INSUFFICIENT_STOCK&#x27;</span> };</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 2. Attempt atomic conditional update with version check</span></span>
+<span class="line">    <span class="tk-kw">const</span> result <span class="tk-op">=</span> <span class="tk-kw">await</span> db.<span class="tk-fn">query</span>(</span>
+<span class="line">      `UPDATE inventory</span>
+<span class="line">       SET stock <span class="tk-op">=</span> stock <span class="tk-op">-</span> $<span class="tk-num">1</span>, version <span class="tk-op">=</span> version <span class="tk-op">+</span> <span class="tk-num">1</span></span>
+<span class="line">       WHERE sku <span class="tk-op">=</span> $<span class="tk-num">2</span> AND version <span class="tk-op">=</span> $<span class="tk-num">3</span> AND stock <span class="tk-op">&gt;=</span> $<span class="tk-num">1</span></span>
+<span class="line">       RETURNING stock, version`,</span>
+<span class="line">      [quantity, sku, item.version]</span>
+<span class="line">    );</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 3. Check if update succeeded (1 row affected)</span></span>
+<span class="line">    <span class="tk-kw">if</span> (result.rowCount <span class="tk-op">==</span><span class="tk-op">=</span> <span class="tk-num">1</span>) {</span>
+<span class="line">      <span class="tk-kw">return</span> { success: <span class="tk-lit">true</span>, remainingStock: result.rows[<span class="tk-num">0</span>].stock };</span>
+<span class="line">    }</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 4. Collision detected: apply randomized exponential backoff (jitter)</span></span>
+<span class="line">    <span class="tk-kw">const</span> delayMs <span class="tk-op">=</span> Math.<span class="tk-fn">min</span>(<span class="tk-num">100</span> <span class="tk-op">*</span> Math.<span class="tk-fn">pow</span>(<span class="tk-num">2</span>, attempt) <span class="tk-op">+</span> Math.<span class="tk-fn">random</span>() <span class="tk-op">*</span> <span class="tk-num">50</span>, <span class="tk-num">1000</span>);</span>
+<span class="line">    <span class="tk-kw">await</span> <span class="tk-kw">new</span> <span class="tk-fn">Promise</span>((resolve) <span class="tk-op">=&gt;</span> <span class="tk-fn">setTimeout</span>(resolve, delayMs));</span>
+<span class="line">  }</span>
+<span class="line"></span>
+<span class="line">  <span class="tk-kw">return</span> { success: <span class="tk-lit">false</span>, error: <span class="tk-str">&#x27;CONCURRENCY_CONFLICT_MAX_RETRIES&#x27;</span> };</span>
+<span class="line">}</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Unbounded Retries:</strong> Retrying failed OCC updates in a tight loop without limits, leading to thread exhaustion, CPU spikes, and severe database thundering herd problems.</li>
+          <li><strong>Missing Stock Bounds Check:</strong> Only checking <code>version = :read_version</code> without verifying <code>quantity >= :requested_qty</code> in the same atomic statement, which can decrement inventory below zero if versions drift.</li>
+          <li><strong>Omitting Idempotency Keys:</strong> Failing to deduplicate retried client requests, causing accidental double orders when network timeouts occur mid-flight.</li>
+          <li><strong>Ignoring Read Replica Replication Lag:</strong> Reading the initial version from an asynchronously replicated read replica, causing transactions to repeatedly fail version checks against the primary database.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In enterprise e-commerce platforms handling high-traffic sales, managing inventory concurrency requires balancing strict consistency with massive throughput:</p>
+        <ul>
+          <li><strong>Atomic Predicate Updates:</strong> Leverage conditional SQL or NoSQL updates such as <code>UPDATE inventory SET stock = stock - 1, version = version + 1 WHERE sku = :sku AND version = :version AND stock >= 1</code> to combine OCC with boundary checks.</li>
+          <li><strong>Inventory Reservation with TTL:</strong> When a user begins checkout, place a temporary hold on the inventory using an atomic decrement or Redis token bucket with an expiring TTL (e.g., 10 minutes) before payment processing.</li>
+          <li><strong>Exponential Backoff with Jitter:</strong> Implement randomized jittered retries (e.g., 3 retries max) for transactions encountering version collisions to prevent thundering herds against the database.</li>
+          <li><strong>Idempotency Keys:</strong> Pass client-generated idempotency keys (UUIDv4) through the checkout pipeline to guarantee that retried requests never double-decrement stock.</li>
+          <li><strong>Tiered Hot-SKU Partitioning:</strong> For viral flash sale items, partition inventory into virtual buckets across multiple database shards or in-memory Redis clusters with Lua scripts to parallelize write throughput.</li>
+        </ul>
+        <p>Combining optimistic concurrency with atomic predicate decrements gives e-commerce platforms the optimal balance of horizontal scalability, low checkout latency, and zero overselling.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p><strong>Optimistic Concurrency Control (OCC)</strong> with versioning solves inventory race conditions by replacing fragile, high-latency distributed locks with atomic, datastore-level conditional updates, ensuring strict consistency and superior scalability.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

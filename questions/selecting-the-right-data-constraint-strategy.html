@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Selecting the Right Data Constraint Strategy — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">04 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Database Constraints</span>
+      <span class="tag tag--green">Database Design</span>
+      <span class="tag tag--amber">Architecture</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Selecting the Right Data Constraint Strategy</h1>
+      <p class="q-scenario"><strong>Alex</strong> works at an expanding online retailer whose platform is split into <strong>multiple independently owned services</strong> (catalog, cart, orders, warehouse, search), each with its own datastore. Stock changes (reservations, sales, returns, restocks) must be reflected consistently across these services. Traffic is spiky (flash sales), <strong>availability and throughput</strong> matter, and a <strong>brief lag</strong> of a few seconds in what the catalog or search shows is acceptable, but the business must <strong>never oversell</strong> the last units. Alex needs the recommended architectural path for keeping stock data consistent across the services.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Enforcing distributed transactions to guarantee strict consistency for every stock change.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Adopting an event-based design relying on eventual consistency for modifying inventory.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Leveraging optimistic concurrency control to manage overlapping stock update calls.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Relying on a single centralized inventory service to orchestrate all quantity modifications.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Event-Driven Design with Eventual Consistency</h3>
+        <p>An <strong>event-driven design with eventual consistency</strong> fits this scenario best. One service (inventory) remains the <strong>single authority</strong> for stock and makes each decrement atomically in its own database. It then publishes events (reserved, committed, released, restocked) that other services consume to update their own copies, with <strong>sagas and compensating actions</strong> coordinating multi-step workflows such as order placement. Consistency is reached in seconds rather than instantly, but the system stays available and scales. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Keeps services decoupled:</strong> Services react to events instead of calling each other synchronously, so a slow search or catalog service cannot block checkout.</li>
+          <li><strong>Stays available under failure:</strong> No cross-service lock or coordinator has to be reachable for every stock change. If a consumer is down, events queue up and are processed on recovery.</li>
+          <li><strong>Scales for spikes:</strong> The broker buffers bursts and consumers scale horizontally, which suits flash-sale traffic.</li>
+          <li><strong>Protects against overselling where it matters:</strong> The authoritative decrement is a single atomic conditional update inside the inventory service (reserve only if enough stock is available). Eventual consistency applies to the <em>copies</em> of stock held elsewhere, not to the source of truth.</li>
+          <li><strong>Handles multi-step workflows with sagas:</strong> If payment fails after stock is reserved, a compensating event releases the reservation. This replaces a distributed transaction with explicit, observable steps.</li>
+          <li><strong>Established guidance:</strong> Sagas were introduced by Garcia-Molina and Salem (1987) for long-lived transactions and are now the standard way to coordinate data changes across microservices.</li>
+        </ul>
+        <p>A sound implementation uses an <strong>authoritative inventory owner</strong>, <strong>atomic conditional decrements</strong>, the <strong>outbox pattern</strong>, <strong>idempotent consumers</strong> and <strong>saga compensation with reservation timeouts</strong>. Track event lag, reservation expiry rate and reconciliation mismatches between inventory and downstream copies.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Distributed Transactions</h4>
+          </div>
+          <p>Two-phase commit (2PC) or XA transactions give strong consistency across services, but participants hold locks while waiting for the coordinator, so latency and contention grow with every service involved, and a coordinator or participant failure can block resources. Throughput drops during exactly the spikes where it is needed, and many modern datastores and brokers do not support XA. <strong>Caveat:</strong> it can be justified for a small number of tightly coupled databases inside one trust boundary, where strict atomicity outweighs availability.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>C — Optimistic Concurrency Control</h4>
+          </div>
+          <p><strong>Optimistic concurrency control</strong> (version checks or conditional writes) prevents two overlapping updates from silently overwriting each other, and it is a good tool <em>inside</em> the inventory service. But it operates on a single datastore and does not propagate stock changes to the other services, so it does not solve the cross-service consistency problem on its own. <strong>Caveat:</strong> it is complementary to option B: the atomic decrement that guards against overselling is typically an optimistic conditional update.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏢</span>
+            <h4>D — Single Centralized Inventory Service</h4>
+          </div>
+          <p>A single owner of inventory data is a good principle, and the recommended design keeps it. But making one service <strong>orchestrate every quantity modification</strong> synchronously turns it into a bottleneck and single point of failure for catalog, cart, orders and warehouse. It also still has to get the changes out to the other services, which brings back the need for events. <strong>Caveat:</strong> for a small system with one database, a single inventory module can be the simplest correct answer.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Event-Driven Design with Eventual Consistency ✓</h4>
+          </div>
+          <p>Adopting an event-based design relying on eventual consistency for modifying inventory.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Cross-Service Consistency</th><th>Availability Under Failure</th><th>Throughput and Scalability</th><th>Service Coupling</th><th>Implementation Complexity</th><th>Oversell Protection</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Distributed Transactions</td><td>Strong, immediate ✅</td><td>Low (blocking coordinator) ❌</td><td>Low (locks held across services) ❌</td><td>Tight ❌</td><td>High ❌</td><td>Strong ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Event-Driven, Eventually Consistent ✓</td><td>Eventual (seconds) ⚠</td><td>High ✅</td><td>High ✅</td><td>Loose ✅</td><td>Medium–High ⚠</td><td>Strong if the owner decrements atomically ✅</td></tr>
+            <tr><td class="tt-option">C — Optimistic Concurrency Control</td><td>Single datastore only ❌</td><td>High ✅</td><td>High at low contention ⚠</td><td>Not applicable across services ⚠</td><td>Low ✅</td><td>Strong within one datastore ✅</td></tr>
+            <tr><td class="tt-option">D — Centralized Inventory Service</td><td>Strong for the owner, copies still lag ⚠</td><td>Low (single point of failure) ❌</td><td>Limited (bottleneck) ❌</td><td>Tight (every service calls it) ❌</td><td>Low–Medium ✅</td><td>Strong ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Distributed Transactions</h4>
+          </div>
+          <p>A small number of databases under one team's control where atomic cross-resource updates are mandatory and volume is modest, such as certain internal financial ledgers.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Event-Driven, Eventually Consistent</h4>
+          </div>
+          <p>Microservices that own their data, must stay available under load, and can tolerate seconds of lag in derived views while a single authority enforces hard invariants.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Optimistic Concurrency Control</h4>
+          </div>
+          <p>Contention on individual records is low to moderate and you need to prevent lost updates inside one datastore, such as the conditional decrement within the inventory service.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Centralized Inventory Service</h4>
+          </div>
+          <p>A small or early-stage system, or a bounded context where one service legitimately owns the data and the number of consumers is limited.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Reserve Stock, Publish Events, Compensate on Failure</h3>
+        <p>The inventory service decrements atomically and writes an outbox event in the same transaction. Other services update from events, and a failed payment triggers a compensating release:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant O as Order Service
+    participant I as Inventory Service
+    participant B as Event Broker
+    participant S as Search and Catalog
+    participant P as Payment Service
+    O-&gt;&gt;I: 1. Reserve 2 units
+    I-&gt;&gt;I: 2. Atomic conditional decrement plus outbox row
+    I--&gt;&gt;O: 3. Reserved
+    I-&gt;&gt;B: 4. Publish StockReserved from outbox
+    B-&gt;&gt;S: 5. Update available quantity
+    O-&gt;&gt;P: 6. Charge payment
+    alt Payment succeeds
+        P--&gt;&gt;O: 7a. Paid
+        O-&gt;&gt;I: 8a. Commit reservation
+    else Payment fails
+        P--&gt;&gt;O: 7b. Declined
+        O-&gt;&gt;I: 8b. Release reservation
+        I-&gt;&gt;B: 9b. Publish StockReleased
+        B-&gt;&gt;S: 10b. Restore available quantity
+    end">sequenceDiagram
+    participant O as Order Service
+    participant I as Inventory Service
+    participant B as Event Broker
+    participant S as Search and Catalog
+    participant P as Payment Service
+    O-&gt;&gt;I: 1. Reserve 2 units
+    I-&gt;&gt;I: 2. Atomic conditional decrement plus outbox row
+    I--&gt;&gt;O: 3. Reserved
+    I-&gt;&gt;B: 4. Publish StockReserved from outbox
+    B-&gt;&gt;S: 5. Update available quantity
+    O-&gt;&gt;P: 6. Charge payment
+    alt Payment succeeds
+        P--&gt;&gt;O: 7a. Paid
+        O-&gt;&gt;I: 8a. Commit reservation
+    else Payment fails
+        P--&gt;&gt;O: 7b. Declined
+        O-&gt;&gt;I: 8b. Release reservation
+        I-&gt;&gt;B: 9b. Publish StockReleased
+        B-&gt;&gt;S: 10b. Restore available quantity
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Atomic Reservation with Outbox and Idempotent Projection</h3>
+        <p>The owner reserves stock with a single conditional UPDATE and writes the event in the same transaction. Consumers apply events idempotently using a per-product version, and expired reservations are released by a scheduled job:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">reserveStock</span>(orderId, sku, qty):</span>
+<span class="line">    <span class="tk-kw">begin</span> transaction</span>
+<span class="line">        <span class="tk-com">// Idempotency: a retried request for the same order returns the original result</span></span>
+<span class="line">        existing <span class="tk-op">=</span> reservations.<span class="tk-fn">find</span>(orderId, sku)</span>
+<span class="line">        <span class="tk-kw">if</span> existing <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">            commit</span>
+<span class="line">            <span class="tk-kw">return</span> existing.status</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// Atomic check-and-decrement: no read-modify-write race, so no overselling</span></span>
+<span class="line">        rows <span class="tk-op">=</span> db.<span class="tk-fn">execute</span>(</span>
+<span class="line">            <span class="tk-str">&#x27;UPDATE stock SET available = available - ?, version = version + 1 WHERE sku = ? AND available &gt;= ?&#x27;</span>,</span>
+<span class="line">            qty, sku, qty)</span>
+<span class="line">        <span class="tk-kw">if</span> rows <span class="tk-op">==</span> <span class="tk-num">0</span>:</span>
+<span class="line">            rollback</span>
+<span class="line">            <span class="tk-kw">return</span> OUT_OF_STOCK</span>
+<span class="line"></span>
+<span class="line">        state <span class="tk-op">=</span> db.<span class="tk-fn">queryOne</span>(<span class="tk-str">&#x27;SELECT available, version FROM stock WHERE sku = ?&#x27;</span>, sku)</span>
+<span class="line">        reservations.<span class="tk-fn">insert</span>(orderId, sku, qty, status <span class="tk-op">=</span> RESERVED, expiresAt <span class="tk-op">=</span> <span class="tk-fn">now</span>() <span class="tk-op">+</span> 15min)</span>
+<span class="line">        outbox.<span class="tk-fn">insert</span>(<span class="tk-fn">Event</span>(id <span class="tk-op">=</span> <span class="tk-fn">uuid</span>(), type <span class="tk-op">=</span> <span class="tk-str">&#x27;StockReserved&#x27;</span>, sku <span class="tk-op">=</span> sku,</span>
+<span class="line">                            available <span class="tk-op">=</span> state.available, version <span class="tk-op">=</span> state.version))</span>
+<span class="line">    commit                                                  <span class="tk-com">// stock update and event are atomic</span></span>
+<span class="line">    <span class="tk-kw">return</span> RESERVED</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// A relay reads unsent outbox rows, publishes them to the broker and marks them sent (at-least-once)</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onStockEvent</span>(event):                               <span class="tk-com">// runs in search, catalog and cart services</span></span>
+<span class="line">    current <span class="tk-op">=</span> projection.<span class="tk-fn">get</span>(event.sku)</span>
+<span class="line">    <span class="tk-kw">if</span> current <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> event.version <span class="tk-op">&lt;=</span> current.version:</span>
+<span class="line">        <span class="tk-kw">return</span>                                              <span class="tk-com">// duplicate or stale event: ignore</span></span>
+<span class="line">    projection.<span class="tk-fn">upsert</span>(event.sku, available <span class="tk-op">=</span> event.available, version <span class="tk-op">=</span> event.version)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onPaymentFailed</span>(orderId, sku):</span>
+<span class="line">    inventory.<span class="tk-fn">release</span>(orderId, sku)                         <span class="tk-com">// compensating action, also idempotent</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">releaseExpiredReservations</span>():                      <span class="tk-com">// scheduled job</span></span>
+<span class="line">    <span class="tk-kw">for</span> r <span class="tk-kw">in</span> reservations.<span class="tk-fn">findExpired</span>(<span class="tk-fn">now</span>()):</span>
+<span class="line">        inventory.<span class="tk-fn">release</span>(r.orderId, r.sku)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Making the decrement itself eventually consistent:</strong> Reading stock, deciding in application code and writing it back later allows overselling. The check-and-decrement must be one atomic conditional operation in the owning database.</li>
+          <li><strong>Dual writes without an outbox:</strong> Updating the database and publishing an event as two separate steps can lose or duplicate events when a crash lands between them. Use the transactional outbox or change data capture.</li>
+          <li><strong>Non-idempotent consumers:</strong> Brokers redeliver. Without event IDs or version checks, a replay can apply the same stock change twice.</li>
+          <li><strong>Ignoring event ordering:</strong> Processing a stale 'available = 10' after 'available = 8' corrupts a projection. Carry a version or sequence number and discard older events, or partition by product ID to preserve order.</li>
+          <li><strong>No reservation expiry:</strong> Abandoned carts that hold stock forever make items look sold out. Use time-limited reservations with a release job.</li>
+          <li><strong>Skipping reconciliation:</strong> Without audits, small drifts accumulate unnoticed. Compare projections with the source of truth on a schedule.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, retailers combine <strong>strong consistency where money or stock is at stake</strong> with <strong>eventual consistency elsewhere</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Define the invariants:</strong> What must never be violated (no negative stock, no oversold units) and what may lag (displayed availability, search results, recommendations)?</li>
+          <li><strong>Step 1 — Single writer for stock:</strong> One inventory service owns the authoritative quantity and performs atomic conditional updates.</li>
+          <li><strong>Step 2 — Reserve, then commit:</strong> Reserve stock at checkout with a time-limited hold, commit on payment success, and release on failure or expiry.</li>
+          <li><strong>Step 3 — Publish events with the outbox pattern:</strong> Stock changes become events written in the same transaction as the update (the biggest win for this scenario).</li>
+          <li><strong>Step 4 — Consumers build read models:</strong> Catalog, search and cart update their own projections idempotently and tolerate out-of-order events.</li>
+          <li><strong>Step 5 — Reconcile:</strong> Run periodic audits that compare projections against the authoritative count, and re-validate against inventory at checkout.</li>
+        </ul>
+        <p>Strict consistency lives in one place; everywhere else the system converges through events.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For stock data spread across decentralized services, keep <strong>one authoritative owner</strong> that enforces the no-oversell invariant atomically, and propagate changes through <strong>events with eventual consistency</strong> and <strong>saga compensation</strong>. Optimistic concurrency is a useful building block inside the owner but does not synchronize multiple services, and distributed transactions trade away the availability and throughput a retail system needs.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

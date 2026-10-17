@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Samira&#x27;s distributed order flow: 2PC, SAGA pattern, or an alternative? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">01 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Saga Pattern</span>
+      <span class="tag tag--green">2PC</span>
+      <span class="tag tag--amber">Order Processing</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Samira&#x27;s distributed order flow: 2PC, SAGA pattern, or an alternative?</h1>
+      <p class="q-scenario"><strong>Samira</strong> is building an Order service for a <strong>high-volume e-commerce platform</strong>. Every order must coordinate three independently deployable microservices, each with its <strong>own database</strong>: <strong>Inventory</strong> (stock reservation), <strong>Payments</strong> (charging) and <strong>Fulfillment</strong> (shipping). The business requires <strong>no overselling</strong>, payment captured <strong>only if stock exists</strong>, <strong>high availability and scalability</strong>, <strong>clear visibility into failed orders</strong> and <strong>low user-facing latency</strong>. She must choose a distributed transaction model that balances latency, consistency, fault tolerance, availability and observability.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Use a two-phase commit (XA style) across all three service databases, with a central transaction coordinator running a blocking prepare/commit so the order commits atomically or rolls back completely.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Use a choreographed SAGA: each service emits domain events (OrderPlaced, InventoryReserved, PaymentCaptured) and downstream services react. Compensating events revert actions on failure. Everything is asynchronous with no central orchestrator.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Use an orchestrated SAGA on a durable workflow engine (such as Zeebe or Temporal) that runs each step as a local transaction (with the outbox pattern for events) and calls explicit compensating actions on failure. The engine provides durable state, retries and visibility.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Use synchronous RPC from the Order service: call Inventory.reserve(), then Payments. If a later step fails, the Order service calls compensating APIs such as Inventory.release(). Rely on timeouts, retries and a dead-letter queue for manual reconciliation, with no commit protocol or workflow engine.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Orchestrated Saga with a Durable Workflow Engine</h3>
+        <p>Option C is the best fit. A saga replaces one global ACID transaction with a sequence of <strong>local transactions plus compensations</strong>, and an orchestrator running on a durable workflow engine makes that sequence explicit, resumable and observable. The engine owns the order state, the retries and the compensation, so no service has to guess where a failed order stands. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Fits independent databases:</strong> each step commits locally in its own service. No cross-database locks or XA support are needed, and an external payment gateway can participate through its normal API.</li>
+          <li><strong>The business rule becomes an order of steps:</strong> reserve inventory first (reversible), then capture payment, then create the shipment. Payment is only attempted once stock is held, so no charge happens without inventory.</li>
+          <li><strong>Durable state and retries:</strong> the engine persists every step, so a crashed orchestrator or service resumes exactly where it stopped. Timeouts, exponential backoff and retry limits are configuration rather than hand-written code.</li>
+          <li><strong>Explicit compensation:</strong> a declined payment triggers <code>Inventory.release</code>, and a hard shipping failure triggers a refund and a release. Each compensation is idempotent and retried until it succeeds.</li>
+          <li><strong>Failure visibility out of the box:</strong> the workflow id equals the order id, so support can see the exact step, history, failure reason and pending retries of any order. This directly answers the requirement for clear visibility into failed orders.</li>
+          <li><strong>Low user-facing latency:</strong> the API starts the workflow and returns <code>PENDING</code> with an order id immediately. Confirmation arrives through a status endpoint or notification instead of blocking on three services.</li>
+          <li><strong>Reliable events via the outbox pattern:</strong> each service writes its state change and its outgoing event in one local transaction, so there is no lost or phantom message.</li>
+        </ul>
+        <p>Define the order state machine and the pivot step up front, give every activity an <strong>idempotency key</strong> (for example <code>orderId:step</code>), and put <strong>TTLs on reservations</strong>. Measure order completion time, compensation rate and the number of stuck workflows.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔐</span>
+            <h4>A — Two-Phase Commit (XA)</h4>
+          </div>
+          <p>A coordinator locks resources in all three databases while waiting for every participant to vote. It gives atomic commit, but it is <strong>blocking</strong>: a slow participant or a coordinator crash leaves locks held and orders stuck, hurting availability and latency exactly when traffic peaks. It also requires every resource to support XA or an equivalent, and a third-party payment gateway cannot enlist in it. The scale and independent-deployment goals rule it out. <strong>Caveat:</strong> inside a single database or a tightly coupled data tier, 2PC remains a valid tool.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🎭</span>
+            <h4>B — Choreographed Saga</h4>
+          </div>
+          <p>Services react to each other's events with no central coordinator. This is decoupled and has no single point of control, and it works well for short flows with two or three participants. For three or more steps with compensation, the flow ends up spread across services, which makes it hard to answer where order 123 currently is, easy to create cyclic event dependencies, and hard to change the sequence. Failure visibility has to be assembled from event logs. <strong>Caveat:</strong> choreography is a good fit for simple edges such as notifications or analytics fan-out.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📞</span>
+            <h4>D — Synchronous RPC with Hand-Rolled Compensation</h4>
+          </div>
+          <p>This is an <em>ad hoc orchestrator</em> embedded in the Order service. It keeps no durable record of progress, so if the Order service crashes between reserving inventory and charging payment, nobody knows to release the stock. Synchronous chaining also stacks latency and multiplies failure probability, and a dead-letter queue with manual reconciliation turns routine failures into operational toil. It is fine for a prototype, but it re-implements, less reliably, what a workflow engine already provides.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Orchestrated Saga with a Durable Workflow Engine ✓</h4>
+          </div>
+          <p>Use an orchestrated SAGA on a durable workflow engine (such as Zeebe or Temporal) that runs each step as a local transaction (with the outbox pattern for events) and calls explicit compensating action</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Atomicity Guarantee</th><th>Availability / Fault Tolerance</th><th>User Latency</th><th>Failure Visibility</th><th>Operational Complexity</th><th>Fit with Independent Databases</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Two-Phase Commit</td><td>Atomic commit ✅</td><td>Low (blocking) ❌</td><td>Slow under contention ❌</td><td>Limited ❌</td><td>Medium ⚠</td><td>Poor ❌ (needs XA)</td></tr>
+            <tr><td class="tt-option">B — Choreographed Saga</td><td>Eventual (compensation) ⚠</td><td>High ✅</td><td>Low ✅</td><td>Weak ❌ (spread across services)</td><td>Medium ⚠ (grows with steps)</td><td>Good ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Orchestrated Saga ✓</td><td>Eventual (compensation) ⚠</td><td>High ✅ (durable retries)</td><td>Low ✅ (async confirmation)</td><td>Excellent ✅</td><td>Medium–High ⚠</td><td>Good ✅</td></tr>
+            <tr><td class="tt-option">D — Sync RPC + Manual Compensation</td><td>Weak ❌ (no durable progress)</td><td>Medium ⚠</td><td>Medium ⚠ (sync chain)</td><td>Poor ❌</td><td>Low now, high later ⚠</td><td>Good ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Two-Phase Commit</h4>
+          </div>
+          <p>Tightly coupled resources inside one trust domain (for example two schemas on one database cluster, or XA-capable resource managers), with short transactions and modest throughput.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Choreographed Saga</h4>
+          </div>
+          <p>Short flows with two or three participants, or loosely coupled reactions such as notifications, search indexing and analytics, where teams prefer no central coordinator.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Orchestrated Saga</h4>
+          </div>
+          <p>Multi-step business processes with compensation, long-running steps, retries, human intervention and strict visibility needs, such as order, booking or onboarding flows.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Sync RPC + Manual Compensation</h4>
+          </div>
+          <p>Prototypes or very simple two-step flows at low volume where a workflow engine is not yet justified, with a plan to migrate as the flow grows.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Orchestrated Order Saga with Compensation</h3>
+        <p>The orchestrator drives each local transaction, and a payment failure triggers an explicit, retried compensation:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant O as Order API
+    participant W as Workflow Engine
+    participant I as Inventory
+    participant P as Payments
+    participant F as Fulfillment
+    C-&gt;&gt;O: POST /orders (Idempotency-Key)
+    O-&gt;&gt;W: Start workflow orderId
+    O--&gt;&gt;C: 202 Accepted, order PENDING
+    W-&gt;&gt;I: 1. Reserve stock (TTL 10 min)
+    I--&gt;&gt;W: Reserved
+    W-&gt;&gt;P: 2. Capture payment (pivot)
+    alt Payment declined
+        P--&gt;&gt;W: Declined
+        W-&gt;&gt;I: Compensate: release stock (retry until done)
+        W-&gt;&gt;O: Mark order FAILED with reason
+    else Payment captured
+        P--&gt;&gt;W: Captured
+        W-&gt;&gt;F: 3. Create shipment (retry forward)
+        F--&gt;&gt;W: Accepted
+        W-&gt;&gt;O: Mark order CONFIRMED
+    end">sequenceDiagram
+    participant C as Client
+    participant O as Order API
+    participant W as Workflow Engine
+    participant I as Inventory
+    participant P as Payments
+    participant F as Fulfillment
+    C-&gt;&gt;O: POST /orders (Idempotency-Key)
+    O-&gt;&gt;W: Start workflow orderId
+    O--&gt;&gt;C: 202 Accepted, order PENDING
+    W-&gt;&gt;I: 1. Reserve stock (TTL 10 min)
+    I--&gt;&gt;W: Reserved
+    W-&gt;&gt;P: 2. Capture payment (pivot)
+    alt Payment declined
+        P--&gt;&gt;W: Declined
+        W-&gt;&gt;I: Compensate: release stock (retry until done)
+        W-&gt;&gt;O: Mark order FAILED with reason
+    else Payment captured
+        P--&gt;&gt;W: Captured
+        W-&gt;&gt;F: 3. Create shipment (retry forward)
+        F--&gt;&gt;W: Accepted
+        W-&gt;&gt;O: Mark order CONFIRMED
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Order Workflow with Pivot and Compensation</h3>
+        <p>A durable workflow where every activity is idempotent, reversible steps come first, and compensation is retried until it succeeds:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">workflow <span class="tk-fn">PlaceOrder</span>(order):</span>
+<span class="line">    activity Orders.<span class="tk-fn">setState</span>(order.id, <span class="tk-str">&#x27;PENDING&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Step 1: reversible. Reserve stock with a TTL so it frees itself if we vanish.</span></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        activity Inventory.<span class="tk-fn">reserve</span>(order.id, order.items,</span>
+<span class="line">                                   idempotencyKey <span class="tk-op">=</span> order.id <span class="tk-op">+</span> <span class="tk-str">&#x27;:reserve&#x27;</span>,</span>
+<span class="line">                                   timeout <span class="tk-op">=</span> <span class="tk-num">5s</span>, retry <span class="tk-op">=</span> <span class="tk-fn">backoff</span>(max <span class="tk-op">=</span> <span class="tk-num">3</span>))</span>
+<span class="line">    <span class="tk-kw">catch</span> OutOfStock:</span>
+<span class="line">        activity Orders.<span class="tk-fn">setState</span>(order.id, <span class="tk-str">&#x27;REJECTED_OUT_OF_STOCK&#x27;</span>)</span>
+<span class="line">        <span class="tk-kw">return</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Step 2: pivot. Once payment is captured we prefer moving forward.</span></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        activity Payments.<span class="tk-fn">capture</span>(order.id, order.total,</span>
+<span class="line">                                  idempotencyKey <span class="tk-op">=</span> order.id <span class="tk-op">+</span> <span class="tk-str">&#x27;:capture&#x27;</span>,</span>
+<span class="line">                                  timeout <span class="tk-op">=</span> <span class="tk-num">10s</span>, retry <span class="tk-op">=</span> <span class="tk-fn">backoff</span>(max <span class="tk-op">=</span> <span class="tk-num">3</span>))</span>
+<span class="line">    <span class="tk-kw">catch</span> PaymentDeclined <span class="tk-kw">or</span> RetriesExhausted:</span>
+<span class="line">        activity Inventory.<span class="tk-fn">release</span>(order.id, retry <span class="tk-op">=</span> forever)       <span class="tk-com">// compensation</span></span>
+<span class="line">        activity Orders.<span class="tk-fn">setState</span>(order.id, <span class="tk-str">&#x27;FAILED_PAYMENT&#x27;</span>)</span>
+<span class="line">        <span class="tk-kw">return</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Step 3: retry forward. Transient failures never undo a captured payment.</span></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        activity Fulfillment.<span class="tk-fn">createShipment</span>(order.id,</span>
+<span class="line">                                            idempotencyKey <span class="tk-op">=</span> order.id <span class="tk-op">+</span> <span class="tk-str">&#x27;:ship&#x27;</span>,</span>
+<span class="line">                                            retry <span class="tk-op">=</span> <span class="tk-fn">backoff</span>(<span class="tk-kw">until</span> <span class="tk-op">=</span> <span class="tk-num">24h</span>))</span>
+<span class="line">    <span class="tk-kw">catch</span> NonRetryable:                                              <span class="tk-com">// for example unshippable address</span></span>
+<span class="line">        activity Payments.<span class="tk-fn">refund</span>(order.id, retry <span class="tk-op">=</span> forever)          <span class="tk-com">// compensation</span></span>
+<span class="line">        activity Inventory.<span class="tk-fn">release</span>(order.id, retry <span class="tk-op">=</span> forever)        <span class="tk-com">// compensation</span></span>
+<span class="line">        activity Orders.<span class="tk-fn">setState</span>(order.id, <span class="tk-str">&#x27;FAILED_FULFILLMENT&#x27;</span>)</span>
+<span class="line">        signal OpsTeam.<span class="tk-fn">review</span>(order.id)                              <span class="tk-com">// human visibility</span></span>
+<span class="line">        <span class="tk-kw">return</span></span>
+<span class="line"></span>
+<span class="line">    activity Orders.<span class="tk-fn">setState</span>(order.id, <span class="tk-str">&#x27;CONFIRMED&#x27;</span>)</span>
+<span class="line">    <span class="tk-com">// Each service publishes its own events through a transactional outbox.</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Non-idempotent steps or compensations:</strong> retries then double-charge or double-release. Every action and its compensation must be safe to repeat.</li>
+          <li><strong>Wrong step order:</strong> capturing payment before reserving stock forces refunds instead of a cheap release. Put reversible steps first.</li>
+          <li><strong>No pivot or forward-recovery plan:</strong> trying to roll back shipped orders. After the pivot, retry forward and compensate only for hard failures.</li>
+          <li><strong>Treating a saga as isolated:</strong> showing an order as confirmed before the workflow completes. Expose explicit intermediate states.</li>
+          <li><strong>Business logic creeping into the orchestrator:</strong> it should sequence steps, while services own their rules.</li>
+          <li><strong>Dual writes:</strong> updating the database and publishing the event in two separate steps can lose the event. Use the transactional outbox.</li>
+          <li><strong>No timeouts or TTLs:</strong> reservations stay held forever when payment hangs.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams model the flow first and pick the tooling second. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Model the flow:</strong> draw the order state machine and mark the reversible steps, the pivot (payment capture) and the steps that must be retried forward.</li>
+          <li><strong>Step 1 — Make every operation idempotent:</strong> use idempotency keys such as <code>orderId:step</code> and deduplicate inside each service so retries are harmless.</li>
+          <li><strong>Step 2 — Reservations with a TTL:</strong> inventory is held for a limited time and released automatically if payment never completes.</li>
+          <li><strong>Step 3 — Pick the engine:</strong> Temporal, Zeebe or a managed service such as AWS Step Functions, based on team skills. Keep orchestration code free of business rules.</li>
+          <li><strong>Step 4 — Outbox in each service:</strong> publish domain events (analytics, notifications) from a transactional outbox rather than a separate publish call.</li>
+          <li><strong>Step 5 — Failure operations:</strong> retry policies, a needs-attention queue, signals for manual intervention and alerts on stuck workflows.</li>
+          <li><strong>Step 6 — Observability:</strong> workflow id equals order id, searchable attributes, and dashboards for completion time and compensation rate.</li>
+        </ul>
+        <p>Use choreography for loose edges and orchestration for the core order flow.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When a business process spans independently owned databases, give up global atomicity and design for <strong>local transactions, idempotent steps and explicit compensation</strong>. An orchestrated saga on a durable workflow engine adds the state tracking, retries and visibility that a distributed order flow needs, at the price of running one more critical component and accepting temporary intermediate states.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya&#x27;s Telemetry Bottleneck: Scaling Raw Metrics Without Disrupting Dashboards — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">30 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Telemetry</span>
+      <span class="tag tag--green">Metrics</span>
+      <span class="tag tag--amber">Dashboards</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya&#x27;s Telemetry Bottleneck: Scaling Raw Metrics Without Disrupting Dashboards</h1>
+      <p class="q-scenario"><strong>Maya</strong> is architecting the backend for telemetry from <strong>millions of IoT devices</strong>, each sending a metric point every <strong>10 seconds</strong> (a million devices is already about <strong>100k points/s</strong>, and reconnect storms after an outage can multiply that, so the design needs real headroom beyond the stated <em>tens of thousands of writes per second</em>). Dashboards must update in <strong>sub-second to a few seconds</strong>, analysts need <strong>ad-hoc history from days to years</strong>, data must be kept for <strong>one year</strong> with <strong>full fidelity for 7 days</strong> and downsampled data after that, and the platform must <strong>tolerate regional outages</strong>. Devices are unreliable, so points arrive late and out of order. She must choose the time-series modeling and ingestion design that best balances scalability, latency, availability and operating cost.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Rely on a single strong-consistency relational database (like Postgres) using daily partitioning and synchronous writes. Set up triggers or stored procedures to refresh aggregates during writes. Achieve scalability through vertical scaling and depend on master failover to maintain availability.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Implement an append-only ingestion pipeline: log device events into a durable message queue (such as Kafka), process streams (using Flink or ksqlDB) to calculate near-real-time aggregates, and write recent data to a specialized TSDB (like TimescaleDB or ClickHouse) for fast dashboards. Store raw events in S3 as time-partitioned Parquet files for extended analytics, and execute offline batch jobs to downsample and compact older records into summary tables.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Set up a dedicated time-series database cluster (e.g., InfluxDB, Prometheus remote write, or ClickHouse) as the central data store. Execute synchronous downsampling during ingestion (writing raw data and immediately writing rollups), and utilize node sharding to scale both read and write operations.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Adopt a wide-column store such as Cassandra utilizing a time-bucketed partition key (e.g., device_id combined with hour/day) to optimize write throughput. Keep materialized views or manage application-level aggregations to serve common queries, accepting eventual consistency for aggregated data.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Append-Only Stream Pipeline with Hot TSDB and Parquet Lake</h3>
+        <p>This workload has three very different access patterns: a <strong>continuous firehose</strong> of writes, <strong>seconds-fresh dashboards</strong> over recent data, and <strong>cheap, flexible analytics</strong> over long history. Option B gives each pattern its own purpose-built layer, connected by a <strong>durable, replayable log</strong>. Ingestion never depends on the query stores, dashboards read pre-aggregated hot data, and history lives in cheap, durable, engine-agnostic files. Here's why it stands out:</p>
+        <ul>
+          <li><strong>The log decouples everything:</strong> Writes land in a replicated Kafka topic (acks=all, spread across AZs), so a TSDB outage or maintenance window never loses points. The log absorbs reconnect storms, and any downstream store can be rebuilt by replay.</li>
+          <li><strong>Near-real-time aggregates:</strong> Flink or ksqlDB windowed aggregations (for example 10 s and 1 min) with <em>watermarks and allowed lateness</em> give dashboards ready-made numbers within seconds and handle out-of-order data from flaky devices correctly.</li>
+          <li><strong>The right store per access pattern:</strong> A hot TSDB (TimescaleDB/ClickHouse) with a 7-day TTL serves dashboards. Raw events in S3 as Parquet (partitioned by date and hour) serve long-range analysis through Athena, Trino, Spark or ClickHouse, with no lock-in to one engine.</li>
+          <li><strong>Cost shape matches the retention policy:</strong> At 100k points/s, 7 days of full fidelity is about 60 billion points. Rolling 10-second data up to 1-minute rows is a 6&times; reduction and to 1-hour rows a 360&times; reduction, so a year of summaries is small next to the raw tier.</li>
+          <li><strong>Regional resilience:</strong> Kafka replicated across AZs, topic mirroring to a second region, and S3 cross-region replication mean a regional outage leaves dashboards and history available elsewhere. Batch downsampling is deterministic and re-runnable, so late data can be folded in by recomputing a partition.</li>
+        </ul>
+        <p>Treat the pipeline as <strong>replayable by design</strong>: schema-registered events, idempotent sinks keyed by (device, metric, window), and monitored <strong>consumer lag</strong>, <strong>watermark delay</strong>, <strong>late-event rate</strong> and <strong>hot-store query p99</strong>. Apply lifecycle rules so raw data leaves the lake on the retention schedule you committed to.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🐘</span>
+            <h4>A — Single Postgres with Triggers</h4>
+          </div>
+          <p>Refreshing aggregates in triggers <strong>multiplies the cost of every write</strong> and creates <strong>row-lock contention</strong> on shared aggregate rows. Synchronous commits and one writer put a hard ceiling on throughput, and vertical scaling only postpones it. Seven days of raw points is tens of billions of rows, which strains indexes and vacuum. A single primary also means a regional failure is an outage until failover completes. <strong>Caveat:</strong> for a fleet of thousands of devices, Postgres with TimescaleDB is a simple and sensible choice.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>C — Single TSDB Cluster with Synchronous Downsampling</h4>
+          </div>
+          <p>Writing rollups in the ingest path <strong>couples ingestion latency and failure to the aggregation logic</strong> and amplifies writes. Ingest-time rollups are also wrong for <strong>late or out-of-order points</strong> unless you can revise them later. There is no durable log to replay if the cluster is damaged, no cheap long-term lake, and the single cluster remains a regional single point of failure. <strong>Caveat:</strong> a ClickHouse-centric variant with a queue in front and incremental materialized views is a good simplification and is really a lighter version of B.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>D — Cassandra with Time-Bucketed Partitions</h4>
+          </div>
+          <p>Cassandra gives excellent write scaling and multi-DC replication, and bucketing by device and hour avoids unbounded partitions. But <strong>ad-hoc analytics</strong> (aggregations across devices, years of history) are not what it is built for: no joins, limited aggregation, and wide scans. You end up maintaining aggregates in application code, and Cassandra's materialized views have a long record of production problems (they remain flagged experimental in recent releases). <strong>Caveat:</strong> it is a strong fit for &ldquo;latest readings for device X&rdquo; lookups, paired with an analytical store.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Append-Only Stream Pipeline with Hot TSDB and Parquet Lake ✓</h4>
+          </div>
+          <p>Implement an append-only ingestion pipeline: log device events into a durable message queue (such as Kafka), process streams (using Flink or ksqlDB) to calculate near-real-time aggregates, and write r</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Ingest Scalability</th><th>Dashboard Latency</th><th>Long-Range Analytics</th><th>Regional Fault Tolerance</th><th>Operational Complexity</th><th>Cost at One Year</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Single Postgres + Triggers</td><td>Low (one writer) ❌</td><td>Good at small scale ⚠</td><td>Poor ❌</td><td>Weak (failover only) ❌</td><td>Low ✅</td><td>High ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Stream Pipeline + TSDB + Parquet Lake ✓</td><td>Very high ✅</td><td>Seconds ✅</td><td>Excellent ✅</td><td>Strong ✅</td><td>High ⚠</td><td>Low (cheap lake) ✅</td></tr>
+            <tr><td class="tt-option">C — Single TSDB, Sync Rollups</td><td>High, with write amplification ⚠</td><td>Good ✅</td><td>Medium ⚠</td><td>Moderate ⚠</td><td>Medium ⚠</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">D — Cassandra Time Buckets</td><td>Very high ✅</td><td>Good for lookups, weak for aggregates ⚠</td><td>Poor ❌</td><td>Strong (multi-DC) ✅</td><td>Medium–High ⚠</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Single Postgres + Triggers</h4>
+          </div>
+          <p>Small fleets (thousands of devices), modest retention, and a team that values simplicity over horizontal scale.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Stream Pipeline + TSDB + Parquet Lake</h4>
+          </div>
+          <p>Very high ingest, seconds-fresh dashboards, long-range analytics, tiered retention and multi-region resilience, as in this scenario.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Single TSDB, Sync Rollups</h4>
+          </div>
+          <p>Moderate scale in one region where the TSDB's own incremental rollups are enough and a durable replay log is not required.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Cassandra Time Buckets</h4>
+          </div>
+          <p>Massive write rates with mostly key-based reads (latest or recent readings per device) and multi-DC replication needs, paired with a separate analytics store.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Telemetry Ingestion and Tiering Pipeline</h3>
+        <p>Events go to a replicated log, then fan out to a stream processor for hot dashboards and an archiver for the lake. Nightly batch jobs build long-term summaries, and both log and lake are replicated to a second region:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    DEV[IoT Devices - 10 s interval] --&gt; GW[Regional Ingest Gateway]
+    GW --&gt; K[(Kafka - replicated across AZs)]
+    K --&gt; F[Stream Processor - Flink - windows and watermarks]
+    F --&gt; HOT[(Hot TSDB - 7 days raw and recent rollups)]
+    K --&gt; ARC[Archiver - Parquet writer]
+    ARC --&gt; LAKE[(S3 Parquet - date and hour partitions)]
+    LAKE --&gt; BATCH[Batch Downsampler - nightly and idempotent]
+    BATCH --&gt; SUM[(Summary Tables - 1 min and 1 hour rollups for 1 year)]
+    DASH[Live Dashboards] --&gt; HOT
+    DASH --&gt; SUM
+    ANA[Ad-hoc Analysts] --&gt; LAKE
+    ANA --&gt; SUM
+    K -. mirror .-&gt; K2[(Kafka in Region B)]
+    LAKE -. cross-region replication .-&gt; LAKE2[(S3 in Region B)]">flowchart LR
+    DEV[IoT Devices - 10 s interval] --&gt; GW[Regional Ingest Gateway]
+    GW --&gt; K[(Kafka - replicated across AZs)]
+    K --&gt; F[Stream Processor - Flink - windows and watermarks]
+    F --&gt; HOT[(Hot TSDB - 7 days raw and recent rollups)]
+    K --&gt; ARC[Archiver - Parquet writer]
+    ARC --&gt; LAKE[(S3 Parquet - date and hour partitions)]
+    LAKE --&gt; BATCH[Batch Downsampler - nightly and idempotent]
+    BATCH --&gt; SUM[(Summary Tables - 1 min and 1 hour rollups for 1 year)]
+    DASH[Live Dashboards] --&gt; HOT
+    DASH --&gt; SUM
+    ANA[Ad-hoc Analysts] --&gt; LAKE
+    ANA --&gt; SUM
+    K -. mirror .-&gt; K2[(Kafka in Region B)]
+    LAKE -. cross-region replication .-&gt; LAKE2[(S3 in Region B)]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Stream Rollups, Raw Archiver and Idempotent Downsampling</h3>
+        <p>Windowed aggregation tolerates late data, sinks are idempotent, and the nightly job can be re-run safely for any day:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Stream job: near-real-time rollups ----</span></span>
+<span class="line">stream <span class="tk-op">=</span> kafka.<span class="tk-fn">source</span>(<span class="tk-str">&#x27;device-metrics&#x27;</span>, eventTime <span class="tk-op">=</span> point.deviceTs, watermark <span class="tk-op">=</span> eventTime <span class="tk-op">-</span> <span class="tk-num">30s</span>)</span>
+<span class="line">stream</span>
+<span class="line">  .<span class="tk-fn">keyBy</span>(deviceId, metric)</span>
+<span class="line">  .<span class="tk-fn">window</span>(<span class="tk-fn">tumbling</span>(<span class="tk-num">1</span> minute), allowedLateness <span class="tk-op">=</span> <span class="tk-num">10</span> minutes)</span>
+<span class="line">  .<span class="tk-fn">aggregate</span>(count, sum, min, max)                          <span class="tk-com">// re-aggregatable parts, never averages</span></span>
+<span class="line">  .<span class="tk-fn">sinkTo</span>(hotStore.<span class="tk-fn">upsert</span>(key <span class="tk-op">=</span> (deviceId, metric, windowStart)))   <span class="tk-com">// replays and late updates overwrite</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Raw archiver ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">archive</span>(batch):</span>
+<span class="line">    path <span class="tk-op">=</span> <span class="tk-str">&#x27;s3://telemetry/raw/dt=&#x27;</span> <span class="tk-op">+</span> <span class="tk-fn">date</span>(batch.ts) <span class="tk-op">+</span> <span class="tk-str">&#x27;/hr=&#x27;</span> <span class="tk-op">+</span> <span class="tk-fn">hour</span>(batch.ts) <span class="tk-op">+</span> <span class="tk-str">&#x27;/part-&#x27;</span> <span class="tk-op">+</span> <span class="tk-fn">uuid</span>() <span class="tk-op">+</span> <span class="tk-str">&#x27;.parquet&#x27;</span></span>
+<span class="line">    <span class="tk-fn">writeParquet</span>(path, batch, compression <span class="tk-op">=</span> <span class="tk-str">&#x27;zstd&#x27;</span>)         <span class="tk-com">// roll files at 128-512 MB, compact small files hourly</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Nightly downsampler (idempotent: re-running a day gives the same result) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">downsample</span>(day):</span>
+<span class="line">    <span class="tk-fn">overwritePartition</span>(summary, dt <span class="tk-op">=</span> day,</span>
+<span class="line">        select deviceId, metric, <span class="tk-fn">windowStart</span>(<span class="tk-num">1</span> hour), <span class="tk-fn">count</span>(<span class="tk-op">*</span>), <span class="tk-fn">sum</span>(value), <span class="tk-fn">min</span>(value), <span class="tk-fn">max</span>(value)</span>
+<span class="line">        <span class="tk-kw">from</span> lake.raw where dt <span class="tk-op">=</span> day</span>
+<span class="line">        group by deviceId, metric, windowStart)</span>
+<span class="line">    <span class="tk-com">// run again for day-1 and day-2 to fold in late arrivals</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Retention policy ----</span></span>
+<span class="line">hotStore.<span class="tk-fn">ttl</span>(rawTable, <span class="tk-num">7</span> days)                              <span class="tk-com">// full fidelity guaranteed for 7 days</span></span>
+<span class="line">lake.<span class="tk-fn">lifecycle</span>(prefix <span class="tk-op">=</span> <span class="tk-str">&#x27;raw/&#x27;</span>, expireAfter <span class="tk-op">=</span> <span class="tk-num">30</span> days)      <span class="tk-com">// short buffer for recompute, then delete per policy</span></span>
+<span class="line">summaryStore.<span class="tk-fn">ttl</span>(summaryTable, <span class="tk-num">365</span> days)                    <span class="tk-com">// one year of downsampled history</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Using processing time instead of event time:</strong> Late or replayed data then lands in the wrong window. Use device event time with watermarks and an allowed-lateness policy.</li>
+          <li><strong>Non-idempotent sinks:</strong> At-least-once delivery plus plain inserts double counts on retries. Upsert by (device, metric, window) or deduplicate on a natural key.</li>
+          <li><strong>Rollups that cannot be re-aggregated:</strong> Storing averages loses information. Store count, sum, min and max so 1-minute rows can be merged into 1-hour rows.</li>
+          <li><strong>Millions of tiny Parquet files:</strong> Writing one file per micro-batch ruins query performance. Roll files to a few hundred MB and compact hourly.</li>
+          <li><strong>Ignoring the reconnect storm:</strong> After an outage every device flushes its buffer at once. Without Kafka headroom, consumer autoscaling and rate-limited backfill, the recovery causes a second outage.</li>
+          <li><strong>Keeping raw data longer than policy:</strong> The requirement says full fidelity for 7 days. Raw data kept in S3 &ldquo;just in case&rdquo; costs money and may violate retention or privacy rules. Set explicit lifecycle expiry.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>IoT telemetry platforms usually evolve into a <strong>lambda-style layout with one source of truth, the log</strong>, rather than one database doing everything. A typical sequence:</p>
+        <ul>
+          <li><strong>Step 0 &mdash; Size it:</strong> Points/s, bytes per point, cardinality and burst factor (reconnect storms). Plan 3&ndash;5&times; headroom on the ingest path.</li>
+          <li><strong>Step 1 &mdash; Ingest layer:</strong> An MQTT/HTTP gateway validates and authenticates, then produces to Kafka partitioned by device ID, using a schema registry (Avro/Protobuf) and recording device timestamps and receive timestamps separately.</li>
+          <li><strong>Step 2 &mdash; Stream aggregation:</strong> Windowed rollups with watermarks and allowed lateness, writing to the hot store with idempotent upserts keyed by (device, metric, window start).</li>
+          <li><strong>Step 3 &mdash; Hot store and lake:</strong> A TSDB holds 7 days of raw data plus recent rollups for dashboards. In parallel an archiver writes Parquet to S3 (hourly files, compacted to a healthy file size).</li>
+          <li><strong>Step 4 &mdash; Batch downsampling and retention:</strong> Idempotent nightly jobs build 1-minute and 1-hour summary tables for the year of history. Lifecycle rules expire raw files on schedule.</li>
+          <li><strong>Step 5 &mdash; Multi-region and observability:</strong> Mirror topics and replicate buckets, and monitor lag, late-event rate, small-file counts and dashboard query latency per region.</li>
+        </ul>
+        <p>Keep the log as the source of truth and treat every derived store as rebuildable.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For <strong>high-rate IoT metrics with long retention</strong>, use an <strong>append-only log as the backbone</strong>: stream processing for seconds-fresh aggregates, a hot TSDB for dashboards, Parquet in object storage for cheap history, and batch jobs for downsampling. It scales ingestion independently from queries, survives regional failures and keeps a year of data affordable.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

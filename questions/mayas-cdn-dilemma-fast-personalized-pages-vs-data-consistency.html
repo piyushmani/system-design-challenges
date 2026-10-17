@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya&#x27;s CDN Dilemma: Fast Personalized Pages vs. Data Consistency — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">30 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">CDN</span>
+      <span class="tag tag--green">Personalization</span>
+      <span class="tag tag--amber">Consistency</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya&#x27;s CDN Dilemma: Fast Personalized Pages vs. Data Consistency</h1>
+      <p class="q-scenario"><strong>Maya</strong>, a senior backend engineer, is building a <strong>global web application</strong> whose main page is a <strong>personalized dashboard</strong> showing balances, settings and recent activity. Traffic is <strong>bursty</strong> and scaling the origin is costly. Users expect <strong>sub-100 ms page loads</strong> and want their own updates (for example a new transaction) to appear <strong>within about a second</strong>. Most of the page (layout, assets, help and catalog content, widget code) is <strong>identical for all users</strong>; only a small slice is user-specific. Showing one user's data to another through a shared cache would be a serious security incident. She must choose the CDN caching and edge strategy that best balances latency, availability, consistency, origin load, observability and operational simplicity.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Apply very brief TTLs (1-5 seconds) on all personalized pages and depend on origin pull. This ensures content remains relatively fresh at the edge while avoiding complex invalidation mechanisms.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Deploy long TTLs for pages and utilize push-based invalidation: whenever a user&#x27;s data changes, the origin invokes the CDN purge API for that specific user&#x27;s cache key. Incorporate personalization attributes within the cache key to guarantee correct content delivery per user.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Cache common page fragments at the edge using long TTLs and handle personalization at the edge: keep user-specific tokens (like signed cookies) and construct the final pages by assembling cached fragments using lightweight per-user calls or edge computing (edge functions / ESI). Secure sensitive information and fallback to the origin when necessary.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Deliver cached content utilizing stale-while-revalidate, combined with origin shielding and conditional GETs (ETag/If-None-Match). Edge servers provide slightly outdated content right away and refresh it in the background, while the origin shield minimizes the load on the origin servers.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Edge Fragment Caching + Edge Personalization</h3>
+        <p>The dashboard is <strong>mostly shared content with a small personal slice</strong>, so the right strategy caches the shared parts aggressively and treats the personal part as <strong>live, private data</strong> that never sits in a shared cache. Option C does exactly that: the edge assembles a page from long-lived cached fragments plus a small per-user call, so freshness is limited by the write-to-read path, not by TTLs or purge propagation. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Right granularity:</strong> One cached copy of the shell and shared fragments serves millions of users, so the hit ratio stays high and origin load barely moves during bursts. The per-user call returns a small JSON payload that is cheap for a regional API to serve.</li>
+          <li><strong>Freshness where it matters:</strong> User data is read live (with <code>Cache-Control: private, no-store</code>), so a new transaction can appear within a second as long as reads honor a <em>read-your-writes</em> token. No TTL or purge delay is involved.</li>
+          <li><strong>Safe by construction:</strong> Shared fragments are keyed without any user identity and contain no user data, so a cache-key mistake cannot leak personal information. The edge verifies a signed session (HMAC/JWT) locally before doing anything else.</li>
+          <li><strong>Latency:</strong> Shell and fragments come from the nearest edge in a few milliseconds, and the personal call runs in parallel with a strict timeout. Streaming the shell first lets the browser start rendering while personal data arrives, which is how sub-100 ms perceived load is achieved.</li>
+          <li><strong>Resilience and observability:</strong> If the personalization call fails or times out, the edge can still serve the cached shell with a skeleton or last-known values instead of an error. Fragment hit ratio, personalization-call p95 and fallback rate become separate, actionable metrics.</li>
+        </ul>
+        <p>Cache <strong>shared fragments with long TTLs and stale-while-revalidate</strong>, keep personal data in <strong>private, non-cacheable</strong> responses, verify <strong>signed sessions at the edge</strong>, and use <strong>version tokens</strong> for read-your-writes. Watch fragment hit ratio, personalization-call p95, fallback rate, and run a synthetic test that proves two different users never receive the same personalized response.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⏱️</span>
+            <h4>A — Very Short TTLs on Personalized Pages</h4>
+          </div>
+          <p>A personalized page has a per-user cache key, so each cached copy is reused only by the one user who refreshes within 1&ndash;5 seconds. The <strong>hit ratio is low and origin load barely drops</strong>, which defeats the goal for a bursty workload. Staleness of up to 5 seconds also violates the &ldquo;visible within a second&rdquo; expectation. Worse, if the cache key ever omits the user identity (a missing Vary or cookie rule), one user's page can be served to another. <strong>Caveat:</strong> micro-caching is excellent for anonymous, shared, fast-changing pages such as live scores.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧹</span>
+            <h4>B — Long TTL + Per-User Purge</h4>
+          </div>
+          <p>CDN purges are <strong>eventually consistent</strong> (propagation ranges from sub-second to several seconds, depending on the provider) and are rate limited, so a burst of writes becomes a purge storm. If a purge fails or is delayed, a long TTL means a <strong>stale balance for minutes or hours</strong>, which is a correctness bug. Per-user keys also fragment the cache: most cached pages are never read again before the data changes. <strong>Caveat:</strong> purge-by-surrogate-key is the right tool for shared content such as product pages and articles.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>D — Stale-While-Revalidate + Origin Shield</h4>
+          </div>
+          <p>Stale-while-revalidate is <strong>designed to return the old response first</strong>, so the user who just made a transaction sees the previous balance and only gets the update on a later request. That is the opposite of &ldquo;almost immediately&rdquo;. For personalized responses a stale copy in a shared cache is also a privacy risk if keyed wrongly. Origin shielding and conditional GETs are good infrastructure, but they belong underneath option C for the shared fragments. <strong>Caveat:</strong> a great fit wherever bounded staleness is acceptable.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Edge Fragment Caching + Edge Personalization ✓</h4>
+          </div>
+          <p>Cache common page fragments at the edge using long TTLs and handle personalization at the edge: keep user-specific tokens (like signed cookies) and construct the final pages by assembling cached fragm</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Freshness of User Data</th><th>Edge Hit Ratio</th><th>Origin Load Reduction</th><th>Cross-User Leak Risk</th><th>Implementation Complexity</th><th>Resilience When Origin Is Slow</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Short TTL on Personalized Pages</td><td>Poor (1–5 s stale) ❌</td><td>Low (per-user keys) ❌</td><td>Low ❌</td><td>Medium (key mistakes) ⚠</td><td>Low ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">B — Long TTL + Per-User Purge</td><td>Good only if purge works ⚠</td><td>Low (per-user keys) ❌</td><td>Medium ⚠</td><td>Medium (key mistakes) ⚠</td><td>High ❌</td><td>Poor (stale until purged) ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Edge Fragments + Personalization ✓</td><td>Excellent (live, private) ✅</td><td>High (shared fragments) ✅</td><td>High ✅</td><td>Low ✅</td><td>Medium ⚠</td><td>Good (degrades to shell) ✅</td></tr>
+            <tr><td class="tt-option">D — SWR + Origin Shield</td><td>Poor (stale served first) ❌</td><td>High ✅</td><td>High ✅</td><td>Medium ⚠</td><td>Low ✅</td><td>Good (serves stale) ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Short TTL on Personalized Pages</h4>
+          </div>
+          <p>Anonymous or segment-level pages that change quickly and are requested by many users (live scores, trending lists), where a few seconds of staleness is fine.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Long TTL + Per-User Purge</h4>
+          </div>
+          <p>Shared content with clear change events (articles, product pages) using surrogate-key purges. Rarely appropriate for per-user data.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Edge Fragments + Personalization</h4>
+          </div>
+          <p>Pages that are mostly shared with a small personal slice, need near-immediate visibility of user updates, and face bursty traffic, as in this scenario.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — SWR + Origin Shield</h4>
+          </div>
+          <p>Shared or slowly changing content where instant response beats perfect freshness: news, catalogs, documentation, public APIs.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Edge Assembly Read Path</h3>
+        <p>The edge verifies the session, pulls shared fragments from cache and personal data from a regional API in parallel, then streams the assembled page as private:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant B as Browser
+    participant E as Edge Function
+    participant S as Edge Cache and Shield
+    participant P as Personal API
+    participant D as Regional DB
+    B-&gt;&gt;E: GET /dashboard with signed session cookie
+    E-&gt;&gt;E: 1. Verify signature and expiry locally
+    par Shared fragments
+        E-&gt;&gt;S: 2a. Get shell and shared fragments
+        S--&gt;&gt;E: HIT - long TTL with stale-while-revalidate
+    and Personal data
+        E-&gt;&gt;P: 2b. GET /me/summary with user token
+        P-&gt;&gt;D: 3. Read from primary or caught-up replica
+        D--&gt;&gt;P: Rows
+        P--&gt;&gt;E: JSON with Cache-Control private, no-store
+    end
+    E--&gt;&gt;B: 4. Assembled page with Cache-Control private">sequenceDiagram
+    participant B as Browser
+    participant E as Edge Function
+    participant S as Edge Cache and Shield
+    participant P as Personal API
+    participant D as Regional DB
+    B-&gt;&gt;E: GET /dashboard with signed session cookie
+    E-&gt;&gt;E: 1. Verify signature and expiry locally
+    par Shared fragments
+        E-&gt;&gt;S: 2a. Get shell and shared fragments
+        S--&gt;&gt;E: HIT - long TTL with stale-while-revalidate
+    and Personal data
+        E-&gt;&gt;P: 2b. GET /me/summary with user token
+        P-&gt;&gt;D: 3. Read from primary or caught-up replica
+        D--&gt;&gt;P: Rows
+        P--&gt;&gt;E: JSON with Cache-Control private, no-store
+    end
+    E--&gt;&gt;B: 4. Assembled page with Cache-Control private</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Edge Handler: Shared Fragments + Private Personal Data</h3>
+        <p>Verify the session locally, fetch shared and personal parts in parallel, degrade gracefully, and never let the assembled page enter a shared cache:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleDashboard</span>(req):</span>
+<span class="line">    session <span class="tk-op">=</span> <span class="tk-fn">verifySignedSession</span>(req.<span class="tk-fn">cookie</span>(<span class="tk-str">&#x27;session&#x27;</span>))         <span class="tk-com">// HMAC or JWT check, no network call</span></span>
+<span class="line">    <span class="tk-kw">if</span> session <span class="tk-op">==</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">redirect</span>(<span class="tk-str">&#x27;/login&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Shared parts: the cache key contains NO user identity</span></span>
+<span class="line">    shellFuture   <span class="tk-op">=</span> edgeCache.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;shell:v42&#x27;</span>, ttl <span class="tk-op">=</span> 1d, swr <span class="tk-op">=</span> <span class="tk-num">1h</span>, staleIfError <span class="tk-op">=</span> 1d)</span>
+<span class="line">    widgetsFuture <span class="tk-op">=</span> edgeCache.<span class="tk-fn">get</span>(<span class="tk-str">&#x27;widgets:&#x27;</span> <span class="tk-op">+</span> session.locale <span class="tk-op">+</span> <span class="tk-str">&#x27;:v42&#x27;</span>, ttl <span class="tk-op">=</span> <span class="tk-num">10m</span>, swr <span class="tk-op">=</span> <span class="tk-num">5m</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Personal part: live, private, bounded by a timeout</span></span>
+<span class="line">    readToken <span class="tk-op">=</span> req.<span class="tk-fn">cookie</span>(<span class="tk-str">&#x27;rt&#x27;</span>)                                  <span class="tk-com">// set after this user&#x27;s last write</span></span>
+<span class="line">    personalFuture <span class="tk-op">=</span> <span class="tk-fn">fetch</span>(PERSONAL_API <span class="tk-op">+</span> <span class="tk-str">&#x27;/me/summary&#x27;</span>,</span>
+<span class="line">                           headers <span class="tk-op">=</span> { Authorization: session.token, <span class="tk-str">&#x27;X-Read-Token&#x27;</span>: readToken },</span>
+<span class="line">                           timeout <span class="tk-op">=</span> <span class="tk-num">120ms</span>)</span>
+<span class="line"></span>
+<span class="line">    shell, widgets <span class="tk-op">=</span> <span class="tk-kw">await</span>(shellFuture, widgetsFuture)</span>
+<span class="line">    degraded <span class="tk-op">=</span> <span class="tk-lit">false</span></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        personal <span class="tk-op">=</span> <span class="tk-kw">await</span>(personalFuture)</span>
+<span class="line">        html <span class="tk-op">=</span> <span class="tk-fn">render</span>(shell, widgets, personal)</span>
+<span class="line">    <span class="tk-kw">catch</span> Timeout, ServerError:</span>
+<span class="line">        html <span class="tk-op">=</span> <span class="tk-fn">render</span>(shell, widgets, <span class="tk-fn">skeleton</span>())                 <span class="tk-com">// client-side fetch retries after load</span></span>
+<span class="line">        degraded <span class="tk-op">=</span> <span class="tk-lit">true</span></span>
+<span class="line">        metrics.<span class="tk-fn">increment</span>(<span class="tk-str">&#x27;personalization_fallback&#x27;</span>)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">response</span>(html, headers <span class="tk-op">=</span> {</span>
+<span class="line">        <span class="tk-str">&#x27;Cache-Control&#x27;</span>: <span class="tk-str">&#x27;private, no-store&#x27;</span>,                     <span class="tk-com">// never stored by a shared cache</span></span>
+<span class="line">        <span class="tk-str">&#x27;Vary&#x27;</span>: <span class="tk-str">&#x27;Cookie&#x27;</span>,</span>
+<span class="line">        <span class="tk-str">&#x27;X-Degraded&#x27;</span>: degraded</span>
+<span class="line">    })</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Personal API: read-your-writes ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleSummary</span>(userId, readToken):</span>
+<span class="line">    replica <span class="tk-op">=</span> <span class="tk-fn">pickNearestReplica</span>()</span>
+<span class="line">    <span class="tk-kw">if</span> readToken <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> replica.appliedPosition <span class="tk-op">&lt;</span> readToken:</span>
+<span class="line">        <span class="tk-kw">return</span> primary.<span class="tk-fn">read</span>(userId)                               <span class="tk-com">// replica is behind this user&#x27;s own write</span></span>
+<span class="line">    <span class="tk-kw">return</span> replica.<span class="tk-fn">read</span>(userId)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Caching personalized responses in a shared cache:</strong> Any response containing user data must be <code>private, no-store</code>. A missing Vary or a cache key without user identity is how data leaks between users.</li>
+          <li><strong>Putting user data inside a shared fragment:</strong> A greeting or balance baked into a &ldquo;shared&rdquo; fragment gets cached for everyone. Keep fragments strictly user-free.</li>
+          <li><strong>Ignoring read-your-writes:</strong> Without a version token, the next read may hit a lagging replica and the user sees their own update missing, which looks like data loss.</li>
+          <li><strong>No timeout on the personal call:</strong> One slow dependency then stalls the whole page. Use a strict timeout and a skeleton or last-known fallback.</li>
+          <li><strong>Using cookies in the shared cache key:</strong> Forwarding the full cookie header fragments the cache into per-user entries. Strip cookies on shared fragment requests and pass only the needed attribute (locale, plan).</li>
+          <li><strong>Treating purge as synchronous:</strong> Purge propagation takes time and can fail. Never depend on it for correctness of user-visible balances.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Production personalization at the edge rarely caches whole personalized pages. Teams <strong>split content by who it is for and how fresh it must be</strong>, then pick a caching rule per slice:</p>
+        <ul>
+          <li><strong>Step 0 &mdash; Classify content:</strong> Shared (same for everyone), segment-level (per locale or plan) and per-user, each with an explicit freshness budget.</li>
+          <li><strong>Step 1 &mdash; Immutable assets:</strong> Fingerprinted JS/CSS/images with one-year TTLs and <code>immutable</code>. Deploys change the URL instead of purging.</li>
+          <li><strong>Step 2 &mdash; Shared fragments:</strong> Long TTL with <code>stale-while-revalidate</code> and <code>stale-if-error</code>, tagged with surrogate keys, plus an origin shield. Publish events purge by tag.</li>
+          <li><strong>Step 3 &mdash; Edge session check:</strong> Verify a short-lived signed cookie or JWT at the edge, rejecting bad or expired sessions before any origin work.</li>
+          <li><strong>Step 4 &mdash; Personal data API:</strong> Private, non-cacheable JSON from a regional API with read replicas, request coalescing, and a read-your-writes token for fresh reads after updates.</li>
+          <li><strong>Step 5 &mdash; Degrade and observe:</strong> Timeouts with skeleton fallbacks, real-user monitoring, per-fragment hit ratio, and automated cache-key tests that fail the build if a personalized response becomes cacheable.</li>
+        </ul>
+        <p>Cache what is shared, never cache what is personal, and make the personal path fast instead of cacheable.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Don't cache <em>pages</em>, cache <strong>fragments</strong>. Put long TTLs on shared content, keep user-specific data <strong>private and live</strong>, assemble at the edge, and use <strong>read-your-writes tokens</strong> so a user's own updates show up immediately. That combination delivers low latency, low origin load and correctness at the same time.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

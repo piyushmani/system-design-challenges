@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Should Business Logic Be Implemented in Triggers or Services? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">02 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Architecture</span>
+      <span class="tag tag--green">Database Triggers</span>
+      <span class="tag tag--amber">Microservices</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Should Business Logic Be Implemented in Triggers or Services?</h1>
+      <p class="q-scenario"><strong>Priya</strong>, a backend developer, is building an <strong>order management system</strong> that must keep an <strong>order history audit trail</strong> whenever an order is modified. The database supports triggers and stored procedures, and the application server is <strong>Node.js</strong>. The team prioritizes <strong>low latency</strong>, <strong>high reliability</strong>, and a clean <strong>separation of concerns</strong>. The audit trail is a <strong>compliance requirement</strong>: every change must be captured, including changes made by migrations, admin scripts, and other services that write to the same database, and an audit row must never exist without its change (or the reverse). She must choose an implementation that scales without tight coupling or operational burden as business logic evolves.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="0">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Create a database trigger designed to automatically insert a log entry into the audit table upon any INSERT, UPDATE, or DELETE operation performed on the orders table.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Incorporate all audit logic directly into the application layer, ensuring that every API endpoint responsible for modifying an order simultaneously writes the corresponding audit record within the same transaction.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Implement a stored procedure to handle all order modifications. This procedure will manage both the order update and the audit log insertion, requiring the application to route all mutations through it.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Emit order modification events from the application to a message broker, and deploy an independent worker service to consume these events and asynchronously update the audit table.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — A: Generic Database Audit Trigger</h3>
+        <p>For a <em>pure audit trail</em> that must be complete and atomic, an <strong>AFTER row-level trigger</strong> is the strongest fit. It runs inside the same transaction as the change, so the audit row commits or rolls back with the order row, and it fires no matter which code path (API, migration, admin script) touched the table. The key discipline is to keep the trigger <strong>generic and free of business rules</strong>: it records what changed, and business logic stays in the Node.js service. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Completeness by construction:</strong> The application cannot forget to log. Every INSERT, UPDATE, and DELETE on <code>orders</code> is captured, including writes that bypass the Node.js service, which is exactly what auditors care about.</li>
+          <li><strong>Atomic and reliable:</strong> The audit insert shares the transaction with the change. There is no window where the order is updated but the history is missing, and no outbox, retry, or reconciliation job to maintain.</li>
+          <li><strong>Low latency:</strong> The extra work is one local insert, with no network hop, broker, or second round trip. Capturing old and new row images as <code>JSONB</code> keeps the trigger tiny.</li>
+          <li><strong>Good separation of concerns:</strong> Audit is a cross-cutting, data-layer concern. Node.js endpoints and business rules can change freely without touching audit code, and one generic trigger function can be attached to many tables.</li>
+          <li><strong>Evolves cheaply:</strong> Because the trigger stores row snapshots rather than a hand-maintained column list, adding a column to <code>orders</code> does not require updating audit code in every endpoint.</li>
+        </ul>
+        <p>A solid implementation uses a <strong>single generic trigger function</strong>, <strong>row snapshots (old and new as JSONB)</strong>, <strong>actor and request context from session settings</strong>, an <strong>append-only audit table</strong> (grant the app role INSERT only), and <strong>time-based partitioning</strong>. If other systems also need to react to order changes, publish events separately (for example through an outbox) instead of overloading the audit mechanism.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧱</span>
+            <h4>B — Audit in the Application Layer (Same Transaction)</h4>
+          </div>
+          <p>Writing the audit row from every endpoint, inside the same transaction, is atomic and explicit, and it makes the actor and the business reason easy to record. Its weakness is <strong>coverage</strong>: every endpoint, job, and future service must remember to do it, and anything that writes SQL directly (migrations, hotfix scripts, another service) leaves no trail. It also scatters a cross-cutting concern through the codebase, the opposite of strict separation. <strong>Caveat:</strong> if audit entries need rich business meaning (reason codes, approvals), or triggers are unavailable (some managed or multi-database setups), a central repository layer or ORM hook is a sound choice, and it is often used alongside a trigger.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🗄️</span>
+            <h4>C — Stored Procedure for All Order Mutations</h4>
+          </div>
+          <p>Routing every mutation through one procedure is atomic and central, but it moves the <strong>write API into the database</strong>. The Node.js service becomes tightly coupled to procedure signatures, business logic splits across two runtimes, and versioning and testing get harder. The audit is complete only if nothing ever writes to the table directly, which nothing enforces unless permissions are locked down. It also puts more CPU work on the one resource that is hardest to scale. <strong>Caveat:</strong> it can make sense in a database-centric architecture with strict DBA ownership and direct table access revoked.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📨</span>
+            <h4>D — Async Events + Independent Worker</h4>
+          </div>
+          <p>Emitting events from the app and letting a worker write the audit table decouples nicely, but it is the weakest option for a <strong>compliance-grade audit</strong>. Publishing after the database commit is a dual write: if the process crashes between commit and publish, the change exists with no history. The audit is also only eventually consistent, and it adds a broker, a worker, retries, deduplication, and monitoring. <strong>Caveat:</strong> with a transactional outbox it becomes reliable, and it is a good way to feed other systems (search, analytics, notifications), but that is more machinery than a plain audit trail needs.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>A — Generic Database Audit Trigger ✓</h4>
+          </div>
+          <p>Create a database trigger designed to automatically insert a log entry into the audit table upon any INSERT, UPDATE, or DELETE operation performed on the orders table.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Completeness (No Missed Changes)</th><th>Atomicity with the Change</th><th>Added Latency</th><th>Separation of Concerns</th><th>Operational Complexity</th><th>Captures Business Context (Who and Why)</th></tr>
+            </thead>
+            <tbody>
+            <tr class="tt-best"><td class="tt-option">A — Audit Trigger ✓</td><td>High, all write paths ✅</td><td>Yes ✅</td><td>Low ✅</td><td>Good if logic-free ✅</td><td>Low–Medium ✅</td><td>Needs session context ⚠</td></tr>
+            <tr><td class="tt-option">B — App-Layer Audit</td><td>Only paths that remember ❌</td><td>Yes ✅</td><td>Low ✅</td><td>Weak (scattered) ❌</td><td>Low ✅</td><td>Excellent ✅</td></tr>
+            <tr><td class="tt-option">C — Stored Procedure API</td><td>Only if direct access is blocked ⚠</td><td>Yes ✅</td><td>Low ✅</td><td>Weak (logic in the DB) ❌</td><td>Medium ⚠</td><td>Via parameters ⚠</td></tr>
+            <tr><td class="tt-option">D — Async Events + Worker</td><td>Gaps unless an outbox is used ❌</td><td>No (dual write) ❌</td><td>Low on the request path ✅</td><td>Strong ✅</td><td>High ❌</td><td>Excellent ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Audit Trigger</h4>
+          </div>
+          <p>Compliance-style audit where completeness matters, several writers touch the table, and the record needs old and new snapshots rather than business narratives.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — App-Layer Audit</h4>
+          </div>
+          <p>Audit entries that carry business meaning (reason codes, approvals), a single well-controlled write path, or databases where triggers are restricted.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Stored Procedure API</h4>
+          </div>
+          <p>Database-centric systems with strict DBA ownership, direct table access revoked, and procedures treated as the versioned write API.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Async Events + Worker</h4>
+          </div>
+          <p>Downstream reactions (notifications, search, analytics) that tolerate delay, ideally fed by a transactional outbox. Not suitable as the primary legal audit record.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Trigger-Based Audit Write Path</h3>
+        <p>The audit row is written inside the same transaction as the order change:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant N as Node.js Service
+    participant O as orders table
+    participant T as Audit Trigger
+    participant H as order_history
+    C-&gt;&gt;N: PATCH /orders/42
+    N-&gt;&gt;O: 1. BEGIN, set actor context, UPDATE orders
+    O-&gt;&gt;T: 2. AFTER UPDATE fires (same transaction)
+    T-&gt;&gt;H: 3. INSERT old row, new row, actor
+    N-&gt;&gt;O: 4. COMMIT (order and audit commit together)
+    N--&gt;&gt;C: 200 OK">sequenceDiagram
+    participant C as Client
+    participant N as Node.js Service
+    participant O as orders table
+    participant T as Audit Trigger
+    participant H as order_history
+    C-&gt;&gt;N: PATCH /orders/42
+    N-&gt;&gt;O: 1. BEGIN, set actor context, UPDATE orders
+    O-&gt;&gt;T: 2. AFTER UPDATE fires (same transaction)
+    T-&gt;&gt;H: 3. INSERT old row, new row, actor
+    N-&gt;&gt;O: 4. COMMIT (order and audit commit together)
+    N--&gt;&gt;C: 200 OK</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Generic Audit Trigger with Actor Context</h3>
+        <p>A logic-free audit trigger that records old and new rows with the actor, plus how the Node.js service passes identity per transaction (PostgreSQL syntax shown):</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">sql</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">-- Audit table (append-only: grant INSERT only to the application role)</span></span>
+<span class="line">CREATE TABLE <span class="tk-fn">order_history</span> (</span>
+<span class="line">    id          BIGSERIAL PRIMARY KEY,</span>
+<span class="line">    order_id    BIGINT      NOT NULL,</span>
+<span class="line">    action      TEXT        NOT NULL,            <span class="tk-com">-- INSERT / UPDATE / DELETE</span></span>
+<span class="line">    old_row     JSONB,</span>
+<span class="line">    new_row     JSONB,</span>
+<span class="line">    actor_id    TEXT,                            <span class="tk-com">-- from the session setting</span></span>
+<span class="line">    request_id  TEXT,</span>
+<span class="line">    changed_at  TIMESTAMPTZ NOT NULL DEFAULT <span class="tk-fn">clock_timestamp</span>()</span>
+<span class="line">);</span>
+<span class="line">CREATE INDEX ON <span class="tk-fn">order_history</span> (order_id, changed_at);</span>
+<span class="line"></span>
+<span class="line">CREATE OR REPLACE FUNCTION <span class="tk-fn">audit_order_change</span>() RETURNS trigger AS $$</span>
+<span class="line">BEGIN</span>
+<span class="line">    INSERT INTO <span class="tk-fn">order_history</span> (order_id, action, old_row, new_row, actor_id, request_id)</span>
+<span class="line">    <span class="tk-fn">VALUES</span> (</span>
+<span class="line">        <span class="tk-fn">COALESCE</span>(NEW.id, OLD.id),</span>
+<span class="line">        TG_OP,</span>
+<span class="line">        CASE WHEN TG_OP <span class="tk-fn">IN</span> (<span class="tk-str">&#x27;UPDATE&#x27;</span>, <span class="tk-str">&#x27;DELETE&#x27;</span>) THEN <span class="tk-fn">to_jsonb</span>(OLD) END,</span>
+<span class="line">        CASE WHEN TG_OP <span class="tk-fn">IN</span> (<span class="tk-str">&#x27;INSERT&#x27;</span>, <span class="tk-str">&#x27;UPDATE&#x27;</span>) THEN <span class="tk-fn">to_jsonb</span>(NEW) END,</span>
+<span class="line">        <span class="tk-fn">current_setting</span>(<span class="tk-str">&#x27;app.user_id&#x27;</span>, <span class="tk-lit">true</span>),    <span class="tk-com">-- true = return NULL if not set</span></span>
+<span class="line">        <span class="tk-fn">current_setting</span>(<span class="tk-str">&#x27;app.request_id&#x27;</span>, <span class="tk-lit">true</span>)</span>
+<span class="line">    );</span>
+<span class="line">    RETURN NULL;                                  <span class="tk-com">-- AFTER trigger: return value is ignored</span></span>
+<span class="line">END;</span>
+<span class="line">$$ LANGUAGE plpgsql;</span>
+<span class="line"></span>
+<span class="line">CREATE TRIGGER orders_audit</span>
+<span class="line">AFTER INSERT OR UPDATE OR DELETE ON orders</span>
+<span class="line">FOR EACH ROW EXECUTE FUNCTION <span class="tk-fn">audit_order_change</span>();</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Node.js (pg): set context per transaction so pooled connections never leak identity</span></span>
+<span class="line"><span class="tk-com">--   await client.query(&#x27;BEGIN&#x27;);</span></span>
+<span class="line"><span class="tk-com">--   await client.query(&quot;SELECT set_config(&#x27;app.user_id&#x27;, $1, true)&quot;, [userId]);   -- true = local to this transaction</span></span>
+<span class="line"><span class="tk-com">--   await client.query(&#x27;UPDATE orders SET status = $1 WHERE id = $2&#x27;, [status, id]);</span></span>
+<span class="line"><span class="tk-com">--   await client.query(&#x27;COMMIT&#x27;);</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Putting business rules in the trigger:</strong> Pricing, validation, or notifications inside triggers create hidden behavior that is hard to test and reason about. Keep triggers to recording facts.</li>
+          <li><strong>Losing the actor:</strong> Without session context, history rows say 'app_user' for everyone. Set user id and request id per transaction.</li>
+          <li><strong>Using session-level settings behind a pooler:</strong> A session-level value can leak to the next request on a pooled connection and attribute changes to the wrong user. Use transaction-local settings.</li>
+          <li><strong>Letting the app role edit audit rows:</strong> An audit trail the application can update or delete is not an audit trail. Grant INSERT only, or use an append-only role.</li>
+          <li><strong>Unbounded audit growth:</strong> The audit table often outgrows the orders table. Partition by time, index by order id and timestamp, and archive old partitions.</li>
+          <li><strong>Row-level triggers on huge batch jobs:</strong> A million-row update fires a million trigger calls. Use statement-level triggers with transition tables for bulk operations.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams <strong>start from the list of writers</strong> to the table rather than from a pattern. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Inventory the writers:</strong> List every path that writes to <code>orders</code> (API, jobs, migrations, other services, support scripts). If exactly one controlled path exists, the application-layer option gets stronger.</li>
+          <li><strong>Step 1 — Add a generic audit trigger:</strong> One trigger function, old and new rows as JSONB, attached to <code>orders</code> and later to other audited tables.</li>
+          <li><strong>Step 2 — Propagate actor and request context:</strong> Set user id and request id per transaction, so history rows say who changed what and from which request.</li>
+          <li><strong>Step 3 — Lock it down:</strong> INSERT-only grants on the audit table, time-based partitioning, and a retention and archival policy.</li>
+          <li><strong>Step 4 — Feed other systems separately:</strong> If notifications, search, or analytics must react to order changes, use a transactional outbox into a broker rather than the audit table.</li>
+          <li><strong>Step 5 — Test the guarantees:</strong> Integration tests asserting audit rows for insert, update, delete, rollback, and bulk operations.</li>
+        </ul>
+        <p>Keep audit in the data layer, keep business rules in the service, and keep the two from leaking into each other.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Use triggers for <strong>what changed</strong> and services for <strong>why it changed</strong>. A generic, logic-free audit trigger gives complete, atomic, low-latency history that survives code churn, while business rules stay in Node.js where they are testable. If audit entries must carry business intent, add it through session context or pair the trigger with an application-level reason code.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Selecting the Right Data Type Challenge — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">06 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Data Types</span>
+      <span class="tag tag--green">Database Design</span>
+      <span class="tag tag--amber">Databases</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Selecting the Right Data Type Challenge</h1>
+      <p class="q-scenario"><p>A backend developer named John is building a distributed application for managing user accounts. The system requires secure credential persistence capable of scaling across multiple availability zones while withstanding targeted credential-stuffing attacks, offline database leakages, and infrastructure compromises. John must determine the most secure method and data type for persisting user passwords in the account database.</p></p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Save passwords in plain text within a NoSQL database utilizing robust encryption at rest.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Apply a strong cryptographic hash function to the passwords and keep the resulting hashes in an indexed SQL database.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Employ a reversible encryption algorithm on the passwords prior to saving them in a distributed key-value store.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Create a bespoke encryption algorithm for the passwords and distribute the encryption keys safely among all database nodes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Salted Adaptive Cryptographic Hashing with Transactional Schema Storage</h3>
+        <p><p>The only secure, industry-mandated architectural strategy for persisting user credentials is to <strong>apply a strong, slow, cryptographic password-hashing function</strong> (such as <strong>Argon2id</strong>, <strong>bcrypt</strong>, or <strong>scrypt</strong>) and store the resulting formatted hash strings within a structured SQL database. Passwords must <em>never</em> be stored reversibly or in cleartext. Unlike fast general-purpose hashes (e.g., SHA-256), dedicated password-hashing algorithms are intentionally computationally and memory intensive, featuring <strong>tunable work factors</strong> that defeat brute-force and rainbow table attacks on GPUs/ASICs. Storing these hashes in an indexed SQL database ensures <strong>ACID transaction guarantees</strong> during credential updates, strict schema typing (e.g., <code>VARCHAR(255)</code> or fixed <code>CHAR(60)</code>) to prevent truncation bugs, and fast $O(1)$ lookups via a unique index on the user identifier (email or username) rather than on the hash itself.</p></p>
+        <ul>
+          <li><p><strong>One-Way Irreversibility:</strong> Cryptographic password hashes cannot be decrypted back into plain text. If an attacker gains read access to the database or backups, raw user passwords remain uncompromised.</p></li>
+          <li><p><strong>Individual Salting Defeats Rainbow Tables:</strong> Password hashing functions automatically generate a unique, cryptographically random salt per user, ensuring identical user passwords yield completely distinct hash strings.</p></li>
+          <li><p><strong>Adaptive Work Factor Against Hardware Acceleration:</strong> Algorithms like Argon2id and bcrypt feature configurable memory, CPU, and parallelism cost parameters that make high-speed GPU/FPGA/ASIC brute-force cracking economically unviable.</p></li>
+          <li><p><strong>Transactional Integrity &amp; Strict Schemas:</strong> Storing credentials in an ACID-compliant SQL database guarantees atomic password updates, prevents partial writes during password resets, and provides foreign key consistency.</p></li>
+          <li><p><strong>Standards &amp; Regulatory Compliance:</strong> Slow salted hashing aligns with NIST Special Publication 800-63B (Digital Identity Guidelines), OWASP Password Storage Cheatsheet, PCI-DSS Requirement 8, and GDPR data security mandates.</p></li>
+        </ul>
+        <p><p>Always implement Argon2id or bcrypt using battle-tested cryptographic libraries. Index only the unique user lookup key (email/username), compare hashes using constant-time verification functions, and protect authentication routes with robust rate limiting.</p></p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚠️</span>
+            <h4>A — Plaintext Storage with Encryption at Rest</h4>
+          </div>
+          <p><p>Storing passwords in plain text—even within an encrypted NoSQL database—is a catastrophic security anti-pattern. Encryption at rest (e.g., AWS EBS encryption or LUKS) only protects against physical theft of hard drives. While the database engine is running, passwords remain fully exposed in plaintext to SQL/NoSQL injection vulnerabilities, compromised application servers, unauthorized DBA access, backup leaks, and memory dumps.</p></p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔓</span>
+            <h4>C — Reversible Two-Way Encryption</h4>
+          </div>
+          <p><p>Using reversible encryption (such as AES-GCM) creates an unnecessary single point of catastrophic failure. If an adversary compromises the application environment, configuration secrets, or Key Management Service (KMS) master key, they can decrypt every password in the database simultaneously. User passwords must be verifiable, never retrievable.</p></p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🚫</span>
+            <h4>D — Bespoke Proprietary Encryption Algorithm</h4>
+          </div>
+          <p><p>Violates the fundamental cryptographic maxim: <em>'Never roll your own crypto'</em> (Schneier's Law). Proprietary or homegrown algorithms lack peer-reviewed mathematical vetting and inevitably introduce subtle weaknesses such as key leaks, timing side-channels, or poor diffusion. Furthermore, distributing encryption keys to all database nodes massively expands the attack surface.</p></p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Salted Adaptive Cryptographic Hashing with Transactional Schema Storage ✓</h4>
+          </div>
+          <p>Apply a strong cryptographic hash function to the passwords and keep the resulting hashes in an indexed SQL database.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Breach Resilience</th><th>Offline Brute-Force Resistance</th><th>Regulatory Compliance</th><th>Implementation Simplicity</th><th>Runtime Resource Overhead</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">Option A: Plaintext + Encryption at Rest</td><td>1/5</td><td>1/5</td><td>1/5</td><td>5/5</td><td>5/5</td></tr>
+            <tr><td class="tt-option">Option B: Cryptographic Hash + SQL Database</td><td>5/5</td><td>5/5</td><td>5/5</td><td>4/5</td><td>3/5</td></tr>
+            <tr><td class="tt-option">Option C: Reversible Encryption</td><td>2/5</td><td>2/5</td><td>2/5</td><td>3/5</td><td>4/5</td></tr>
+            <tr><td class="tt-option">Option D: Bespoke Algorithm + Distributed Keys</td><td>1/5</td><td>1/5</td><td>1/5</td><td>1/5</td><td>2/5</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>Option A (Plaintext + Encryption at Rest)</h4>
+          </div>
+          <p>Plain text password storage is strictly obsolete and unacceptable under all modern architectural and compliance frameworks.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>Option B (Cryptographic Hash + SQL Database)</h4>
+          </div>
+          <p>Salted adaptive cryptographic hashing in an indexed SQL database is the mandatory standard for storing human user passwords and authentication secrets.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>Option C (Reversible Encryption + Key-Value Store)</h4>
+          </div>
+          <p>Reversible encryption (e.g., AES-256-GCM backed by AWS KMS or HashiCorp Vault) is appropriate for third-party API keys or OAuth refresh tokens that the system must send out in plaintext, but never for passwords.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>Option D (Bespoke Algorithm + Distributed Keys)</h4>
+          </div>
+          <p>Bespoke encryption should never be deployed; proprietary algorithms lack formal mathematical review and violate Kerckhoffs's principle.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Secure Credential Registration and Authentication Lifecycle</h3>
+        <p>Sequence diagram demonstrating salted adaptive password hashing, structured SQL persistence, constant-time verification, and automatic hash cost upgrading.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    autonumber
+    actor Client as User Client
+    participant Auth as Auth Service
+    participant Hash as Password Hasher (Argon2id)
+    participant DB as SQL Database
+
+    Note over Client, DB: Registration Flow
+    Client-&gt;&gt;Auth: Register(email, password)
+    Auth-&gt;&gt;Hash: HashPassword(password, salt=randomBytes(16))
+    Hash--&gt;&gt;Auth: Modular Hash ($argon2id$v=19$m=65536,t=3,p=1...)
+    Auth-&gt;&gt;DB: INSERT INTO users (email, password_hash) VALUES (?, ?)
+    DB--&gt;&gt;Auth: 201 Created (ACID Transaction Committed)
+    Auth--&gt;&gt;Client: 201 Account Created
+
+    Note over Client, DB: Authentication Flow
+    Client-&gt;&gt;Auth: Login(email, password)
+    Auth-&gt;&gt;DB: SELECT id, password_hash FROM users WHERE email = ?
+    DB--&gt;&gt;Auth: User Record Found (O(1) B-Tree Index Lookup)
+    Auth-&gt;&gt;Hash: Verify(password, stored_hash)
+    Note over Auth, Hash: Constant-Time Memory/CPU Verification
+    alt Valid Password &amp; Hash Cost Up-to-Date
+        Hash--&gt;&gt;Auth: Verification Success (Match)
+        Auth--&gt;&gt;Client: 200 OK + JWT / Session Token
+    else Valid Password But Hash Needs Upgrade
+        Hash--&gt;&gt;Auth: Match (Rehash Needed: Cost Outdated)
+        Auth-&gt;&gt;Hash: HashPassword(password, updated_parameters)
+        Auth-&gt;&gt;DB: UPDATE users SET password_hash = ? WHERE id = ?
+        Auth--&gt;&gt;Client: 200 OK + JWT / Session Token
+    else Invalid Password
+        Hash--&gt;&gt;Auth: Verification Failed
+        Auth--&gt;&gt;Client: 401 Unauthorized
+    end">sequenceDiagram
+    autonumber
+    actor Client as User Client
+    participant Auth as Auth Service
+    participant Hash as Password Hasher (Argon2id)
+    participant DB as SQL Database
+
+    Note over Client, DB: Registration Flow
+    Client-&gt;&gt;Auth: Register(email, password)
+    Auth-&gt;&gt;Hash: HashPassword(password, salt=randomBytes(16))
+    Hash--&gt;&gt;Auth: Modular Hash ($argon2id$v=19$m=65536,t=3,p=1...)
+    Auth-&gt;&gt;DB: INSERT INTO users (email, password_hash) VALUES (?, ?)
+    DB--&gt;&gt;Auth: 201 Created (ACID Transaction Committed)
+    Auth--&gt;&gt;Client: 201 Account Created
+
+    Note over Client, DB: Authentication Flow
+    Client-&gt;&gt;Auth: Login(email, password)
+    Auth-&gt;&gt;DB: SELECT id, password_hash FROM users WHERE email = ?
+    DB--&gt;&gt;Auth: User Record Found (O(1) B-Tree Index Lookup)
+    Auth-&gt;&gt;Hash: Verify(password, stored_hash)
+    Note over Auth, Hash: Constant-Time Memory/CPU Verification
+    alt Valid Password &amp; Hash Cost Up-to-Date
+        Hash--&gt;&gt;Auth: Verification Success (Match)
+        Auth--&gt;&gt;Client: 200 OK + JWT / Session Token
+    else Valid Password But Hash Needs Upgrade
+        Hash--&gt;&gt;Auth: Match (Rehash Needed: Cost Outdated)
+        Auth-&gt;&gt;Hash: HashPassword(password, updated_parameters)
+        Auth-&gt;&gt;DB: UPDATE users SET password_hash = ? WHERE id = ?
+        Auth--&gt;&gt;Client: 200 OK + JWT / Session Token
+    else Invalid Password
+        Hash--&gt;&gt;Auth: Verification Failed
+        Auth--&gt;&gt;Client: 401 Unauthorized
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Secure User Authentication with Adaptive Hashing and Auto-Upgrades</h3>
+        <p>Production-grade pseudocode demonstrating Argon2id password hashing, schema design, constant-time verification, and transparent cost upgrading.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">python</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">import</span> argon2</span>
+<span class="line"><span class="tk-kw">from</span> argon2 <span class="tk-kw">import</span> PasswordHasher</span>
+<span class="line"><span class="tk-kw">from</span> argon2.exceptions <span class="tk-kw">import</span> VerifyMismatchError</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com"># 1. Initialize hasher with production-calibrated parameters</span></span>
+<span class="line">ph <span class="tk-op">=</span> <span class="tk-fn">PasswordHasher</span>(</span>
+<span class="line">    time_cost<span class="tk-op">=</span><span class="tk-num">3</span>,        <span class="tk-com"># Iterations</span></span>
+<span class="line">    memory_cost<span class="tk-op">=</span><span class="tk-num">65536</span>,  <span class="tk-com"># 64 MB memory usage</span></span>
+<span class="line">    parallelism<span class="tk-op">=</span><span class="tk-num">1</span>,      <span class="tk-com"># Threads</span></span>
+<span class="line">    hash_len<span class="tk-op">=</span><span class="tk-num">32</span>,</span>
+<span class="line">    salt_len<span class="tk-op">=</span><span class="tk-num">16</span></span>
+<span class="line">)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">def</span> <span class="tk-fn">register_user</span>(db_session, email: str, raw_password: str) <span class="tk-op">-&gt;</span> str:</span>
+<span class="line">    <span class="tk-com"># Hash password with auto-generated cryptographically secure salt</span></span>
+<span class="line">    secure_hash <span class="tk-op">=</span> ph.<span class="tk-fn">hash</span>(raw_password)</span>
+<span class="line">    </span>
+<span class="line">    <span class="tk-com"># SQL Schema: email VARCHAR(255) UNIQUE INDEX, password_hash VARCHAR(255)</span></span>
+<span class="line">    query <span class="tk-op">=</span> <span class="tk-str">&quot;INSERT INTO users (email, password_hash) VALUES (:email, :hash)&quot;</span></span>
+<span class="line">    db_session.<span class="tk-fn">execute</span>(query, {<span class="tk-str">&quot;email&quot;</span>: email.<span class="tk-fn">lower</span>().<span class="tk-fn">strip</span>(), <span class="tk-str">&quot;hash&quot;</span>: secure_hash})</span>
+<span class="line">    db_session.<span class="tk-fn">commit</span>()</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-str">&quot;User registered successfully&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">def</span> <span class="tk-fn">authenticate_user</span>(db_session, email: str, raw_password: str) <span class="tk-op">-&gt;</span> bool:</span>
+<span class="line">    <span class="tk-com"># Look up by indexed identifier, NEVER by hash</span></span>
+<span class="line">    query <span class="tk-op">=</span> <span class="tk-str">&quot;SELECT id, password_hash FROM users WHERE email = :email&quot;</span></span>
+<span class="line">    user <span class="tk-op">=</span> db_session.<span class="tk-fn">execute</span>(query, {<span class="tk-str">&quot;email&quot;</span>: email.<span class="tk-fn">lower</span>().<span class="tk-fn">strip</span>()}).<span class="tk-fn">fetchone</span>()</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> user:</span>
+<span class="line">        <span class="tk-com"># Run dummy hash calculation to defend against timing attacks</span></span>
+<span class="line">        <span class="tk-kw">try</span>:</span>
+<span class="line">            ph.<span class="tk-fn">verify</span>(<span class="tk-str">&quot;$argon2id$v=19$m=65536,t=3,p=1$dummy$dummy&quot;</span>, <span class="tk-str">&quot;dummy&quot;</span>)</span>
+<span class="line">        <span class="tk-kw">except</span> Exception:</span>
+<span class="line">            pass</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-lit">False</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        <span class="tk-com"># Constant-time verification using native Argon2 primitive</span></span>
+<span class="line">        ph.<span class="tk-fn">verify</span>(user.password_hash, raw_password)</span>
+<span class="line">        </span>
+<span class="line">        <span class="tk-com"># Check if algorithm parameters need transparent upgrade</span></span>
+<span class="line">        <span class="tk-kw">if</span> ph.<span class="tk-fn">check_needs_rehash</span>(user.password_hash):</span>
+<span class="line">            new_hash <span class="tk-op">=</span> ph.<span class="tk-fn">hash</span>(raw_password)</span>
+<span class="line">            update_query <span class="tk-op">=</span> <span class="tk-str">&quot;UPDATE users SET password_hash = :hash WHERE id = :id&quot;</span></span>
+<span class="line">            db_session.<span class="tk-fn">execute</span>(update_query, {<span class="tk-str">&quot;hash&quot;</span>: new_hash, <span class="tk-str">&quot;id&quot;</span>: user.id})</span>
+<span class="line">            db_session.<span class="tk-fn">commit</span>()</span>
+<span class="line">            </span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-lit">True</span></span>
+<span class="line">    <span class="tk-kw">except</span> VerifyMismatchError:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-lit">False</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><p><strong>Utilizing Fast General-Purpose Hashes:</strong> Using SHA-256, SHA-512, or MD5 without key stretching; modern GPU clusters compute tens of billions of SHA-256 hashes per second, making brute-force trivial.</p></li>
+          <li><p><strong>Static or Reused Salt:</strong> Employing a global application-wide salt instead of generating an unpredictable, cryptographically random salt per user, exposing all accounts to shared rainbow table attacks.</p></li>
+          <li><p><strong>Column Truncation Vulnerability:</strong> Defining database columns too narrow (e.g., <code>VARCHAR(32)</code>), truncating hashes and potentially allowing unauthorized logins or breaking verification entirely.</p></li>
+          <li><p><strong>Direct Indexing of the Hash Column:</strong> Creating an index on the <code>password_hash</code> column, which wastes database cache space on high-entropy data that should never appear in a <code>WHERE</code> query.</p></li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Enterprise authentication pipelines combine salted adaptive hashing with structured relational storage and defense-in-depth perimeter protections. Here is the recommended production implementation roadmap:</p>
+        <ul>
+          <li><p><strong>Select Argon2id or bcrypt:</strong> Configure Argon2id with recommended parameters (e.g., 64 MB memory cost, 3 iterations, 1 degree of parallelism) as the primary algorithm, or bcrypt with a minimum work factor of 12.</p></li>
+          <li><p><strong>Choose the Correct SQL Column Type:</strong> Store the modular crypt-formatted hash in a <code>VARCHAR(255)</code> or <code>CHAR(60)</code> (for bcrypt) column, ensuring sufficient length so hashes are never truncated.</p></li>
+          <li><p><strong>Index Solely the Account Identifier:</strong> Place a unique B-Tree index on <code>email</code> or <code>normalized_username</code>. Look up the record by identifier, then verify the supplied password against the retrieved hash in application memory.</p></li>
+          <li><p><strong>Use Constant-Time Comparison:</strong> Perform hash validation using constant-time string comparisons (e.g., <code>crypto.timingSafeEqual</code>) to prevent side-channel timing attacks that infer hash structure.</p></li>
+          <li><p><strong>Implement Transparent Cost Upgrades on Login:</strong> Check if the stored hash's work factor is outdated upon successful user login; if so, re-hash the submitted password using updated security parameters and persist the new hash seamlessly.</p></li>
+          <li><p><strong>Enforce Aggressive Rate Limiting at the Edge:</strong> Implement IP and account-based rate limiting, proof-of-work challenges, or CAPTCHA at the API gateway to prevent computational exhaustion from brute-force hash calculation floods.</p></li>
+        </ul>
+        <p>Through adaptive salted hashing, constant-time verification, and strict relational schemas, John guarantees that user accounts remain impervious to offline database compromises and modern hardware cracking.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p><p>Passwords must never be stored in cleartext or with reversible encryption. The gold standard architectural strategy is to use an <strong>adaptive, slow cryptographic password hash function</strong> (such as Argon2id or bcrypt) with per-user salting, persisting the resulting string in an ACID-compliant SQL database indexed strictly by user identity.</p></p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

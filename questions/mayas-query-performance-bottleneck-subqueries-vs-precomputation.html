@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya’s Query Performance Bottleneck: Subqueries vs. Precomputation — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">30 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Query Optimization</span>
+      <span class="tag tag--green">Databases</span>
+      <span class="tag tag--amber">Performance</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya’s Query Performance Bottleneck: Subqueries vs. Precomputation</h1>
+      <p class="q-scenario"><strong>Maya</strong>, a backend engineer on a payments system, owns a <strong>real-time dashboard endpoint</strong> that must return per-customer metrics (<strong>transaction count over 30 days</strong>, <strong>top 3 merchants</strong>, <strong>rolling spend percentiles</strong>) in <strong>under 200 ms</strong>. Today it runs one large SQL statement with nested subqueries and several CTEs over very large transaction tables. At peak, <strong>database CPU spikes</strong>, <strong>p99 latency degrades</strong> and requests <strong>time out</strong>. Profiling shows the cost comes from the <em>volume of data aggregated on every request</em>, not from a missing index, the same metrics are requested repeatedly by dashboards that refresh, transactions are essentially append-only, and the product can tolerate <strong>seconds to a minute of staleness</strong> if it is disclosed. She must pick the production strategy that best balances latency, scalability, consistency and operational overhead.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Retain the single complex SQL query (with its subqueries and CTEs) and vertically scale the database by increasing the instance size and introducing read replicas to handle read operations. Trust the database query optimizer to manage CTEs and subqueries dynamically for each request to provide real-time results.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Restructure the monolithic SQL into numerous smaller CTEs and temporary tables that run per-request, forcing the database to materialize partial results during execution. Incorporate query hints and performance tunings to encourage inlining or parallel processing where feasible.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Pre-calculate and store denormalized summary metrics (using materialized views or dedicated summary tables) that are updated asynchronously (via CDC or background tasks). Serve dashboard requests directly from the summary table, falling back to on-the-fly queries only for missing or cold data. Track staleness and clearly communicate eventual consistency levels.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Extract the intensive joins and aggregations from the database and move them to the application layer or a specialized analytics microservice. This service would fetch raw data as needed, calculate the results in memory, and synchronously return them to the API.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Precomputed Summaries Fed by CDC</h3>
+        <p>The endpoint is slow because <strong>every request re-aggregates up to 30 days of raw transactions</strong>. No rewrite of that query changes the amount of data it must read. Option C <strong>moves the work from read time to write time</strong>: each transaction updates a small summary once, and each dashboard request becomes a handful of key lookups. Latency stops depending on table size and traffic stops multiplying database CPU. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Constant-cost reads:</strong> A request reads about 30 daily buckets by primary key (customer, day) and merges them in memory, which is typically a few milliseconds, versus scanning and aggregating a month of rows. p99 becomes predictable and independent of table size.</li>
+          <li><strong>Scales with writes, not reads:</strong> Each transaction is aggregated once, no matter how many times dashboards refresh. The CPU surge disappears and the source database is shielded from analytical load.</li>
+          <li><strong>Mergeable design handles the hard metrics:</strong> Per customer per day, store the count, spend sum, a per-merchant spend map (or top-K sketch) and a <em>percentile sketch</em> (t-digest or DDSketch). A rolling 30-day window is the merge of 30 buckets. Percentiles cannot be derived from sums or averages, so sketches (or histograms) are essential.</li>
+          <li><strong>CDC is non-invasive and replayable:</strong> Log-based change data capture (for example Debezium) reads the commit log, so there are no triggers on the hot payments tables and no dual writes. The summary can be rebuilt by replaying the stream, and idempotent upserts make retries safe.</li>
+          <li><strong>Honest freshness:</strong> Every summary carries an <code>as_of</code> watermark that is returned to the client. For stricter freshness, add today's small delta from a live query or in-stream state. A rate-limited fallback covers cold or missing customers.</li>
+        </ul>
+        <p>Define the <strong>freshness SLO</strong> and which metrics are exact versus approximate, make aggregation <strong>idempotent</strong> (dedupe by transaction ID and version), <strong>reconcile</strong> summaries against the source nightly, and alert on <strong>CDC lag</strong>. Guard the fallback query with a rate limiter and circuit breaker so a cold-cache storm cannot recreate the original outage.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📈</span>
+            <h4>A — Bigger Instance + Replicas + Trust the Optimizer</h4>
+          </div>
+          <p>Scaling up and out does not change the <strong>work per request</strong>. Each request still scans and aggregates a month of data, so you just pay linearly more to run the same expensive query, and replicas add replication lag. The optimizer cannot turn an aggregate over 30 days into an index lookup. (In Postgres 12+ a CTE referenced once is inlined, but one referenced several times is still materialized on every execution.) <strong>Caveat:</strong> useful as a stopgap while the summaries are being built, and always fix a genuinely missing index first.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>B — More CTEs, Temp Tables and Hints per Request</h4>
+          </div>
+          <p>Per-request temp tables and extra materialization step <strong>increase</strong> the work done: temp-table creation writes to the catalog and storage, and at thousands of requests per second the I/O and CPU amplification is severe. Query hints are brittle and tend to break with data skew, upgrades or plan changes. This reshapes the plan but not the <em>amount of data processed</em>. <strong>Caveat:</strong> refactoring can give a 2&ndash;10&times; gain, which is worth applying to the fallback path.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧮</span>
+            <h4>D — Aggregate in the Application or Analytics Microservice</h4>
+          </div>
+          <p>Pulling raw rows over the network shifts the cost to <strong>serialization, network and application memory</strong>, while the database still performs the same scans to produce those rows. Synchronous per-request computation keeps the p99 problem and adds network overhead, and the app has no access to the database's indexes or join algorithms. <strong>Caveat:</strong> an analytics service is a good idea when it owns <em>precomputed or columnar</em> data, which is effectively option C.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Precomputed Summaries Fed by CDC ✓</h4>
+          </div>
+          <p>Pre-calculate and store denormalized summary metrics (using materialized views or dedicated summary tables) that are updated asynchronously (via CDC or background tasks). Serve dashboard requests dire</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read Latency (p99)</th><th>Source DB Load</th><th>Freshness</th><th>Scalability with Traffic</th><th>Operational Overhead</th><th>Correctness Risk</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Scale Up + Replicas</td><td>Poor under load ❌</td><td>High ❌</td><td>Real-time ✅</td><td>Linear cost ⚠</td><td>Low ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — More CTEs / Temp Tables</td><td>Poor ❌</td><td>Higher ❌</td><td>Real-time ✅</td><td>Poor ❌</td><td>Medium ⚠</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — Precomputed Summaries ✓</td><td>Very low (key lookups) ✅</td><td>Low ✅</td><td>Seconds to minutes ⚠</td><td>High ✅</td><td>Medium–High ⚠</td><td>Medium (drift, reversals) ⚠</td></tr>
+            <tr><td class="tt-option">D — App-Layer Aggregation</td><td>Poor ❌</td><td>High ❌</td><td>Real-time ✅</td><td>Poor ❌</td><td>Medium ⚠</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Scale Up + Replicas</h4>
+          </div>
+          <p>A temporary stopgap while a longer-term fix is built, or when the query is already efficient and the load is simply a bit higher than capacity.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — More CTEs / Temp Tables</h4>
+          </div>
+          <p>One-off or low-frequency reports where readability or plan stability matters more than throughput.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Precomputed Summaries</h4>
+          </div>
+          <p>Repeated, latency-sensitive metrics over large append-mostly data where bounded staleness is acceptable, as in this dashboard.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — App-Layer Aggregation</h4>
+          </div>
+          <p>Small result sets or logic that cannot be expressed in SQL, ideally over already-aggregated or columnar data rather than raw tables.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Dashboard Read Path from Summaries</h3>
+        <p>The API reads pre-aggregated daily buckets and merges them; the source database is touched only by a guarded fallback:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client Dashboard
+    participant A as Metrics API
+    participant S as Summary Store
+    participant D as Source DB
+    C-&gt;&gt;A: GET /customers/42/metrics
+    A-&gt;&gt;S: 1. Read 30 daily buckets and watermark
+    alt Summary present and fresh enough
+        S--&gt;&gt;A: Buckets
+        A-&gt;&gt;A: 2. Merge buckets - counts, top 3 merchants, percentile sketch
+    else Missing or stale beyond SLO
+        A-&gt;&gt;D: 3. Guarded fallback query - rate limited with circuit breaker
+        D--&gt;&gt;A: Result
+    end
+    A--&gt;&gt;C: Metrics plus as_of timestamp">sequenceDiagram
+    participant C as Client Dashboard
+    participant A as Metrics API
+    participant S as Summary Store
+    participant D as Source DB
+    C-&gt;&gt;A: GET /customers/42/metrics
+    A-&gt;&gt;S: 1. Read 30 daily buckets and watermark
+    alt Summary present and fresh enough
+        S--&gt;&gt;A: Buckets
+        A-&gt;&gt;A: 2. Merge buckets - counts, top 3 merchants, percentile sketch
+    else Missing or stale beyond SLO
+        A-&gt;&gt;D: 3. Guarded fallback query - rate limited with circuit breaker
+        D--&gt;&gt;A: Result
+    end
+    A--&gt;&gt;C: Metrics plus as_of timestamp</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent Aggregator and Merge-Based Read Path</h3>
+        <p>The aggregator maintains mergeable daily buckets; the read path merges 30 buckets, checks freshness and guards the slow fallback:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// ---- Aggregator (stream consumer, ordered per customer) ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onTransactionEvent</span>(e):</span>
+<span class="line">    dedupeKey <span class="tk-op">=</span> e.txnId <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> e.version</span>
+<span class="line">    <span class="tk-kw">if</span> seen.<span class="tk-fn">contains</span>(dedupeKey): <span class="tk-kw">return</span>                      <span class="tk-com">// idempotent replay protection</span></span>
+<span class="line">    day <span class="tk-op">=</span> <span class="tk-fn">toDate</span>(e.occurredAt)</span>
+<span class="line">    bucket <span class="tk-op">=</span> summary.<span class="tk-fn">get</span>(e.customerId, day) <span class="tk-kw">or</span> <span class="tk-fn">emptyBucket</span>()</span>
+<span class="line">    sign <span class="tk-op">=</span> (e.type <span class="tk-op">==</span> <span class="tk-str">&#x27;REFUND&#x27;</span>) ? <span class="tk-op">-</span><span class="tk-num">1</span> : <span class="tk-num">1</span></span>
+<span class="line">    bucket.txnCount  <span class="tk-op">+</span><span class="tk-op">=</span> sign</span>
+<span class="line">    bucket.spendSum  <span class="tk-op">+</span><span class="tk-op">=</span> sign <span class="tk-op">*</span> e.amount</span>
+<span class="line">    bucket.merchantSpend[e.merchantId] <span class="tk-op">+</span><span class="tk-op">=</span> sign <span class="tk-op">*</span> e.amount     <span class="tk-com">// or a top-K sketch if merchants are very numerous</span></span>
+<span class="line">    <span class="tk-kw">if</span> sign <span class="tk-op">==</span> <span class="tk-num">1</span>:</span>
+<span class="line">        bucket.spendSketch.<span class="tk-fn">add</span>(e.amount)                     <span class="tk-com">// t-digest or DDSketch: mergeable percentiles</span></span>
+<span class="line">    <span class="tk-kw">else</span>:</span>
+<span class="line">        bucket.needsRecompute <span class="tk-op">=</span> <span class="tk-lit">true</span>                         <span class="tk-com">// sketches cannot delete: nightly job rebuilds this day</span></span>
+<span class="line">    summary.<span class="tk-fn">upsert</span>(e.customerId, day, bucket, asOf <span class="tk-op">=</span> e.commitTime)</span>
+<span class="line">    seen.<span class="tk-fn">add</span>(dedupeKey)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- Read path ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getMetrics</span>(customerId):</span>
+<span class="line">    buckets <span class="tk-op">=</span> summary.<span class="tk-fn">multiGet</span>(customerId, <span class="tk-fn">last30Days</span>())     <span class="tk-com">// 30 primary-key lookups, one round trip</span></span>
+<span class="line">    stale <span class="tk-op">=</span> buckets.<span class="tk-fn">isEmpty</span>() <span class="tk-kw">or</span> (now <span class="tk-op">-</span> <span class="tk-fn">min</span>(buckets.asOf) <span class="tk-op">&gt;</span> FRESHNESS_SLO)</span>
+<span class="line">    <span class="tk-kw">if</span> stale:</span>
+<span class="line">        <span class="tk-kw">if</span> fallbackLimiter.<span class="tk-fn">tryAcquire</span>() <span class="tk-kw">and</span> circuitBreaker.<span class="tk-fn">isClosed</span>():</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">computeFromSource</span>(customerId, timeout <span class="tk-op">=</span> <span class="tk-num">150ms</span>)   <span class="tk-com">// slow path, strictly guarded</span></span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> buckets.<span class="tk-fn">isEmpty</span>():</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">render</span>(buckets, stale <span class="tk-op">=</span> <span class="tk-lit">true</span>)                    <span class="tk-com">// serve what we have, flagged as stale</span></span>
+<span class="line">        <span class="tk-kw">return</span> ServiceBusy</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">render</span>(buckets, stale <span class="tk-op">=</span> <span class="tk-lit">false</span>)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">render</span>(buckets, stale):</span>
+<span class="line">    merged <span class="tk-op">=</span> <span class="tk-fn">merge</span>(buckets)</span>
+<span class="line">    <span class="tk-kw">return</span> {</span>
+<span class="line">        txnCount30d: <span class="tk-fn">sum</span>(merged.txnCount),</span>
+<span class="line">        topMerchants: <span class="tk-fn">topN</span>(<span class="tk-fn">sumByMerchant</span>(merged.merchantSpend), <span class="tk-num">3</span>),</span>
+<span class="line">        spendP50: merged.spendSketch.<span class="tk-fn">quantile</span>(<span class="tk-num">0.50</span>),</span>
+<span class="line">        spendP95: merged.spendSketch.<span class="tk-fn">quantile</span>(<span class="tk-num">0.95</span>),</span>
+<span class="line">        spendP99: merged.spendSketch.<span class="tk-fn">quantile</span>(<span class="tk-num">0.99</span>),</span>
+<span class="line">        asOf: <span class="tk-fn">min</span>(buckets.asOf),</span>
+<span class="line">        stale: stale</span>
+<span class="line">    }</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Skipping profiling:</strong> If the real problem is a missing index or a bad plan, precomputation adds a pipeline for nothing. Confirm with <code>EXPLAIN ANALYZE</code> first.</li>
+          <li><strong>Averaging percentiles:</strong> You cannot get a rolling P95 from stored averages or per-day percentiles. Store mergeable sketches or histograms.</li>
+          <li><strong>Relying on full-refresh materialized views:</strong> Refreshing recomputes everything, which is slow and heavy at this scale. Maintain summaries incrementally.</li>
+          <li><strong>Ignoring reversals and late events:</strong> Refunds, chargebacks and out-of-order events make summaries drift. Model them as correction events and reconcile nightly.</li>
+          <li><strong>Unbounded fallback to the source query:</strong> A cold start sends every request back to the slow path and recreates the outage. Use a rate limiter, a circuit breaker and stale responses.</li>
+          <li><strong>Hiding staleness:</strong> If clients cannot see <code>as_of</code>, they cannot decide whether the number is fresh enough. Return it and alert on lag.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Performance work on a slow endpoint should <strong>start with evidence</strong>, but when the evidence points at aggregation volume, teams move to incremental precomputation. A typical path:</p>
+        <ul>
+          <li><strong>Step 0 &mdash; Profile:</strong> <code>EXPLAIN (ANALYZE, BUFFERS)</code> and <code>pg_stat_statements</code> to confirm the cost is aggregation volume and not a missing index. Take cheap wins first.</li>
+          <li><strong>Step 1 &mdash; Define metric contracts:</strong> Freshness SLO, which metrics are exact, and the acceptable error for approximate percentiles.</li>
+          <li><strong>Step 2 &mdash; Design the summary schema:</strong> Customer &times; day buckets with count, sum, merchant spend map and percentile sketch, keyed by (customer_id, day).</li>
+          <li><strong>Step 3 &mdash; Feed it through CDC:</strong> Source database &rarr; Kafka &rarr; stream aggregator &rarr; idempotent upsert, deduplicating by transaction ID and handling refunds as corrections.</li>
+          <li><strong>Step 4 &mdash; Serve and cache:</strong> Multi-get the 30 buckets, merge in memory, and optionally cache the merged result for a few seconds per customer when dashboards poll.</li>
+          <li><strong>Step 5 &mdash; Protect and verify:</strong> Rate-limited fallback with a circuit breaker, nightly reconciliation against the source, lag alerts and a backfill tool for new metrics.</li>
+        </ul>
+        <p>Measure first, then pay the aggregation cost once at write time instead of on every read.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>If a query is slow because it <strong>aggregates too much data on every request</strong>, rewriting it will not fix the fundamentals. <strong>Precompute mergeable summaries incrementally</strong> (CDC, daily buckets, sketches), serve reads as key lookups, disclose freshness with an <code>as_of</code> timestamp, and keep a guarded fallback for cold data.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Enhancing Cache Performance in Scalable Systems — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">03 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Caching</span>
+      <span class="tag tag--green">Scalability</span>
+      <span class="tag tag--amber">Optimization</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Enhancing Cache Performance in Scalable Systems</h1>
+      <p class="q-scenario"><strong>Sara</strong>, a software engineer at an expanding e-commerce business, is dealing with a cache that is losing effectiveness as the platform grows. The system relies heavily on <strong>Redis</strong> to cache frequently requested data, but the <strong>hit ratio keeps declining</strong>. Her investigation shows the Redis instances are <strong>running at their memory limit</strong>, the <code>evicted_keys</code> counter keeps climbing, and a large share of memory is held by <strong>long-lived entries that are rarely read again</strong> (old catalog variants, expired promotions, one-off lookups), while the truly hot set is still smaller than one node's memory. She must determine the most effective strategy to <em>boost the cache hit rate</em>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Deploy a CDN to serve static assets, thereby lessening the burden on the Redis cache.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Implement a cache eviction policy to remove outdated information and free up space for fresh data.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Apply a sharding approach to divide the cache and spread the data out among several Redis nodes.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Adopt a write-through caching model that instantly updates the cache whenever database modifications occur.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Cache Eviction Policy (with TTL Discipline)</h3>
+        <p>A cache's hit ratio is determined by <strong>how well its limited memory is filled with data that will be read again</strong>. When memory is full, the eviction policy decides which entries are sacrificed, so a poor policy (or none) fills the cache with cold or stale data and pushes out hot data, which is exactly the symptom of a declining hit ratio. A <strong>frequency- or recency-aware eviction policy</strong> (in Redis, <code>allkeys-lfu</code> or <code>allkeys-lru</code>) combined with sensible <strong>TTLs</strong> makes the cache prune itself toward the hot set. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Targets the cause:</strong> Hit ratio rises when hot items stay resident, and eviction decides residency. It acts on <em>what is kept</em>, whereas the other options address static assets, capacity or freshness.</li>
+          <li><strong>Cheap, fast and reversible:</strong> It is a configuration change (<code>maxmemory-policy</code>) plus a TTL review, with no data migration, and can be rolled out and measured within hours.</li>
+          <li><strong>LFU resists scan pollution:</strong> A burst of one-off keys (a crawler, a bulk job) can flush an LRU cache, while LFU keeps frequently used keys resident. Redis has supported <code>allkeys-lfu</code> since version 4.0.</li>
+          <li><strong>The default deserves a deliberate choice:</strong> Open-source Redis defaults to <code>noeviction</code> (writes fail when memory is full), and managed offerings often default to <code>volatile-lru</code>, which ignores keys without a TTL. Neither is a considered cache policy.</li>
+          <li><strong>Easy to measure:</strong> Hit ratio is <code>keyspace_hits / (keyspace_hits + keyspace_misses)</code>, and <code>evicted_keys</code> and <code>used_memory</code> show whether the change worked.</li>
+          <li><strong>Why not shard first?</strong> Sharding raises <em>capacity</em>, but if memory is full of cold data, more nodes just store more cold data, at the cost of operational complexity. Fix what you keep first, then scale out when the <em>hot</em> working set outgrows a node.</li>
+        </ul>
+        <p>Pair the policy with <strong>explicit TTLs (with jitter)</strong>, <strong>admission control</strong> so one-off keys are not cached, <strong>compact values</strong>, and a dashboard of <strong>hit ratio, evicted_keys and memory usage</strong> per key pattern. Re-measure after every change.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>A — CDN for Static Assets</h4>
+          </div>
+          <p>A CDN is excellent for user latency and origin offload of static content, and it frees Redis memory if large assets were cached there. But it does not improve the hit ratio of the data Redis actually serves; it removes traffic Redis should not be handling. Do it as an <em>offload</em> measure, not as the strategy that boosts <em>Redis hit rate</em>. <strong>Caveat:</strong> if static assets or large blobs consume a big share of Redis memory, moving them out is a legitimate memory-recovery step.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>C — Sharding the Cache</h4>
+          </div>
+          <p>Sharding (Redis Cluster or client-side partitioning) adds <strong>total memory and throughput</strong>, which raises the hit ratio <em>when the hot working set no longer fits</em> on one node. It also adds complexity: slot mapping, resharding, limits on multi-key operations (keys must share a slot), hot-key skew on one shard and more failure modes. It is the right <strong>next</strong> step once policy and TTLs are sound and hot keys are still being evicted.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">✍️</span>
+            <h4>D — Write-Through Caching</h4>
+          </div>
+          <p>Write-through keeps cache and database in sync on writes, which improves <em>freshness</em> and read-after-write behavior, but it does <strong>not raise the read hit ratio</strong>. It can lower it: every write populates the cache, including data that is never read, consuming memory and evicting hot entries. It also adds write latency (two writes per update). Use it where read-after-write consistency matters, not as a hit-rate booster.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Cache Eviction Policy (with TTL Discipline) ✓</h4>
+          </div>
+          <p>Implement a cache eviction policy to remove outdated information and free up space for fresh data.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Raises Hit Ratio Directly</th><th>Effort and Risk</th><th>Adds Memory Capacity</th><th>Operational Complexity</th><th>Reversibility</th><th>Removes Cold or Stale Data</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — CDN for Static Assets</td><td>No (offloads static content) ❌</td><td>Low ✅</td><td>Indirect ⚠</td><td>Low ✅</td><td>Easy ✅</td><td>No ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Eviction Policy ✓</td><td>Yes ✅</td><td>Low ✅</td><td>No (uses memory better) ⚠</td><td>Low ✅</td><td>Easy ✅</td><td>Yes ✅</td></tr>
+            <tr><td class="tt-option">C — Sharding the Cache</td><td>Yes if capacity-bound ⚠</td><td>High ❌</td><td>Yes ✅</td><td>High ❌</td><td>Hard ❌</td><td>No ❌</td></tr>
+            <tr><td class="tt-option">D — Write-Through</td><td>No (can lower it) ❌</td><td>Medium ⚠</td><td>No ❌</td><td>Medium ⚠</td><td>Moderate ⚠</td><td>Freshness only ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — CDN for Static Assets</h4>
+          </div>
+          <p>Static assets (images, scripts, styles) and cacheable public responses, to cut origin load and user latency.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Eviction Policy</h4>
+          </div>
+          <p>The cache is at its memory limit with rising evictions and a falling hit ratio, and the hot set fits in memory. The first lever to pull.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Sharding the Cache</h4>
+          </div>
+          <p>The hot working set exceeds one node's memory, or throughput exceeds a node's capacity even after policy tuning.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Write-Through</h4>
+          </div>
+          <p>Data that is read immediately after being written and must be fresh (profiles, carts), where the added write latency is acceptable.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Eviction-Aware Cache Read Path</h3>
+        <p>Hits bump a frequency counter. Misses are admitted selectively, and when memory is full the lowest-frequency keys are evicted:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TD
+    A[Read request] --&gt; B{Key in Redis?}
+    B --&gt;|Hit| C[Return value and bump frequency counter]
+    B --&gt;|Miss| D[Query database]
+    D --&gt; E{Worth caching? Seen before and small}
+    E --&gt;|No| F[Return without caching]
+    E --&gt;|Yes| G{Memory at maxmemory?}
+    G --&gt;|No| H[SET key with TTL plus jitter]
+    G --&gt;|Yes| I[Evict lowest-frequency keys per allkeys-lfu]
+    I --&gt; H
+    H --&gt; J[Return value]">flowchart TD
+    A[Read request] --&gt; B{Key in Redis?}
+    B --&gt;|Hit| C[Return value and bump frequency counter]
+    B --&gt;|Miss| D[Query database]
+    D --&gt; E{Worth caching? Seen before and small}
+    E --&gt;|No| F[Return without caching]
+    E --&gt;|Yes| G{Memory at maxmemory?}
+    G --&gt;|No| H[SET key with TTL plus jitter]
+    G --&gt;|Yes| I[Evict lowest-frequency keys per allkeys-lfu]
+    I --&gt; H
+    H --&gt; J[Return value]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Redis Eviction Policy, TTL Jitter and Admission Control</h3>
+        <p>Configure frequency-based eviction, then keep one-off and oversized values out of the cache and give every key a jittered TTL:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com"># ---- redis.conf (comments are on their own lines because redis.conf has no trailing comments) ----</span></span>
+<span class="line">maxmemory <span class="tk-num">8gb</span></span>
+<span class="line"><span class="tk-com"># evict the least frequently used keys across the whole keyspace</span></span>
+<span class="line">maxmemory<span class="tk-op">-</span>policy allkeys<span class="tk-op">-</span>lfu</span>
+<span class="line"><span class="tk-com"># counter growth and decay: defaults are a sensible start, tune with measurements</span></span>
+<span class="line">lfu<span class="tk-op">-</span>log<span class="tk-op">-</span>factor <span class="tk-num">10</span></span>
+<span class="line">lfu<span class="tk-op">-</span>decay<span class="tk-op">-</span>time <span class="tk-num">1</span></span>
+<span class="line"><span class="tk-com"># more samples give closer-to-true LFU at a small CPU cost</span></span>
+<span class="line">maxmemory<span class="tk-op">-</span>samples <span class="tk-num">10</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- application: admission control and TTL discipline ----</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">cachedGet</span>(key, loader, baseTtl):</span>
+<span class="line">    value <span class="tk-op">=</span> redis.<span class="tk-fn">get</span>(key)</span>
+<span class="line">    <span class="tk-kw">if</span> value <span class="tk-op">!=</span> <span class="tk-lit">null</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> value                                       <span class="tk-com">// hit</span></span>
+<span class="line"></span>
+<span class="line">    value <span class="tk-op">=</span> <span class="tk-fn">loader</span>()                                       <span class="tk-com">// miss: go to the database</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// Admission control: only cache on the second sighting of a key (skips one-hit wonders)</span></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> seenRecently.<span class="tk-fn">mightContain</span>(key):                 <span class="tk-com">// small Bloom filter, rotated every few minutes</span></span>
+<span class="line">        seenRecently.<span class="tk-fn">add</span>(key)</span>
+<span class="line">        <span class="tk-kw">return</span> value</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-fn">sizeOf</span>(value) <span class="tk-op">&gt;</span> MAX_CACHEABLE_BYTES:                <span class="tk-com">// giant values must not evict hundreds of hot small keys</span></span>
+<span class="line">        <span class="tk-kw">return</span> value</span>
+<span class="line"></span>
+<span class="line">    ttl <span class="tk-op">=</span> baseTtl <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, baseTtl <span class="tk-op">*</span> <span class="tk-num">0.1</span>)               <span class="tk-com">// jitter avoids synchronized expiry</span></span>
+<span class="line">    redis.<span class="tk-fn">set</span>(key, value, ttl <span class="tk-op">=</span> ttl)                       <span class="tk-com">// every cache key has a TTL</span></span>
+<span class="line">    <span class="tk-kw">return</span> value</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// ---- observability ----</span></span>
+<span class="line">hitRatio <span class="tk-op">=</span> keyspace_hits <span class="tk-op">/</span> (keyspace_hits <span class="tk-op">+</span> keyspace_misses)     <span class="tk-com">// from INFO stats</span></span>
+<span class="line">alert when the evicted_keys rate rises <span class="tk-kw">while</span> hitRatio falls</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Tuning blind:</strong> Changing policy or adding nodes without per-pattern hit ratios and eviction counts. A single chatty low-value key pattern can mask a poor hit ratio on the hot path.</li>
+          <li><strong>Using volatile-* policies with TTL-less keys:</strong> Keys without a TTL are never evicted, so memory fills and writes fail or the cache stops admitting new data.</li>
+          <li><strong>One TTL for everything:</strong> Identical TTLs cause synchronized expiry and stampedes. Add jitter and use shorter TTLs only where freshness demands it.</li>
+          <li><strong>Polluted cache keys:</strong> Timestamps, session ids or unordered query parameters in keys make near-identical requests miss. Normalize keys.</li>
+          <li><strong>Caching one-hit wonders and giant values:</strong> They evict many small hot entries for no later benefit. Admit on second access and cap value size.</li>
+          <li><strong>Confusing eviction with expiry:</strong> A low hit ratio with few evictions usually points to TTLs that are too short or to key design, not to memory.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>A falling hit ratio is a <strong>diagnosis problem first</strong>. Teams usually proceed like this:</p>
+        <ul>
+          <li><strong>Step 0 — Measure:</strong> Track <code>keyspace_hits</code>, <code>keyspace_misses</code>, <code>evicted_keys</code>, <code>expired_keys</code> and <code>used_memory</code> against <code>maxmemory</code>, and break the hit ratio down per key pattern (sampling with <code>redis-cli --bigkeys</code> and <code>MEMORY USAGE</code>).</li>
+          <li><strong>Step 1 — Eviction policy and TTLs:</strong> Switch to <code>allkeys-lfu</code> (or <code>allkeys-lru</code>), set TTLs with jitter and eliminate keys that have no TTL.</li>
+          <li><strong>Step 2 — Fix what goes in:</strong> Add admission control, normalize cache keys (no timestamps or random parameters in keys), compress or shrink values and skip one-off or huge objects.</li>
+          <li><strong>Step 3 — Offload what does not belong:</strong> Static assets to a CDN, large blobs to object storage.</li>
+          <li><strong>Step 4 — Scale out:</strong> When the hot set exceeds one node's memory, use Redis Cluster or sharding with replicas, and watch for hot-key skew.</li>
+          <li><strong>Step 5 — Layer caches:</strong> A small in-process L1 cache for the hottest keys, and write-through or refresh-ahead only where freshness requires it.</li>
+        </ul>
+        <p>Fix <em>what</em> is cached before scaling <em>how much</em> you cache.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>A falling hit ratio means the cache holds the wrong data or too little of the right data. First make memory hold the <strong>hot set</strong> with a frequency-aware eviction policy, disciplined TTLs and admission control. If the hot working set still outgrows a node, then <strong>shard</strong>. Measure hit ratio and evictions at every step.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

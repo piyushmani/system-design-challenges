@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Challenges in Optimizing Caching Strategies — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">05 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Caching</span>
+      <span class="tag tag--green">Optimization</span>
+      <span class="tag tag--amber">Performance</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Challenges in Optimizing Caching Strategies</h1>
+      <p class="q-scenario"><strong>Alex</strong>, a backend engineer at a rapidly growing e-commerce platform, is tasked with scaling the company's caching infrastructure to support explosive traffic growth. Currently, popular product catalog data, dynamic inventory status, and promotional pricing are cached using a standalone Redis instance. However, driven by an expanding user base and flash-sale traffic surges, the team is experiencing severe scaling bottlenecks: the single-threaded Redis process is maxing out CPU core limits, memory footprint is approaching single-node RAM capacity, and network interface card (NIC) bandwidth is saturating. Alex must select an architectural choice that relieves these bottlenecks, scales read and write throughput horizontally, maintains sub-millisecond retrieval latency, and minimizes operational and migration risks to the existing system.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Deploy a Content Delivery Network (CDN) to hold static files and decrease the burden on servers.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Shard the Redis cache to spread the data out across several nodes, thereby improving scalability.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Implement an in-memory data grid such as Hazelcast for storing and retrieving product information.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Apply a write-through caching method to guarantee that data remains synchronized between the cache and the main database.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Redis Sharding and Hash-Slot Cluster Partitioning</h3>
+        <p>Redis is an in-memory, single-threaded execution engine for data operations. While exceptionally performant on a single core, a standalone Redis node inevitably encounters physical hardware limits under rapid traffic expansion: CPU single-core saturation, host RAM capacity exhaustion, and network interface (NIC) bandwidth throttling. <strong>Sharding the Redis cache</strong>—by migrating to Redis Cluster (utilizing its 16,384 deterministic hash slots) or deploying proxy/client-side partitioning (e.g., Envoy or Twemproxy)—horizontally partitions the product dataset across multiple master nodes. Each shard operates as an independent instance with its own dedicated CPU core, memory pool, and network interface. By spreading product keys across N shards using consistent hashing, memory capacity scales linearly by aggregating RAM across hosts, aggregate read/write throughput multiplies by utilizing N CPU cores simultaneously, and network I/O is parallelized across distinct network interfaces. Crucially, sharding builds directly on the team's existing Redis data structures, client protocols, and operational tooling, eliminating the massive disruption, code rewrites, and JVM garbage-collection pauses of migrating to an in-memory data grid like Hazelcast.</p>
+        <ul>
+          <li><strong>Linear horizontal throughput and memory scaling:</strong> Distributing keys across N independent Redis master nodes aggregates physical RAM, parallelizes network bandwidth, and leverages N CPU cores simultaneously to eliminate single-instance limits.</li>
+          <li><strong>Preserves existing Redis investment and tooling:</strong> Retains existing Redis client SDKs, rich data structures (Hashes, Sorted Sets, Bitmaps), and operational monitoring scripts without requiring costly application code rewrites.</li>
+          <li><strong>High availability and partition fault isolation:</strong> In a sharded Redis Cluster topology, each master shard is paired with replicas; failure of a single node only impacts that shard's hash slots during automated failover, while unaffected shards continue serving traffic uninterrupted.</li>
+          <li><strong>Dynamic, online slot rebalancing:</strong> Redis Cluster supports dynamic hash-slot migration, enabling Alex to add nodes and scale out the cache cluster during seasonal sales events without downtime or cold cache restarts.</li>
+          <li><strong>Deterministic key routing:</strong> Hash slot calculation (<code>CRC16(key) % 16384</code>) is performed client-side or at a lightweight proxy layer, ensuring sub-millisecond direct routing to the authoritative shard without intermediate network bottlenecks.</li>
+        </ul>
+        <p>When Redis bottlenecks on CPU, memory, or bandwidth, sharding is the proven horizontal scaling pattern. It multiplies system throughput while preserving existing data structures and operational investments.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🌐</span>
+            <h4>A — Content Delivery Network (CDN) for Static Files</h4>
+          </div>
+          <p>Deploying a CDN is essential for caching static assets such as product images, JavaScript bundles, and CSS stylesheets at edge locations. However, the question specifically states that the scaling bottleneck is caused by <em>popular product data cached in Redis</em>. Static CDN caching does not alleviate the read and write load on dynamic in-memory product data (pricing, dynamic stock status, personalized attributes, and catalog queries) that application servers fetch from Redis.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚠️</span>
+            <h4>C — In-Memory Data Grid (Hazelcast IMDG)</h4>
+          </div>
+          <p>Migrating from Redis to Hazelcast represents a high-risk, expensive, and largely unnecessary architectural overhaul. Hazelcast is a JVM-based In-Memory Data Grid designed for distributed compute and complex distributed clustering. Introducing Hazelcast incurs significant JVM garbage collection pauses, heavy heap management overhead, complex cluster configuration, and requires rewriting all application caching clients. Sharding the existing Redis installation achieves the required horizontal scalability at a fraction of the cost, complexity, and operational risk.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>D — Write-Through Caching Pattern</h4>
+          </div>
+          <p>Write-through caching ensures that data is synchronously written to both the cache and the primary database before acknowledging success, improving data consistency between cache and disk. However, write-through caching does nothing to solve <em>scaling bottlenecks</em> caused by an increasing user base. In fact, write-through introduces additional write latency by coupling every cache write to a synchronous database commit, while failing to address Redis CPU exhaustion, RAM limits, or network bandwidth bottlenecks on reads.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Redis Sharding and Hash-Slot Cluster Partitioning ✓</h4>
+          </div>
+          <p>Shard the Redis cache to spread the data out across several nodes, thereby improving scalability.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Throughput Scalability</th><th>Memory Capacity Scalability</th><th>Dynamic Product Data Acceleration</th><th>Implementation &amp; Migration Risk</th><th>Hot-Key Contention Handling</th><th>Operational Simplicity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Deploy Content Delivery Network (CDN)</td><td>High (Static Assets Only) ⚠️</td><td>N/A (Edge Storage) ⚠️</td><td>Ineffective for Dynamic Data ❌</td><td>Low Risk ✅</td><td>Irrelevant to Redis Hot Keys ❌</td><td>High (Managed Edge) ✅</td></tr>
+            <tr><td class="tt-option">B — Shard Redis Cache (Cluster / Proxy)</td><td>High (Scales Linearly with Nodes) ✅</td><td>Linear Memory Aggregation ✅</td><td>Optimal Sub-Millisecond Reads ✅</td><td>Low (Preserves Redis Ecosystem) ✅</td><td>Requires L1 / Replica Scaling ⚠️</td><td>Moderate (Cluster Topology) ⚠️</td></tr>
+            <tr><td class="tt-option">C — Migrate to Hazelcast IMDG</td><td>High (Distributed Fabric) ✅</td><td>Scales with JVM Cluster ⚠️</td><td>Good (JVM Overhead / GC) ⚠️</td><td>Very High (Complete Rewrite) ❌</td><td>Handled via Near-Cache ⚠️</td><td>Complex (JVM Tuning &amp; Clustering) ❌</td></tr>
+            <tr><td class="tt-option">D — Apply Write-Through Caching</td><td>Degrades Write Throughput ❌</td><td>Does Not Add Memory Capacity ❌</td><td>Guarantees DB-Cache Sync ⚠️</td><td>Low to Moderate ⚠️</td><td>Does Not Mitigate Contention ❌</td><td>Moderate ⚠️</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Deploy Content Delivery Network (CDN)</h4>
+          </div>
+          <p>Globally distributed web platforms serving massive volumes of static media (high-resolution product images, video demos, frontend JavaScript and CSS bundles).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Shard Redis Cache (Cluster / Proxy)</h4>
+          </div>
+          <p>High-traffic web platforms and e-commerce stores whose in-memory Redis cache exceeds single-node RAM, CPU core limits, or network bandwidth.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Migrate to Hazelcast IMDG</h4>
+          </div>
+          <p>Complex enterprise Java applications requiring distributed in-memory computing, map-reduce aggregations, and continuous distributed queries across cached objects.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">✅</span>
+            <h4>D — Apply Write-Through Caching</h4>
+          </div>
+          <p>Critical transactional domains (such as financial balances or user authentication sessions) where cache-database inconsistency cannot be tolerated even for milliseconds.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Redis Cluster Hash-Slot Sharding Architecture</h3>
+        <p>Product keys are hashed using CRC16 across 16,384 slots distributed among three master shards, each backed by an asynchronous replica for high availability.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart TD
+    AppClient[&quot;Application Client (Cluster-Aware SDK)&quot;] --&gt; HashCalc[&quot;CRC16(Key) % 16384&quot;]
+    HashCalc --&gt;|Slots 0 - 5460| Master1[&quot;Master Shard 1 (Node A)&quot;]
+    HashCalc --&gt;|Slots 5461 - 10922| Master2[&quot;Master Shard 2 (Node B)&quot;]
+    HashCalc --&gt;|Slots 10923 - 16383| Master3[&quot;Master Shard 3 (Node C)&quot;]
+    Master1 -.-&gt;|Async Replication| Replica1[&quot;Replica 1 (Node D)&quot;]
+    Master2 -.-&gt;|Async Replication| Replica2[&quot;Replica 2 (Node E)&quot;]
+    Master3 -.-&gt;|Async Replication| Replica3[&quot;Replica 3 (Node F)&quot;]
+    Master1 --- Gossip[&quot;Gossip Protocol Cluster Bus (Port 16379)&quot;]
+    Master2 --- Gossip
+    Master3 --- Gossip">flowchart TD
+    AppClient[&quot;Application Client (Cluster-Aware SDK)&quot;] --&gt; HashCalc[&quot;CRC16(Key) % 16384&quot;]
+    HashCalc --&gt;|Slots 0 - 5460| Master1[&quot;Master Shard 1 (Node A)&quot;]
+    HashCalc --&gt;|Slots 5461 - 10922| Master2[&quot;Master Shard 2 (Node B)&quot;]
+    HashCalc --&gt;|Slots 10923 - 16383| Master3[&quot;Master Shard 3 (Node C)&quot;]
+    Master1 -.-&gt;|Async Replication| Replica1[&quot;Replica 1 (Node D)&quot;]
+    Master2 -.-&gt;|Async Replication| Replica2[&quot;Replica 2 (Node E)&quot;]
+    Master3 -.-&gt;|Async Replication| Replica3[&quot;Replica 3 (Node F)&quot;]
+    Master1 --- Gossip[&quot;Gossip Protocol Cluster Bus (Port 16379)&quot;]
+    Master2 --- Gossip
+    Master3 --- Gossip</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Two-Tier Cache Client with Hash-Tagged Redis Cluster</h3>
+        <p>A cache manager demonstrating L1 near-cache hot-key protection coupled with Redis Cluster client routing and hash-slot tagging.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> TwoTierProductCache:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, cluster_nodes, l1_max_items<span class="tk-op">=</span><span class="tk-num">10000</span>, l1_ttl_sec<span class="tk-op">=</span><span class="tk-num">15</span>):</span>
+<span class="line">        <span class="tk-com"># L1: In-process LRU cache to absorb ultra-hot keys (zero network hops)</span></span>
+<span class="line">        self.l1_cache <span class="tk-op">=</span> <span class="tk-fn">LRUCache</span>(maxsize<span class="tk-op">=</span>l1_max_items, ttl<span class="tk-op">=</span>l1_ttl_sec)</span>
+<span class="line">        <span class="tk-com"># L2: Horizontally sharded Redis Cluster client</span></span>
+<span class="line">        self.redis_cluster <span class="tk-op">=</span> <span class="tk-fn">RedisClusterClient</span>(nodes<span class="tk-op">=</span>cluster_nodes)</span>
+<span class="line">        self.db <span class="tk-op">=</span> <span class="tk-fn">DatabaseClient</span>()</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">get_product</span>(self, product_id):</span>
+<span class="line">        <span class="tk-com"># 1. Check L1 in-memory cache first</span></span>
+<span class="line">        cached_l1 <span class="tk-op">=</span> self.l1_cache.<span class="tk-fn">get</span>(product_id)</span>
+<span class="line">        <span class="tk-kw">if</span> cached_l1 is <span class="tk-kw">not</span> <span class="tk-lit">None</span>:</span>
+<span class="line">            <span class="tk-kw">return</span> cached_l1</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># 2. Form hash-tagged Redis key to guarantee slot affinity for related sub-keys</span></span>
+<span class="line">        redis_key <span class="tk-op">=</span> f<span class="tk-str">&quot;{{product:{product_id}}}:details&quot;</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># 3. Query sharded Redis cluster (automatically routes to owning master shard)</span></span>
+<span class="line">        cached_redis <span class="tk-op">=</span> self.redis_cluster.<span class="tk-fn">get</span>(redis_key)</span>
+<span class="line">        <span class="tk-kw">if</span> cached_redis is <span class="tk-kw">not</span> <span class="tk-lit">None</span>:</span>
+<span class="line">            product <span class="tk-op">=</span> <span class="tk-fn">deserialize</span>(cached_redis)</span>
+<span class="line">            self.l1_cache.<span class="tk-fn">set</span>(product_id, product)</span>
+<span class="line">            <span class="tk-kw">return</span> product</span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com"># 4. Cache miss on both tiers: query authoritative database</span></span>
+<span class="line">        product <span class="tk-op">=</span> self.db.<span class="tk-fn">query_product_by_id</span>(product_id)</span>
+<span class="line">        <span class="tk-kw">if</span> product is <span class="tk-kw">not</span> <span class="tk-lit">None</span>:</span>
+<span class="line">            serialized <span class="tk-op">=</span> <span class="tk-fn">serialize</span>(product)</span>
+<span class="line">            <span class="tk-com"># Set in Redis cluster with 1-hour expiration</span></span>
+<span class="line">            self.redis_cluster.<span class="tk-fn">setex</span>(redis_key, <span class="tk-num">3600</span>, serialized)</span>
+<span class="line">            <span class="tk-com"># Populate L1 cache with short 15-second TTL to guard against sudden thundering herds</span></span>
+<span class="line">            self.l1_cache.<span class="tk-fn">set</span>(product_id, product)</span>
+<span class="line">        <span class="tk-kw">return</span> product</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Neglecting hot-key skew on individual shards:</strong> Assuming sharding automatically balances traffic evenly, while a single mega-popular product saturates the specific shard leader owning its hash slot.</li>
+          <li><strong>Issuing un-tagged multi-key queries:</strong> Attempting to run <code>MGET</code>, transactions, or Lua scripts across multiple keys located on different hash slots without using Redis hash tags (<code>{tag}</code>), resulting in <code>CROSSSLOT Keys in request don't hash to the same slot</code> errors.</li>
+          <li><strong>Ignoring Redis Cluster client topology caching:</strong> Using a non-cluster-aware client library that fails to cache the slot-to-node routing table, resulting in constant <code>MOVED</code> redirects and doubled network round-trips.</li>
+          <li><strong>Over-provisioning too many small shards:</strong> Creating hundreds of tiny Redis instances, introducing excessive connection management overhead, cross-node gossip communication noise, and operational sprawl.</li>
+          <li><strong>Failing to configure replicas per master:</strong> Running a sharded Redis cluster without replica nodes, meaning a single node crash renders an entire segment of product catalog cache unavailable.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>High-scale e-commerce architectures (such as Shopify, eBay, and Target) cache millions of product details across distributed Redis clusters. To prevent single-node saturation while handling massive flash-sale traffic, they combine Redis Cluster sharding with multi-tier caching.</p>
+        <ul>
+          <li><strong>Adopt Redis Cluster hash-slot partitioning:</strong> Deploy Redis Cluster mode where the 16,384 hash slots are evenly distributed across master instances, enabling automatic routing and horizontal scaling.</li>
+          <li><strong>Mitigate hot keys with L1 local in-memory caches:</strong> Implement a two-tier caching strategy (e.g., Caffeine in Java or in-process LRU in Go/Node) in front of Redis with short TTLs (5–30 seconds) to absorb viral traffic spikes on individual hot products.</li>
+          <li><strong>Leverage Redis Hash Tags for co-located data:</strong> Group related product data into the same shard using hash tags (e.g., <code>{prod:1042}:info</code>, <code>{prod:1042}:inventory</code>) so multi-key operations can execute locally without cross-slot errors.</li>
+          <li><strong>Scale read capacity via replica read-only endpoints:</strong> For read-heavy product catalog workloads, attach read-replicas to each master shard and configure client libraries (like Lettuce or Jedis) to direct read commands to replicas.</li>
+          <li><strong>Monitor hot slots and key skew:</strong> Use Redis tools (such as <code>redis-cli --hotkeys</code> or Redis enterprise telemetry) to detect unbalanced key distribution and reshard busy slots before memory limits are reached.</li>
+          <li><strong>Configure active memory defragmentation and evictions:</strong> Enable <code>activedefrag yes</code> and define a strict eviction policy (such as <code>volatile-lru</code> or <code>allkeys-lfu</code>) to ensure shards automatically discard least-frequently-used data when approaching memory caps.</li>
+        </ul>
+        <p>Shard Redis to scale horizontally across CPU cores, hosts, and network interfaces. Combine sharded Redis with short-lived local in-memory caching to eliminate hot-key bottlenecks during peak traffic.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p><strong>Scale Redis horizontally by sharding keys across nodes.</strong> Sharding multiplies CPU, RAM, and network throughput while preserving your existing caching architecture.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

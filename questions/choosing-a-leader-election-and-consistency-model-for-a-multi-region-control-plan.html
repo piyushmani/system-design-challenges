@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Choosing a Leader-Election and Consistency Model for a Multi-Region Control Plane — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">31 MAR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Leader Election</span>
+      <span class="tag tag--green">Control Plane</span>
+      <span class="tag tag--amber">Multi-Region</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Choosing a Leader-Election and Consistency Model for a Multi-Region Control Plane</h1>
+      <p class="q-scenario"><strong>Aisha</strong> is building a control plane that stores <strong>feature flags and distributed locks</strong> for hundreds of microservices running in <strong>three active regions</strong>. Writes must be <strong>strictly correct</strong> (no two services may ever hold the same lock or apply conflicting flag updates), regional services need <strong>fast local reads</strong>, and the system must keep working through <strong>a network partition or an entire region failure</strong>. Writes are rare compared with reads, flag reads tolerate <em>bounded</em> staleness (seconds), and a write may take roughly one inter-region round trip. She must choose the coordination and leader-election design that best balances operational simplicity, latency and consistency.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">A single global ZooKeeper cluster in the primary region; every service in every region reads and writes against it, with a dormant standby cluster in a second region for disaster recovery.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Independent Raft clusters in each region with regional leaders serving local reads and writes, plus a global coordinator elected among the regional leaders, which act as the quorum for cross-region decisions and failovers.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">An eventually consistent, leaderless, Dynamo-style system spanning all regions: accept writes in any region with quorum writes and resolve conflicts with vector clocks or application-level reconciliation.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">One global Raft cluster with replicas spread across the three regions and a single authoritative leader (which can live in any region); read leases and election timeouts are tuned carefully, and regional services read from local replicas.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Global Raft Cluster</h3>
+        <p>Feature flags and locks are <strong>small, low-write, high-correctness</strong> data, which is exactly where a single consensus group stretched across failure domains shines. One Raft group with a replica in each region gives <strong>linearizable writes</strong>, survives the loss of any one region (2 of 3 replicas still form a quorum), and avoids the semantic gaps of layered or leaderless designs. Here's why it stands out:</p>
+        <ul>
+          <li><strong>One source of truth:</strong> A single replicated log orders every write, so two services can never both acquire the same lock and flag updates never conflict. Compare-and-swap on revisions gives safe, atomic updates.</li>
+          <li><strong>Region-failure tolerance without manual failover:</strong> With replicas in three regions, losing one region leaves a majority. Followers detect the missing leader and elect a new one automatically, typically within a few seconds when timeouts are tuned for cross-region latency.</li>
+          <li><strong>Fast local reads:</strong> Services read from their regional replica (or a local watch-fed cache) with bounded staleness via read leases or follower reads. Reads that must be linearizable can use a read-index round trip to the leader.</li>
+          <li><strong>Write latency matches the need:</strong> A write costs one round trip from the leader to the nearest follower, because the leader plus one follower is a majority. For rare control-plane writes, tens of milliseconds is an acceptable price for correctness.</li>
+          <li><strong>Operational simplicity:</strong> One cluster, one membership, one set of dashboards and runbooks, versus several clusters plus a coordinating tier. Proven systems (etcd, or Spanner-style Paxos groups) use this model.</li>
+        </ul>
+        <p>A solid deployment uses <strong>an odd number of voters across failure domains</strong> (three regions, or five replicas as 2/2/1), <strong>learners or followers for regional read scaling</strong>, <strong>leader placement preferences</strong>, <strong>lease-based or follower reads with an explicit staleness bound</strong>, <strong>watch-based client caches</strong> and <strong>fencing tokens for locks</strong>. Test region isolation regularly and verify that clients degrade to cached values instead of failing hard.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏝️</span>
+            <h4>A — Single ZooKeeper + Dormant Standby</h4>
+          </div>
+          <p>Strongly consistent in the normal case, but every remote service pays a cross-region round trip on <em>every</em> read and write, the primary region is a single point of failure, and a <strong>dormant</strong> standby means failover is manual or scripted, with replication-gap and split-brain risks. It does not meet the local-read requirement. <strong>Caveat:</strong> a reasonable pattern for a single-region system with disaster-recovery requirements.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🏗️</span>
+            <h4>B — Hierarchical Regional Raft</h4>
+          </div>
+          <p>Regional clusters give fast local writes, but local consensus cannot provide <strong>global</strong> invariants: a lock granted in region A is invisible to region B unless every global decision also passes through the cross-region coordinator, at which point you pay for both layers. The coordinator's 'quorum of regional leaders' is itself a consensus group, so this is a more complex version of option D, with extra failure modes (regional leader churn changes global membership). <strong>Caveat:</strong> hierarchy fits <em>region-scoped</em> state (regional config, caches) layered under a global store.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🕸️</span>
+            <h4>C — Dynamo-Style Leaderless</h4>
+          </div>
+          <p>Maximum availability, but it provides no mutual exclusion and allows concurrent conflicting updates that must be reconciled after the fact. Distributed locks and 'no conflicting flag updates' are exactly the invariants eventual consistency cannot guarantee, and vector clocks only <em>detect</em> conflicts rather than prevent them. <strong>Caveat:</strong> well suited to shopping carts, presence or telemetry, where merges are acceptable.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Global Raft Cluster ✓</h4>
+          </div>
+          <p>One global Raft cluster with replicas spread across the three regions and a single authoritative leader (which can live in any region); read leases and election timeouts are tuned carefully, and regio</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Write Correctness</th><th>Local Read Latency</th><th>Write Latency</th><th>Survives Region Loss</th><th>Operational Simplicity</th><th>Fit for Distributed Locks</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — ZooKeeper + Standby</td><td>Strong ✅</td><td>Poor for remote regions ❌</td><td>Poor for remote regions ❌</td><td>Manual failover ❌</td><td>Medium ⚠</td><td>Yes ✅</td></tr>
+            <tr><td class="tt-option">B — Hierarchical Regional Raft</td><td>Strong locally, unclear globally ⚠</td><td>Good ✅</td><td>Fast locally, slow for global ⚠</td><td>Good ✅</td><td>Low (two tiers) ❌</td><td>Region-scoped only ❌</td></tr>
+            <tr><td class="tt-option">C — Dynamo-Style Leaderless</td><td>Eventual ❌</td><td>Excellent ✅</td><td>Excellent ✅</td><td>Excellent ✅</td><td>Medium ⚠</td><td>No ❌</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Global Raft Cluster ✓</td><td>Linearizable ✅</td><td>Good (follower or lease reads) ✅</td><td>One inter-region RTT ⚠</td><td>Automatic ✅</td><td>Good ✅</td><td>Yes, with fencing ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — ZooKeeper + Dormant Standby</h4>
+          </div>
+          <p>Single-region systems where cross-region latency is irrelevant and disaster recovery is the only multi-region requirement.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Hierarchical Regional Raft</h4>
+          </div>
+          <p>Region-scoped state (regional configuration, local leader election inside one region) with a separate global store for cross-region invariants.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Dynamo-Style Leaderless</h4>
+          </div>
+          <p>Highly available, mergeable data (carts, presence, CRDT counters) where conflicting updates are acceptable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Global Raft Cluster</h4>
+          </div>
+          <p>Small, correctness-critical state shared by all regions (locks, ownership, feature flags, configuration) with infrequent writes and read-heavy regional consumers.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Global Raft: Local Reads, Quorum Writes</h3>
+        <p>Services read from their regional replica; writes go to the leader and commit as soon as a majority of regions acknowledge:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant S as Service in Region B
+    participant FB as Replica in Region B
+    participant L as Leader in Region A
+    participant FC as Replica in Region C
+    S-&gt;&gt;FB: Read flag, local with bounded staleness
+    FB--&gt;&gt;S: Value and revision
+    S-&gt;&gt;L: Write flag with expected revision
+    L-&gt;&gt;FB: Append entry
+    L-&gt;&gt;FC: Append entry
+    FB--&gt;&gt;L: Ack
+    Note over L: Majority reached, 2 of 3, commit
+    L--&gt;&gt;S: Committed at revision 42
+    FC--&gt;&gt;L: Ack, arrives late">sequenceDiagram
+    participant S as Service in Region B
+    participant FB as Replica in Region B
+    participant L as Leader in Region A
+    participant FC as Replica in Region C
+    S-&gt;&gt;FB: Read flag, local with bounded staleness
+    FB--&gt;&gt;S: Value and revision
+    S-&gt;&gt;L: Write flag with expected revision
+    L-&gt;&gt;FB: Append entry
+    L-&gt;&gt;FC: Append entry
+    FB--&gt;&gt;L: Ack
+    Note over L: Majority reached, 2 of 3, commit
+    L--&gt;&gt;S: Committed at revision 42
+    FC--&gt;&gt;L: Ack, arrives late</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Local Flag Reads and Fenced Distributed Locks</h3>
+        <p>Flag reads come from a local cache fed by watches with an explicit staleness bound; lock acquisition is a compare-and-swap through the global leader and returns a fencing token:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">getFlag</span>(name):</span>
+<span class="line">    entry <span class="tk-op">=</span> localCache.<span class="tk-fn">get</span>(name)                        <span class="tk-com">// fed by a watch on the regional replica</span></span>
+<span class="line">    <span class="tk-kw">if</span> entry <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> <span class="tk-fn">now</span>() <span class="tk-op">-</span> entry.lastSyncedAt <span class="tk-op">&lt;=</span> MAX_STALENESS:   <span class="tk-com">// e.g. 5s</span></span>
+<span class="line">        <span class="tk-kw">return</span> entry.value</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        <span class="tk-kw">return</span> regionalReplica.<span class="tk-fn">read</span>(name, consistency <span class="tk-op">=</span> BOUNDED_STALE, timeout <span class="tk-op">=</span> <span class="tk-num">50ms</span>)</span>
+<span class="line">    <span class="tk-kw">catch</span> Unavailable:</span>
+<span class="line">        <span class="tk-kw">return</span> entry <span class="tk-op">!=</span> <span class="tk-lit">null</span> ? entry.value : DEFAULT_FLAGS[name]        <span class="tk-com">// degrade safely</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">setFlag</span>(name, newValue, expectedRevision):</span>
+<span class="line">    <span class="tk-com">// linearizable write through the global leader (one inter-region round trip)</span></span>
+<span class="line">    <span class="tk-kw">return</span> leader.<span class="tk-fn">compareAndSet</span>(key <span class="tk-op">=</span> <span class="tk-str">&#x27;flags/&#x27;</span> <span class="tk-op">+</span> name, expect <span class="tk-op">=</span> expectedRevision, value <span class="tk-op">=</span> newValue)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">acquireLock</span>(resource, owner, leaseTtl):</span>
+<span class="line">    result <span class="tk-op">=</span> leader.<span class="tk-fn">compareAndSet</span>(key <span class="tk-op">=</span> <span class="tk-str">&#x27;locks/&#x27;</span> <span class="tk-op">+</span> resource,</span>
+<span class="line">                                  expect <span class="tk-op">=</span> ABSENT, value <span class="tk-op">=</span> owner, lease <span class="tk-op">=</span> leaseTtl)</span>
+<span class="line">    <span class="tk-kw">if</span> <span class="tk-kw">not</span> result.ok:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">LockBusy</span>(heldBy <span class="tk-op">=</span> result.currentValue)</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-fn">LockGranted</span>(fencingToken <span class="tk-op">=</span> result.revision)  <span class="tk-com">// monotonic, derived from the Raft log index</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">protectedWrite</span>(resource, token, operation):</span>
+<span class="line">    <span class="tk-com">// executed by the protected resource itself, not by the lock client</span></span>
+<span class="line">    <span class="tk-kw">if</span> token <span class="tk-op">&lt;=</span> resource.highestSeenToken:</span>
+<span class="line">        <span class="tk-kw">return</span> <span class="tk-fn">Rejected</span>(<span class="tk-str">&#x27;stale fencing token&#x27;</span>)          <span class="tk-com">// a paused ex-owner is turned away</span></span>
+<span class="line">    resource.highestSeenToken <span class="tk-op">=</span> token</span>
+<span class="line">    <span class="tk-kw">return</span> operation.<span class="tk-fn">apply</span>()</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Voters in only two regions:</strong> Losing either region then loses quorum. Use three failure domains, or a lightweight tie-breaker in a third.</li>
+          <li><strong>Default election timeouts:</strong> Timeouts tuned for a single data center cause constant spurious elections across regions. Set them from measured inter-region RTT and jitter.</li>
+          <li><strong>Reading from followers without a staleness bound:</strong> Unbounded stale reads make flag rollouts and rollbacks unpredictable. Use read leases or explicit revision checks.</li>
+          <li><strong>Locks without fencing tokens:</strong> Lease expiry plus a GC pause lets two clients believe they hold the lock. Always propagate the revision to the protected resource.</li>
+          <li><strong>No client behavior during quorum loss:</strong> Services that block on the control plane during a partition turn a small outage into a big one. Cache last-known values with safe defaults.</li>
+          <li><strong>Leader in the wrong region:</strong> A leader far from most writers adds avoidable latency to every write. Use leader priority or transfer-leader tooling.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams treat control-plane data as <strong>consistent (CP) state with cached, bounded-stale reads</strong>, and they <strong>test partitions explicitly</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Classify the data:</strong> Separate strongly consistent state (locks, ownership, flag versions) from data that tolerates staleness (read-mostly flag values).</li>
+          <li><strong>Step 1 — Global consensus group:</strong> Deploy 3 (or 5) voters across regions with a preferred leader region and election and heartbeat timeouts tuned from measured inter-region RTT.</li>
+          <li><strong>Step 2 — Regional read path:</strong> Serve flag reads from local followers or watch-fed in-process caches with an explicit staleness budget and a safe default.</li>
+          <li><strong>Step 3 — Locks with fencing:</strong> Implement locks as leased keys with revisions, and require the revision as a fencing token on every protected operation.</li>
+          <li><strong>Step 4 — Partition and region drills:</strong> Isolate regions in game days, verify automatic re-election, and confirm services fall back to cached values.</li>
+          <li><strong>Step 5 — Scale-out reads:</strong> Add non-voting learners in regions that need more read capacity without increasing quorum latency.</li>
+        </ul>
+        <p>Keep writes consensus-backed and make reads cheap, local and explicitly bounded.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>For small, correctness-critical control-plane state, <strong>one consensus group stretched across three regions</strong> gives linearizable writes, automatic regional failover and local reads with bounded staleness. Hierarchies add complexity without extending guarantees, leaderless designs cannot enforce mutual exclusion, and a single-region primary fails the latency and availability goals.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

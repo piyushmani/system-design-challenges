@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Designing Observability in Distributed Systems — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">03 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Observability</span>
+      <span class="tag tag--green">Distributed Systems</span>
+      <span class="tag tag--amber">Architecture</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Designing Observability in Distributed Systems</h1>
+      <p class="q-scenario"><strong>Emily</strong>, a senior software engineer, is architecting a new microservices platform and must choose the optimal observability approach among <strong>logging, tracing and monitoring</strong>. Every service produces a <strong>massive volume of requests and responses</strong>, so telemetry itself becomes a scaling and cost problem: full-fidelity logs and traces would add significant <strong>CPU, network and storage overhead</strong> and risk saturating the ingestion pipeline. Basic service metrics and trace-context propagation are already in place. The open question is how to keep <strong>the data needed for debugging</strong> without drowning in volume, so she must decide what to evaluate and prioritize.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Set up centralized logging to collect and combine logs from every service to simplify analysis.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Adopt distributed tracing to follow requests across multiple services and gain granular insights.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Establish monitoring that tracks metrics such as memory and CPU usage to guarantee performance and health.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Utilize log sampling to minimize overhead while retaining crucial data necessary for debugging.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Sampling to Control Telemetry Volume</h3>
+        <p>At this scale the binding constraint is not <em>which signal exists</em> but <strong>how much telemetry you can afford to emit, ship, store and query</strong>. Keeping everything is rarely feasible, and the useful fraction is small: errors, slow requests and a representative baseline. <strong>Sampling</strong> with rules that always keep the important events cuts overhead by orders of magnitude while preserving what debugging needs, and it lets logs, traces and metrics each do the job they are cheapest at. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Overhead and cost under control:</strong> Telemetry cost scales with volume. Keeping a few percent of healthy traffic cuts storage, ingestion and query cost roughly in proportion, and reduces CPU, network and pipeline load on the services themselves.</li>
+          <li><strong>Smart sampling keeps what matters:</strong> Always keep errors, slow requests and flagged sessions, and sample fast successful requests at a low rate. Tail-based sampling decides after the trace completes, so rare failures are not lost (head-based sampling is cheaper but blind to the outcome).</li>
+          <li><strong>Metrics stay unsampled:</strong> Aggregated counters and histograms (RED: rate, errors, duration; USE for resources) cost almost nothing regardless of traffic and give exact rates and alerts. Sampling only affects the high-cardinality detail, so dashboards and SLOs stay accurate.</li>
+          <li><strong>Correlation survives:</strong> Propagate a trace id (W3C Trace Context), put it in every log line and sample consistently by trace id, so a kept trace has its logs and vice versa.</li>
+          <li><strong>Why not just tracing (B)?</strong> Tracing answers where a request spent its time, but tracing every request at this volume is itself expensive. Sampling is the decision that makes tracing affordable.</li>
+          <li><strong>Proven at scale:</strong> Google's Dapper paper (2010) describes sampling as essential to keep tracing overhead negligible, and OpenTelemetry's Collector offers tail-sampling processors for exactly this purpose.</li>
+        </ul>
+        <p>A balanced design uses <strong>metrics for always-on, exact signals</strong>, <strong>traces sampled with tail-based rules</strong> for request flow, and <strong>structured, level-aware logs carrying trace ids</strong>, with <strong>sampling rates visible</strong> in the data and <strong>audit logs excluded from sampling</strong>. Review cost per signal and adjust rates as traffic changes.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📚</span>
+            <h4>A — Centralized Logging</h4>
+          </div>
+          <p>Centralizing logs is necessary, but <em>collecting everything</em> from every service at massive request volume is expensive (ingest, indexing, storage, slow queries) and noisy. Logs also lack cross-service causality unless every line carries a trace id. It is a transport and storage choice that still needs a volume-control policy such as sampling, log levels and retention tiers.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧵</span>
+            <h4>B — Distributed Tracing</h4>
+          </div>
+          <p>Traces show how a single request flows across services with per-hop latency, which is the best tool for finding <em>where</em> time is spent. But tracing every request has real overhead (span creation, propagation, export) and storage cost at massive volume, so in practice tracing is <strong>enabled together with sampling</strong>. It answers where a request went, not whether the system is healthy. <strong>Caveat:</strong> once sampling exists, tracing is the highest-value signal to add for debugging microservices.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📊</span>
+            <h4>C — Metrics Monitoring (CPU, Memory)</h4>
+          </div>
+          <p>Metrics are cheap, aggregate well and drive alerting, and every system needs them. But host-level metrics such as CPU and memory show <em>that</em> something is wrong, not which request, endpoint or dependency is at fault. Request-level metrics (rate, errors, duration) are far more useful than resource metrics, and neither gives per-request debugging context.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Sampling to Control Telemetry Volume ✓</h4>
+          </div>
+          <p>Utilize log sampling to minimize overhead while retaining crucial data necessary for debugging.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Overhead at High Volume</th><th>Storage and Cost</th><th>Cross-Service Visibility</th><th>Alerting and SLO Support</th><th>Debugging Detail</th><th>Implementation Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Centralized Logging</td><td>High ❌</td><td>High ❌</td><td>Weak without trace ids ⚠</td><td>Weak ⚠</td><td>High ✅</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Distributed Tracing</td><td>Medium to high (needs sampling) ⚠</td><td>Medium ⚠</td><td>Strong ✅</td><td>Weak ⚠</td><td>High ✅</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — Metrics Monitoring</td><td>Very low ✅</td><td>Low ✅</td><td>Weak ❌</td><td>Strong ✅</td><td>Low ❌</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Sampling ✓</td><td>Low ✅</td><td>Low ✅</td><td>Good if sampled by trace id ⚠</td><td>Not applicable, use metrics ⚠</td><td>Good for kept events ⚠</td><td>Medium ⚠</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Centralized Logging</h4>
+          </div>
+          <p>Always needed as the storage and search backbone, combined with structured logs, retention tiers and level-based sampling. Required for audit and security logs.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Distributed Tracing</h4>
+          </div>
+          <p>Microservices with many hops where latency and failures must be attributed to specific services. Pair it with sampling.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Metrics Monitoring</h4>
+          </div>
+          <p>The foundation of every system: health, capacity and SLO alerting. Start here.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Sampling</h4>
+          </div>
+          <p>High-throughput services where full-fidelity telemetry is too costly: keep all errors and slow requests, sample the rest.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Sampling-Aware Telemetry Pipeline</h3>
+        <p>Metrics are aggregated and always on. Spans and logs flow through a collector tier that keeps every important trace and a small slice of the rest:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    S[Services with OTel SDK] --&gt;|Metrics always on and aggregated| M[Metrics backend]
+    S --&gt;|Spans and logs with trace_id| C[Collector tier]
+    C --&gt; T{Tail sampling decision}
+    T --&gt;|Error or slow| K[Keep 100 percent]
+    T --&gt;|Healthy and fast| P[Keep about 1 to 5 percent]
+    K --&gt; B[Trace and log backend]
+    P --&gt; B
+    M --&gt; A[Alerts and SLO dashboards]">flowchart LR
+    S[Services with OTel SDK] --&gt;|Metrics always on and aggregated| M[Metrics backend]
+    S --&gt;|Spans and logs with trace_id| C[Collector tier]
+    C --&gt; T{Tail sampling decision}
+    T --&gt;|Error or slow| K[Keep 100 percent]
+    T --&gt;|Healthy and fast| P[Keep about 1 to 5 percent]
+    K --&gt; B[Trace and log backend]
+    P --&gt; B
+    M --&gt; A[Alerts and SLO dashboards]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Tail-Based Sampling Decision with Always-Keep Rules</h3>
+        <p>Keep every error and slow trace (rate-limited to protect the backend), sample the healthy rest deterministically by trace id so logs and traces agree, and never sample errors in logs:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line">BASELINE_RATE <span class="tk-op">=</span> <span class="tk-num">0.02</span>                 <span class="tk-com">// keep about 2 percent of healthy traces</span></span>
+<span class="line">SLOW_THRESHOLD_MS <span class="tk-op">=</span> <span class="tk-num">800</span></span>
+<span class="line">MAX_IMPORTANT_PER_SECOND <span class="tk-op">=</span> <span class="tk-num">1000</span>      <span class="tk-com">// protects the backend during incident floods</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">decide</span>(trace):</span>
+<span class="line">    <span class="tk-com">// 1. Always keep what debugging needs</span></span>
+<span class="line">    <span class="tk-kw">if</span> trace.<span class="tk-fn">hasError</span>() <span class="tk-kw">or</span> trace.durationMs <span class="tk-op">&gt;</span> SLOW_THRESHOLD_MS <span class="tk-kw">or</span> trace.<span class="tk-fn">hasAttribute</span>(<span class="tk-str">&quot;debug&quot;</span>, <span class="tk-lit">true</span>):</span>
+<span class="line">        keep <span class="tk-op">=</span> rateLimiter.<span class="tk-fn">tryAcquire</span>(<span class="tk-str">&quot;important&quot;</span>, MAX_IMPORTANT_PER_SECOND)</span>
+<span class="line">        <span class="tk-kw">return</span> { keep: keep, rate: <span class="tk-num">1.0</span> }</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-com">// 2. Deterministic baseline sampling: same decision in every collector and for logs</span></span>
+<span class="line">    bucket <span class="tk-op">=</span> <span class="tk-fn">hash</span>(trace.traceId) mod <span class="tk-num">10000</span></span>
+<span class="line">    <span class="tk-kw">return</span> { keep: bucket <span class="tk-op">&lt;</span> BASELINE_RATE <span class="tk-op">*</span> <span class="tk-num">10000</span>, rate: BASELINE_RATE }</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onTraceComplete</span>(trace):</span>
+<span class="line">    d <span class="tk-op">=</span> <span class="tk-fn">decide</span>(trace)</span>
+<span class="line">    <span class="tk-kw">if</span> d.keep:</span>
+<span class="line">        trace.<span class="tk-fn">setAttribute</span>(<span class="tk-str">&quot;sample_rate&quot;</span>, d.rate)       <span class="tk-com">// lets queries re-weight counts</span></span>
+<span class="line">        backend.<span class="tk-fn">export</span>(trace)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">logEvent</span>(level, message, fields):</span>
+<span class="line">    record <span class="tk-op">=</span> <span class="tk-fn">structured</span>(level, message, fields, traceId <span class="tk-op">=</span> <span class="tk-fn">currentTraceId</span>())</span>
+<span class="line">    <span class="tk-kw">if</span> level <span class="tk-kw">in</span> [ERROR, WARN]:</span>
+<span class="line">        <span class="tk-fn">emit</span>(record)                                     <span class="tk-com">// never sample errors</span></span>
+<span class="line">    <span class="tk-kw">else</span> <span class="tk-kw">if</span> <span class="tk-fn">hash</span>(record.traceId) mod <span class="tk-num">10000</span> <span class="tk-op">&lt;</span> BASELINE_RATE <span class="tk-op">*</span> <span class="tk-num">10000</span>:</span>
+<span class="line">        <span class="tk-fn">emit</span>(record)                                     <span class="tk-com">// INFO and DEBUG sampled by trace id, matching the trace decision</span></span>
+<span class="line">    <span class="tk-com">// For traces kept by the tail rules, route logs through the collector so they follow the same decision.</span></span>
+<span class="line">    <span class="tk-com">// Audit logs bypass this function entirely and go to a separate, unsampled pipeline.</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Uniform random sampling that drops rare errors:</strong> The failure you need to debug is exactly the one most likely to be discarded. Always keep errors and slow requests.</li>
+          <li><strong>Inconsistent sampling across signals and services:</strong> If each service decides independently, traces arrive with missing spans and logs do not match traces. Sample by trace id and honor the parent's decision.</li>
+          <li><strong>Computing rates from sampled data:</strong> Counts and percentages become wrong. Use unsampled metrics, or record the sampling rate and re-weight.</li>
+          <li><strong>Head-based sampling only:</strong> The decision is made before the outcome is known, so it cannot prefer failures. Add tail-based rules where it matters.</li>
+          <li><strong>Sampling audit or security logs:</strong> Those need complete retention on a separate pipeline.</li>
+          <li><strong>High-cardinality metric labels:</strong> Putting user or request ids in labels explodes metric storage. Keep that detail in traces and logs.</li>
+          <li><strong>Unstructured logs without trace ids:</strong> They cannot be correlated with traces, so sampling decisions cannot be applied consistently.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>The three signals are <strong>complementary</strong>, and mature teams budget telemetry the way they budget any other resource:</p>
+        <ul>
+          <li><strong>Step 0 — Define the questions:</strong> Set SLOs, list the incidents you need to be able to debug, and decide a budget and retention per signal.</li>
+          <li><strong>Step 1 — Metrics first:</strong> RED metrics per service and endpoint, USE metrics for resources, SLO-based alerts and low-cardinality labels.</li>
+          <li><strong>Step 2 — Standardize instrumentation:</strong> OpenTelemetry SDKs, W3C Trace Context propagation and structured JSON logs that include the trace id.</li>
+          <li><strong>Step 3 — Sample deliberately:</strong> Head sampling at the SDK for the baseline, tail sampling in a collector tier for errors and slow traces, dynamic rate limits per service and level-based log sampling.</li>
+          <li><strong>Step 4 — Tier storage:</strong> Hot searchable storage for days, cheap object storage for weeks or months, and a separate pipeline for audit logs.</li>
+          <li><strong>Step 5 — Watch the pipeline itself:</strong> Dropped spans, queue depth and cost per service, with a periodic review of sampling rates.</li>
+        </ul>
+        <p>Observability is a product with a budget: decide what you need to know, then pay only for that.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>At massive scale, <strong>telemetry volume</strong> is the design constraint. Keep metrics exact and always on, correlate everything with a trace id, and use <strong>smart sampling</strong> (keep all errors and slow requests, sample the rest) so debugging data survives without crushing cost or performance.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

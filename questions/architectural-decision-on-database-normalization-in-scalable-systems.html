@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architectural Decision on Database Normalization in Scalable Systems — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">04 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Database Normalization</span>
+      <span class="tag tag--green">Scalability</span>
+      <span class="tag tag--amber">Architecture</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Architectural Decision on Database Normalization in Scalable Systems</h1>
+      <p class="q-scenario"><strong>Sarah</strong> is revamping the database schema of a growing <strong>online store</strong> for better speed and easier upkeep. The core transactional tables (orders, payments, inventory) are already well normalized and must keep <strong>strict integrity</strong>. Profiling shows the <strong>storefront is heavily read-intensive</strong> (product listings, search results, order history), a few <strong>join-heavy read paths</strong> dominate latency, and the attributes those pages repeat (product name, category name, brand) <strong>change rarely</strong>. She has to choose the normalization strategy that balances efficient queries against data integrity.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Push normalization to BCNF to cut down on data duplication and modification anomalies.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Introduce partial denormalization for read-intensive workloads, decreasing joins and boosting query speed.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Choose eventual consistency to permit quicker writes and enhanced scaling in a distributed setup.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Apply database sharding to horizontally split data across multiple servers, improving write capacity.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Selective (Partial) Denormalization</h3>
+        <p><strong>Partial denormalization for the read-intensive paths</strong>, layered on top of a normalized source of truth, gives the best balance. The normalized tables remain authoritative for writes and integrity, while carefully chosen, rarely changing attributes are duplicated or precomputed into read-optimized structures so hot queries avoid multi-table joins. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Targets the real bottleneck:</strong> Joins across several large tables on every page view dominate cost in read-heavy workloads. Precomputing the joined shape moves that cost to the (rarer) write or refresh.</li>
+          <li><strong>Keeps integrity where it matters:</strong> Orders, payments and stock stay normalized with constraints and transactions. Only derived, display-oriented copies are denormalized, so any anomaly is confined to data that can be rebuilt.</li>
+          <li><strong>Incremental and reversible when done as projections:</strong> Materialized views, summary tables or read models can be added per query path and dropped without touching the core schema.</li>
+          <li><strong>Matches the upkeep goal:</strong> A normalized core means one place to change a fact, and denormalized copies are refreshed by a defined mechanism (triggers, scheduled refresh or change data capture).</li>
+          <li><strong>Why not push to BCNF alone?</strong> BCNF removes redundancy and update anomalies, but it also multiplies tables and joins. Further normalization does not speed up the reads that are the problem.</li>
+          <li><strong>Standard industry practice:</strong> Most OLTP systems keep 3NF/BCNF as the system of record and use denormalized read models, summary tables or search indexes for hot read paths (the idea behind materialized views and CQRS read models).</li>
+        </ul>
+        <p>A disciplined approach keeps a <strong>normalized system of record</strong>, adds <strong>denormalized projections only for measured hot paths</strong>, defines an explicit <strong>refresh mechanism</strong> (trigger, scheduled refresh or CDC), and runs <strong>consistency checks</strong> between source and copy. Compare query latency and write cost before and after each change.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📐</span>
+            <h4>A — Normalize to BCNF</h4>
+          </div>
+          <p>BCNF eliminates redundancy and update, insert and delete anomalies, and it is an excellent foundation for transactional data, which is why the core schema should stay normalized. But taken as the whole strategy, it increases the number of tables and joins and does nothing for the read-heavy path where speed is the complaint. <strong>Caveat:</strong> for write-heavy OLTP or data with strict integrity rules, normalizing (usually to 3NF or BCNF) is the right default.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⏳</span>
+            <h4>C — Eventual Consistency</h4>
+          </div>
+          <p>Eventual consistency is a <strong>replication and consistency model</strong>, not a schema normalization strategy. It trades read-your-writes guarantees for write speed and availability in distributed settings and adds anomalies the application must handle, but it does not decide how tables are structured. <strong>Caveat:</strong> it can legitimately apply to denormalized read models and search indexes that update asynchronously, but that is a delivery mechanism for option B, not an alternative to it.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>D — Database Sharding</h4>
+          </div>
+          <p>Sharding splits data across servers to scale storage and write throughput. It is a <strong>scale-out technique</strong>, not a normalization choice, and it adds cross-shard query and transaction complexity. It does not reduce join cost on the read path and can make joins harder. <strong>Caveat:</strong> consider it when a single node cannot handle the data size or write rate, which is not what this scenario describes.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Selective (Partial) Denormalization ✓</h4>
+          </div>
+          <p>Introduce partial denormalization for read-intensive workloads, decreasing joins and boosting query speed.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Read Query Speed</th><th>Data Integrity</th><th>Write Overhead</th><th>Implementation Complexity</th><th>Reversibility</th><th>Addresses the Speed vs Integrity Trade-off Directly</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Normalize to BCNF</td><td>Lower (more joins) ❌</td><td>Highest ✅</td><td>Low ✅</td><td>Low ✅</td><td>Moderate (schema migration) ⚠</td><td>Partly (integrity side only) ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Partial Denormalization ✓</td><td>High on targeted paths ✅</td><td>Good if copies are refreshed reliably ⚠</td><td>Medium (refresh cost) ⚠</td><td>Medium ⚠</td><td>Easy when done as projections ✅</td><td>Yes ✅</td></tr>
+            <tr><td class="tt-option">C — Eventual Consistency</td><td>Not schema related ⚠</td><td>Weaker guarantees ❌</td><td>Lower write latency ✅</td><td>High ❌</td><td>Hard ❌</td><td>No ❌</td></tr>
+            <tr><td class="tt-option">D — Database Sharding</td><td>Not improved, joins get harder ❌</td><td>Cross-shard integrity is harder ❌</td><td>Higher write capacity ✅</td><td>High ❌</td><td>Very hard ❌</td><td>No ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Normalize to BCNF</h4>
+          </div>
+          <p>Transactional core data (orders, payments, accounts) where correctness and update simplicity dominate, and as the default starting point for any OLTP schema.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Partial Denormalization</h4>
+          </div>
+          <p>Read-heavy paths with proven join cost and rarely changing attributes: product listings, search results, dashboards, reporting tables, order summaries.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Eventual Consistency</h4>
+          </div>
+          <p>Distributed systems where availability and write scale matter more than immediate read-your-writes, such as caches, search indexes and derived read models.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Database Sharding</h4>
+          </div>
+          <p>A single node can no longer handle data volume or write throughput, and the data has a natural shard key.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Normalized Core with a Denormalized Read Projection</h3>
+        <p>Writes go to the normalized tables. A refresh mechanism populates a read-optimized projection that the storefront queries without joins, while checkout keeps reading the authoritative tables:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · flowchart</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="flowchart LR
+    W[Application writes] --&gt; N[Normalized core tables]
+    N --&gt; R[Refresh by trigger or scheduled job or CDC]
+    R --&gt; V[product_listing projection]
+    V --&gt; S[Storefront reads without joins]
+    N --&gt; T[Checkout and orders read the normalized tables]">flowchart LR
+    W[Application writes] --&gt; N[Normalized core tables]
+    N --&gt; R[Refresh by trigger or scheduled job or CDC]
+    R --&gt; V[product_listing projection]
+    V --&gt; S[Storefront reads without joins]
+    N --&gt; T[Checkout and orders read the normalized tables]</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Normalized Core with a Materialized Read Projection (PostgreSQL)</h3>
+        <p>The normalized tables stay authoritative. A materialized view precomputes the join for listing pages and is refreshed concurrently so readers are not blocked:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">sql</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">-- Normalized source of truth (3NF/BCNF): one fact, one place</span></span>
+<span class="line">CREATE TABLE <span class="tk-fn">categories</span> (category_id BIGINT PRIMARY KEY, name TEXT NOT NULL);</span>
+<span class="line"></span>
+<span class="line">CREATE TABLE <span class="tk-fn">products</span> (</span>
+<span class="line">    product_id  BIGINT PRIMARY KEY,</span>
+<span class="line">    category_id BIGINT NOT NULL REFERENCES <span class="tk-fn">categories</span> (category_id),</span>
+<span class="line">    name        TEXT   NOT NULL</span>
+<span class="line">);</span>
+<span class="line"></span>
+<span class="line">CREATE TABLE <span class="tk-fn">prices</span> (</span>
+<span class="line">    product_id BIGINT PRIMARY KEY REFERENCES <span class="tk-fn">products</span> (product_id),</span>
+<span class="line">    amount     <span class="tk-fn">NUMERIC</span>(<span class="tk-num">12</span>,<span class="tk-num">2</span>) NOT NULL</span>
+<span class="line">);</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Read-optimized projection for the storefront: the join cost is paid once, at refresh time</span></span>
+<span class="line">CREATE MATERIALIZED VIEW product_listing AS</span>
+<span class="line">SELECT p.product_id, p.name, c.name AS category_name, pr.amount AS price</span>
+<span class="line">FROM products p</span>
+<span class="line">JOIN categories c ON c.category_id <span class="tk-op">=</span> p.category_id</span>
+<span class="line">JOIN prices pr    ON pr.product_id  <span class="tk-op">=</span> p.product_id;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- A unique index is required for REFRESH ... CONCURRENTLY</span></span>
+<span class="line">CREATE UNIQUE INDEX product_listing_pk ON <span class="tk-fn">product_listing</span> (product_id);</span>
+<span class="line">CREATE INDEX product_listing_category_idx ON <span class="tk-fn">product_listing</span> (category_name);</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Scheduled job (for example every minute): refresh without blocking readers</span></span>
+<span class="line">REFRESH MATERIALIZED VIEW CONCURRENTLY product_listing;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Storefront query: no joins on the hot path</span></span>
+<span class="line">SELECT product_id, name, price FROM product_listing WHERE category_name <span class="tk-op">=</span> <span class="tk-str">&#x27;Shoes&#x27;</span> ORDER BY price LIMIT <span class="tk-num">24</span>;</span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Orders keep the price actually paid: a historical fact, not a duplicate of the current price</span></span>
+<span class="line"><span class="tk-com">-- order_items(order_id, product_id, quantity, unit_price_at_purchase)</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">-- Reconciliation idea: periodically compare the projection with the source tables and alert on mismatches</span></span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Denormalizing before measuring:</strong> Duplicating data without proof that joins are the bottleneck adds permanent write complexity for a problem that may not exist.</li>
+          <li><strong>Replacing the source of truth:</strong> Collapsing the core tables into wide ones removes constraints and invites update anomalies. Keep a normalized core and add projections beside it.</li>
+          <li><strong>No refresh strategy:</strong> A copy with no defined update path becomes wrong quietly. Choose triggers, scheduled or concurrent refresh, or CDC, and monitor lag.</li>
+          <li><strong>Denormalizing volatile fields:</strong> Duplicating frequently changing values such as stock counts or prices multiplies write cost and drift risk.</li>
+          <li><strong>Forgetting reconciliation:</strong> Add periodic checks that compare projections with the source and rebuild on mismatch.</li>
+          <li><strong>Confusing history with duplication:</strong> Snapshotting the price on an order line is correct. Overwriting it with the current price when the catalog changes would corrupt order history.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams <strong>normalize first and denormalize on evidence</strong>. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Model the domain properly:</strong> Design the transactional schema in 3NF or BCNF with keys and constraints so each fact lives in one place.</li>
+          <li><strong>Step 1 — Measure the read paths:</strong> Use slow-query logs and <code>EXPLAIN ANALYZE</code> to find which joins dominate latency.</li>
+          <li><strong>Step 2 — Fix the cheap things first:</strong> Add or adjust indexes, rewrite queries and cache hot responses.</li>
+          <li><strong>Step 3 — Add targeted denormalization:</strong> Use materialized views, summary tables or read models for the proven hot paths (the biggest win for this scenario).</li>
+          <li><strong>Step 4 — Define the refresh and verify it:</strong> Use triggers, scheduled or concurrent refresh, or CDC, plus periodic reconciliation jobs.</li>
+          <li><strong>Step 5 — Scale out when needed:</strong> Add read replicas, and consider sharding only when a single node cannot cope with data volume or write rate.</li>
+        </ul>
+        <p>Keep the source of truth normalized; make the read side as denormalized as the measurements justify.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Balance speed and integrity by keeping a <strong>normalized system of record</strong> and applying <strong>partial denormalization</strong> to measured, read-heavy paths using rebuildable structures such as materialized views or read models. BCNF alone does not speed up reads, and eventual consistency and sharding solve different problems than schema normalization.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

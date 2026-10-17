@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Consistency Dilemmas in Distributed Systems — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">03 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Consistency</span>
+      <span class="tag tag--green">Distributed Systems</span>
+      <span class="tag tag--amber">Architecture</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Data Consistency Dilemmas in Distributed Systems</h1>
+      <p class="q-scenario"><strong>Sarah</strong>, a software engineer working for a rapidly expanding e-commerce application, is struggling to maintain data consistency among multiple microservices. Today <strong>every microservice writes straight to the database</strong> (in practice a shared one), so a single business action such as <em>placing an order</em> (create the order, reserve stock, charge the payment) can <strong>partially succeed</strong> and leave anomalies and mismatches. Some steps call external systems such as a payment gateway that cannot join a database transaction, and the business needs the services to stay <strong>available</strong> while the flow completes. She must choose the method that best restores consistency.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="3">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Deploy a two-phase commit protocol to guarantee transactional atomicity among the various services.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Add a message broker to facilitate asynchronous interactions between microservices, ensuring eventual consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Route all write operations through a single, dedicated service that coordinates transactions and enforces strict consistency.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Rely on idempotent operations alongside compensating transactions to manage errors and preserve consistency without halting services.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — D: Idempotent Operations with Compensating Transactions (Saga)</h3>
+        <p>The root problem is a <strong>business transaction that spans several services</strong> and can fail halfway. The pattern built for this is a <strong>saga</strong>: a sequence of local transactions, each paired with a <strong>compensating action</strong> that semantically undoes it, made safe to retry through <strong>idempotent</strong> operations. Failures are handled by retrying or compensating instead of by locking everything, so services stay available and the system converges to a consistent state. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Correct failure semantics:</strong> Every step either completes or is compensated (refund the payment, release the stock, cancel the order), so the system never rests in a half-finished state. Intermediate states are explicit and visible (PENDING, CONFIRMED, CANCELLED).</li>
+          <li><strong>Idempotency makes retries safe:</strong> Networks and brokers deliver at-least-once. With an idempotency key per operation, a duplicate has no additional effect, which turns unreliable delivery into reliable outcomes.</li>
+          <li><strong>No distributed locks:</strong> Each service commits locally and stays available. Throughput is not capped by the slowest participant or by a coordinator.</li>
+          <li><strong>Works with external systems:</strong> Payment gateways and third-party APIs cannot join a database transaction, but most offer idempotency keys and refund or cancel calls, which is exactly what the pattern needs.</li>
+          <li><strong>Why not just add a broker (B)?</strong> A broker is the <em>transport</em>, not the correctness mechanism. Without idempotent consumers and compensations, at-least-once delivery creates duplicates and half-finished flows. Publishing an event after a database commit, without an outbox, also reintroduces the dual-write problem. Sagas normally run <em>on</em> a broker.</li>
+          <li><strong>Well established:</strong> Sagas were introduced by Garcia-Molina and Salem in 1987. Today they run through orchestrators such as Temporal, Camunda or AWS Step Functions, or as choreography over Kafka or RabbitMQ with the transactional outbox pattern.</li>
+        </ul>
+        <p>A production saga has an <strong>explicit state machine</strong> (orchestrated or choreographed), <strong>idempotency keys</strong> on every command and consumer, a <strong>transactional outbox</strong> for reliable publishing, <strong>timeouts and retries with backoff</strong>, <strong>idempotent compensations</strong>, and a <strong>dead-letter and reconciliation</strong> path. Also give each dataset <strong>one owning service</strong>, so no two services write the same tables.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔒</span>
+            <h4>A — Two-Phase Commit (2PC)</h4>
+          </div>
+          <p>2PC gives atomicity, but participants hold locks while waiting for the coordinator, so a coordinator failure or a slow participant <strong>blocks</strong> the whole transaction. It lowers availability, couples services and their databases (all must support XA or similar), cannot include external APIs such as payment gateways, and scales poorly. <strong>Caveat:</strong> it can be acceptable inside one bounded context with a few XA-capable databases and low throughput, or where strict atomicity is non-negotiable.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📨</span>
+            <h4>B — Message Broker with Eventual Consistency</h4>
+          </div>
+          <p>A necessary building block but <strong>not sufficient</strong> alone. A broker decouples services, but without the outbox pattern a service can commit to its database and crash before publishing (or the reverse), and at-least-once delivery produces duplicates unless consumers are idempotent. It also does not define what happens when a later step fails; compensations do. In this scenario it is the transport underneath option D.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🚪</span>
+            <h4>C — Single Write Service</h4>
+          </div>
+          <p>Funnelling every write through one service removes concurrent-writer anomalies and centralizes rules, but it creates a <strong>bottleneck, a single point of failure</strong> and a <strong>distributed monolith</strong> in which every team depends on that service for every change. It also does not give cross-service atomicity when the work still spans external systems or several data stores. <strong>Caveat:</strong> single-writer ownership is the right idea <em>per aggregate or data domain</em>, not for the whole platform.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>D — Idempotent Operations with Compensating Transactions (Saga) ✓</h4>
+          </div>
+          <p>Rely on idempotent operations alongside compensating transactions to manage errors and preserve consistency without halting services.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Consistency Model</th><th>Availability Under Failure</th><th>Service Coupling</th><th>Works With External APIs</th><th>Implementation Complexity</th><th>Handles Partial Failure</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Two-Phase Commit</td><td>Strong (atomic) ✅</td><td>Low (blocking) ❌</td><td>Tight ❌</td><td>No ❌</td><td>Medium ⚠</td><td>Yes (rollback) ✅</td></tr>
+            <tr><td class="tt-option">B — Message Broker Only</td><td>Eventual ⚠</td><td>High ✅</td><td>Loose ✅</td><td>Yes ✅</td><td>Medium ⚠</td><td>No (needs compensation) ❌</td></tr>
+            <tr><td class="tt-option">C — Single Write Service</td><td>Strong within one store ✅</td><td>Low (single point of failure) ❌</td><td>Tight ❌</td><td>Partial ⚠</td><td>Medium ⚠</td><td>Partial ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">D — Idempotency + Compensation (Saga) ✓</td><td>Eventual ⚠</td><td>High ✅</td><td>Loose ✅</td><td>Yes ✅</td><td>High ❌</td><td>Yes (compensation) ✅</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Two-Phase Commit</h4>
+          </div>
+          <p>Strict atomicity across a small number of XA-capable databases in one bounded context, at low throughput (for example moving a ledger entry between two internal databases).</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Message Broker with Eventual Consistency</h4>
+          </div>
+          <p>Decoupling and fan-out where consumers tolerate eventual consistency (notifications, search indexing, analytics), always paired with an outbox and idempotent consumers.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Single Write Service</h4>
+          </div>
+          <p>A single data domain with strict invariants (inventory counts, account balances) where one owner service per aggregate enforces them.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Idempotency + Compensation (Saga)</h4>
+          </div>
+          <p>Multi-step business flows across services or external systems (orders, bookings, payments) that must stay available and converge to a consistent outcome.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Order Saga with Compensation</h3>
+        <p>Each service commits locally and emits an event. When inventory fails, the earlier payment is compensated and the order is cancelled:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant O as Order Service
+    participant B as Broker
+    participant P as Payment Service
+    participant I as Inventory Service
+    O-&gt;&gt;O: 1. Create order as PENDING, local transaction plus outbox row
+    O-&gt;&gt;B: 2. OrderCreated
+    B-&gt;&gt;P: 3. Deliver OrderCreated
+    P-&gt;&gt;P: 4. Charge with idempotency key equal to orderId
+    P-&gt;&gt;B: 5. PaymentCompleted
+    B-&gt;&gt;I: 6. Deliver PaymentCompleted
+    I-&gt;&gt;I: 7. Reserve stock fails because it is out of stock
+    I-&gt;&gt;B: 8. StockReservationFailed
+    B-&gt;&gt;P: 9. Deliver StockReservationFailed
+    P-&gt;&gt;P: 10. Refund as an idempotent compensation
+    P-&gt;&gt;B: 11. PaymentRefunded
+    B-&gt;&gt;O: 12. Deliver PaymentRefunded
+    O-&gt;&gt;O: 13. Mark order CANCELLED">sequenceDiagram
+    participant O as Order Service
+    participant B as Broker
+    participant P as Payment Service
+    participant I as Inventory Service
+    O-&gt;&gt;O: 1. Create order as PENDING, local transaction plus outbox row
+    O-&gt;&gt;B: 2. OrderCreated
+    B-&gt;&gt;P: 3. Deliver OrderCreated
+    P-&gt;&gt;P: 4. Charge with idempotency key equal to orderId
+    P-&gt;&gt;B: 5. PaymentCompleted
+    B-&gt;&gt;I: 6. Deliver PaymentCompleted
+    I-&gt;&gt;I: 7. Reserve stock fails because it is out of stock
+    I-&gt;&gt;B: 8. StockReservationFailed
+    B-&gt;&gt;P: 9. Deliver StockReservationFailed
+    P-&gt;&gt;P: 10. Refund as an idempotent compensation
+    P-&gt;&gt;B: 11. PaymentRefunded
+    B-&gt;&gt;O: 12. Deliver PaymentRefunded
+    O-&gt;&gt;O: 13. Mark order CANCELLED</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Idempotent Saga Step with Outbox and Compensation</h3>
+        <p>The consumer deduplicates by message id, calls the external gateway with a stable idempotency key, and writes its state change and outgoing event in one transaction. The compensation is also idempotent:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-com">// Payment service: handles the ChargePayment command</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onChargePayment</span>(msg):</span>
+<span class="line">    tx <span class="tk-op">=</span> db.<span class="tk-kw">begin</span>()</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        <span class="tk-com">// Inbox: a unique constraint on message id makes duplicates harmless</span></span>
+<span class="line">        inserted <span class="tk-op">=</span> tx.<span class="tk-fn">insertIfAbsent</span>(<span class="tk-str">&quot;processed_messages&quot;</span>, msg.id)</span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> inserted:</span>
+<span class="line">            tx.<span class="tk-fn">rollback</span>()</span>
+<span class="line">            <span class="tk-kw">return</span>                                   <span class="tk-com">// duplicate delivery, already handled</span></span>
+<span class="line"></span>
+<span class="line">        <span class="tk-com">// Stable key: if we crash after charging and retry, the gateway will not charge twice</span></span>
+<span class="line">        result <span class="tk-op">=</span> gateway.<span class="tk-fn">charge</span>(msg.orderId, msg.amount, idempotencyKey <span class="tk-op">=</span> msg.orderId)</span>
+<span class="line">        <span class="tk-kw">if</span> result.ok:</span>
+<span class="line">            tx.<span class="tk-fn">insert</span>(<span class="tk-str">&quot;payments&quot;</span>, { orderId: msg.orderId, status: <span class="tk-str">&quot;CAPTURED&quot;</span> })</span>
+<span class="line">            tx.<span class="tk-fn">insert</span>(<span class="tk-str">&quot;outbox&quot;</span>, <span class="tk-fn">event</span>(<span class="tk-str">&quot;PaymentCompleted&quot;</span>, msg.orderId))   <span class="tk-com">// same transaction as the state change</span></span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            tx.<span class="tk-fn">insert</span>(<span class="tk-str">&quot;outbox&quot;</span>, <span class="tk-fn">event</span>(<span class="tk-str">&quot;PaymentFailed&quot;</span>, msg.orderId))</span>
+<span class="line">        tx.<span class="tk-fn">commit</span>()</span>
+<span class="line">    <span class="tk-kw">catch</span> TransientError:</span>
+<span class="line">        tx.<span class="tk-fn">rollback</span>()</span>
+<span class="line">        <span class="tk-kw">throw</span> <span class="tk-fn">Retry</span>(backoff <span class="tk-op">=</span> exponential, maxAttempts <span class="tk-op">=</span> <span class="tk-num">5</span>)   <span class="tk-com">// then move to the dead-letter queue</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-com">// Compensation: must also be idempotent</span></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">onStockReservationFailed</span>(msg):</span>
+<span class="line">    payment <span class="tk-op">=</span> db.<span class="tk-fn">find</span>(<span class="tk-str">&quot;payments&quot;</span>, msg.orderId)</span>
+<span class="line">    <span class="tk-kw">if</span> payment <span class="tk-op">==</span> <span class="tk-lit">null</span> <span class="tk-kw">or</span> payment.status <span class="tk-op">==</span> <span class="tk-str">&quot;REFUNDED&quot;</span>:</span>
+<span class="line">        <span class="tk-kw">return</span>                                       <span class="tk-com">// nothing to undo, or already undone</span></span>
+<span class="line">    gateway.<span class="tk-fn">refund</span>(msg.orderId, idempotencyKey <span class="tk-op">=</span> <span class="tk-str">&quot;refund-&quot;</span> <span class="tk-op">+</span> msg.orderId)</span>
+<span class="line">    db.transaction:</span>
+<span class="line">        db.<span class="tk-fn">update</span>(<span class="tk-str">&quot;payments&quot;</span>, msg.orderId, status <span class="tk-op">=</span> <span class="tk-str">&quot;REFUNDED&quot;</span>)</span>
+<span class="line">        db.<span class="tk-fn">insert</span>(<span class="tk-str">&quot;outbox&quot;</span>, <span class="tk-fn">event</span>(<span class="tk-str">&quot;PaymentRefunded&quot;</span>, msg.orderId))</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>The dual write:</strong> Updating the database and then publishing an event as two separate steps. A crash in between loses the event or publishes one for a rolled-back change. Use the transactional outbox.</li>
+          <li><strong>Non-idempotent consumers and compensations:</strong> Redelivery of a message then charges twice or refunds twice. Deduplicate on a message id with a unique constraint.</li>
+          <li><strong>Assuming compensation equals rollback:</strong> Some effects cannot be undone. Order steps so the hardest-to-reverse step comes last, and design explicit business-level compensations.</li>
+          <li><strong>Ignoring isolation anomalies:</strong> Other readers see PENDING data. Expose pending states deliberately and use semantic locks or versioning for contested resources.</li>
+          <li><strong>No timeouts, dead-letter queue or reconciliation:</strong> Sagas silently stall when a service is down. Add timeouts, alerts and a repair path.</li>
+          <li><strong>Idempotency keys that are not durable:</strong> Keys kept in memory or per instance are lost on restart. Store them durably, scoped to the operation, and enforce them with a unique constraint.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>Senior engineers combine several patterns, and they start by fixing <strong>data ownership</strong>:</p>
+        <ul>
+          <li><strong>Step 0 — Establish ownership:</strong> Each service owns its tables. No cross-service direct writes; other services use APIs or events.</li>
+          <li><strong>Step 1 — Keep strong consistency inside a service:</strong> Use local ACID transactions within each service boundary.</li>
+          <li><strong>Step 2 — Use sagas across services:</strong> Orchestration (Temporal, Step Functions, Camunda) for complex flows, choreography for simple ones.</li>
+          <li><strong>Step 3 — Reliable messaging:</strong> Transactional outbox with change data capture (for example Debezium) or a polling publisher, plus an inbox or dedup table on consumers.</li>
+          <li><strong>Step 4 — Idempotency everywhere:</strong> Idempotency keys on APIs, unique constraints and conditional updates.</li>
+          <li><strong>Step 5 — Reconcile and observe:</strong> Reconciliation jobs, dead-letter queues and alerts for stuck sagas. Keep 2PC for the rare case that truly needs it.</li>
+        </ul>
+        <p>Prefer local transactions plus sagas, and reserve distributed transactions for the narrow cases that justify them.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>Cross-service consistency comes from <strong>designing for failure</strong>: local transactions, idempotent retries and compensations, with a broker and an outbox as the plumbing. Give every dataset a <strong>single owning service</strong>, accept eventual consistency, and monitor for stuck or half-finished flows.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

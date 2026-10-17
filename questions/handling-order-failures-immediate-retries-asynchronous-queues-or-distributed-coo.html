@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Handling order failures: immediate retries, asynchronous queues, or distributed coordination? — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">01 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Error Handling</span>
+      <span class="tag tag--green">Retries</span>
+      <span class="tag tag--amber">Message Queues</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Handling order failures: immediate retries, asynchronous queues, or distributed coordination?</h1>
+      <p class="q-scenario"><strong>Maya</strong> manages a <strong>high-volume order-processing backend</strong> with peaks of <strong>5k requests per second</strong>, a <strong>99.9% availability SLA</strong> and a user-facing API that must average <strong>under 200 ms</strong> write latency. Downstream dependencies (<strong>shipping, payment and inventory</strong>) occasionally slow down or fail. She needs an error-handling strategy that keeps the API responsive, <strong>prevents data loss</strong>, allows <strong>safe retries</strong> and gives operators <strong>clear failure diagnostics</strong>.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="1">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Keep everything synchronous: the API gateway calls the order service, which calls the downstream dependencies. Handle transient errors with client-side retries and exponential backoff (up to a limit) before returning an error, and add a circuit breaker to prevent cascading failures.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Decouple with durable asynchronous messaging: accept the order synchronously, publish a reliable message to a processing queue and return success promptly. Workers consume with at-least-once delivery, idempotent handlers, exponential backoff and a dead-letter queue for problem messages, with strong metrics and tracing.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Use fire-and-forget: receive the request, emit a non-durable event to a lightweight stream and reply with success immediately. If downstream processing fails, rely on compensating transactions or periodic batch reconciliation, with minimal retry logic.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Use distributed transactions (2PC or XA) across all involved services for strict consistency. If any participant fails or is unreachable, the coordinator aborts and immediately tells the client, using locks or leases to keep state correct.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — B: Durable Queue with Idempotent Workers and DLQ</h3>
+        <p>Option B is the best fit. The API's only job becomes <strong>durably accepting the order</strong>. Everything that can be slow or flaky moves behind a durable queue, where retries, backoff and dead-lettering are normal operations rather than user-facing errors. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Availability is decoupled from dependencies:</strong> in a synchronous chain, three dependencies at 99.9% each, called in series, cap the order path near 99.7% before your own failures, which already misses a 99.9% SLA. With a queue, the API depends only on its own database and the broker.</li>
+          <li><strong>Latency stays flat:</strong> accepting an order is one local commit plus a publish (typically single-digit milliseconds), so the 200 ms average holds even when shipping takes seconds.</li>
+          <li><strong>No data loss:</strong> the order and an outbox row commit in one transaction, and the broker stores messages with replication. A crash at any point leaves either nothing or a durable record.</li>
+          <li><strong>Safe retries:</strong> at-least-once delivery plus idempotent handlers (deduplicate by message id, use idempotency keys on downstream calls) means a retry can never double-charge or double-ship.</li>
+          <li><strong>Failure becomes a managed state:</strong> exponential backoff with jitter absorbs transient slowdowns, and messages that keep failing land in a dead-letter queue with the error, attempt count and trace id for review and replay.</li>
+          <li><strong>Operator-friendly diagnostics:</strong> queue depth, oldest-message age, retry rate and DLQ size give an immediate health picture, and trace ids carried in the message connect the API request to every worker attempt.</li>
+          <li><strong>Absorbs the 5k RPS peaks:</strong> the queue is a buffer, so a slow downstream grows a visible, bounded backlog instead of timing out user requests.</li>
+        </ul>
+        <p>Combine <strong>outbox publishing</strong>, <strong>idempotent consumers</strong>, <strong>backoff with jitter</strong>, <strong>circuit breakers inside the workers</strong> and a <strong>DLQ with redrive tooling</strong>. Watch queue age, retry rate and DLQ depth, not just error rates.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔁</span>
+            <h4>A — Synchronous Calls with Retries and Circuit Breaker</h4>
+          </div>
+          <p>Retries with backoff add seconds of latency exactly when dependencies are slow, and each retry adds load to a struggling service. Availability is the <strong>product</strong> of every dependency in the call chain. A circuit breaker prevents cascades but, once open, it fails user requests instead of preserving them, and nothing durable records an order that was never completed. <strong>Caveat:</strong> synchronous calls with breakers are right for reads that must return fresh data inline, and breakers remain useful inside the workers of Option B.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔥</span>
+            <h4>C — Fire-and-Forget with Non-Durable Events</h4>
+          </div>
+          <p>Replying success before the event is durable breaks the requirement to prevent data loss: a broker restart or crash silently drops orders. Reconciliation batches can detect discrepancies, but they find them hours later, which makes them a safety net, not a primary design. With minimal retry logic, transient failures become permanent ones. <strong>Caveat:</strong> this style is acceptable for loss-tolerant events such as click tracking or telemetry.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔗</span>
+            <h4>D — Distributed Transactions (2PC / XA)</h4>
+          </div>
+          <p>Blocking coordination across payment, shipping and inventory makes the API as slow and as unavailable as the weakest participant, and holding locks across network calls at 5k RPS does not scale. External providers usually cannot join XA, and a coordinator failure strands transactions. It also pushes failures straight to the client instead of absorbing them.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Durable Queue with Idempotent Workers and DLQ ✓</h4>
+          </div>
+          <p>Decouple with durable asynchronous messaging: accept the order synchronously, publish a reliable message to a processing queue and return success promptly. Workers consume with at-least-once delivery,</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>API Write Latency</th><th>Availability Coupling</th><th>Data-Loss Risk</th><th>Retry Safety</th><th>Failure Diagnostics</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Sync + Retries + Circuit Breaker</td><td>Grows with dependency latency ❌</td><td>Tightly coupled ❌</td><td>Medium ⚠ (request may be lost)</td><td>Needs idempotency ⚠</td><td>Limited ⚠</td><td>Low ✅</td></tr>
+            <tr class="tt-best"><td class="tt-option">B — Durable Queue + Idempotent Workers ✓</td><td>Low and flat ✅</td><td>Decoupled ✅</td><td>Very low ✅</td><td>Safe with idempotency ✅</td><td>Strong ✅ (DLQ, tracing)</td><td>Medium ⚠</td></tr>
+            <tr><td class="tt-option">C — Fire-and-Forget</td><td>Lowest ✅</td><td>Decoupled ✅</td><td>High ❌</td><td>Weak ❌</td><td>Weak ❌</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">D — Distributed Transactions</td><td>High ❌</td><td>Tightly coupled ❌</td><td>Low ✅</td><td>Moderate ⚠</td><td>Moderate ⚠</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Sync + Retries + Circuit Breaker</h4>
+          </div>
+          <p>Reads or queries where the caller needs the result inline, with idempotent dependencies and low volume. Circuit breakers are still valuable inside async workers.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Durable Queue + Idempotent Workers</h4>
+          </div>
+          <p>Write workflows with unreliable dependencies, strict loss and availability requirements, and traffic peaks that exceed what downstream systems can absorb in real time.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Fire-and-Forget</h4>
+          </div>
+          <p>Low-value, loss-tolerant events such as telemetry, click tracking or best-effort notifications.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Distributed Transactions</h4>
+          </div>
+          <p>Tightly coupled resources inside one trust boundary with short transactions and modest throughput, where atomic commit is mandatory.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Durable Intake, Retries and Dead-Letter Queue</h3>
+        <p>The API only stores the order and an outbox row. Workers handle slow dependencies with backoff and send repeated failures to the DLQ:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant A as Order API
+    participant D as Order DB and Outbox
+    participant Q as Durable Queue
+    participant W as Worker
+    participant S as Downstream Service
+    participant X as Dead-Letter Queue
+    C-&gt;&gt;A: POST /orders (Idempotency-Key)
+    A-&gt;&gt;D: 1. Save order and outbox row (one transaction)
+    A--&gt;&gt;C: 2. 202 Accepted, status PENDING
+    D-&gt;&gt;Q: 3. Relay message
+    Q-&gt;&gt;W: 4. Deliver (at-least-once)
+    W-&gt;&gt;S: 5. Call with timeout and idempotency key
+    alt Success
+        S--&gt;&gt;W: OK
+        W-&gt;&gt;D: Advance order state and record message id
+        W-&gt;&gt;Q: Ack
+    else Transient failure
+        S--&gt;&gt;W: Timeout or 503
+        W-&gt;&gt;Q: Requeue with delay (backoff and jitter)
+    else Max attempts reached
+        W-&gt;&gt;X: Send message with error and trace id
+        X--&gt;&gt;W: Alert operators for review and redrive
+    end">sequenceDiagram
+    participant C as Client
+    participant A as Order API
+    participant D as Order DB and Outbox
+    participant Q as Durable Queue
+    participant W as Worker
+    participant S as Downstream Service
+    participant X as Dead-Letter Queue
+    C-&gt;&gt;A: POST /orders (Idempotency-Key)
+    A-&gt;&gt;D: 1. Save order and outbox row (one transaction)
+    A--&gt;&gt;C: 2. 202 Accepted, status PENDING
+    D-&gt;&gt;Q: 3. Relay message
+    Q-&gt;&gt;W: 4. Deliver (at-least-once)
+    W-&gt;&gt;S: 5. Call with timeout and idempotency key
+    alt Success
+        S--&gt;&gt;W: OK
+        W-&gt;&gt;D: Advance order state and record message id
+        W-&gt;&gt;Q: Ack
+    else Transient failure
+        S--&gt;&gt;W: Timeout or 503
+        W-&gt;&gt;Q: Requeue with delay (backoff and jitter)
+    else Max attempts reached
+        W-&gt;&gt;X: Send message with error and trace id
+        X--&gt;&gt;W: Alert operators for review and redrive
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Outbox Intake and Idempotent Worker with Retry Tiers</h3>
+        <p>Intake commits the order and its message together, and the worker deduplicates, calls downstream safely and routes failures to retry or DLQ:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">placeOrder</span>(request):</span>
+<span class="line">    <span class="tk-fn">validate</span>(request)                                        <span class="tk-com">// fail fast with 4xx</span></span>
+<span class="line">    transaction:                                             <span class="tk-com">// order and message commit together</span></span>
+<span class="line">        orders.<span class="tk-fn">insert</span>(request.orderId, status <span class="tk-op">=</span> <span class="tk-str">&#x27;PENDING&#x27;</span>, payload <span class="tk-op">=</span> request.body)</span>
+<span class="line">        outbox.<span class="tk-fn">insert</span>(<span class="tk-fn">OrderAccepted</span>(request.orderId, traceId <span class="tk-op">=</span> <span class="tk-fn">currentTrace</span>()))</span>
+<span class="line">    <span class="tk-kw">return</span> <span class="tk-num">202</span>, Location: <span class="tk-str">&#x27;/orders/&#x27;</span> <span class="tk-op">+</span> request.orderId       <span class="tk-com">// typically a few milliseconds</span></span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">handleMessage</span>(msg):                                 <span class="tk-com">// queue consumer, at-least-once</span></span>
+<span class="line">    <span class="tk-kw">if</span> dedupe.<span class="tk-fn">seen</span>(msg.id):</span>
+<span class="line">        <span class="tk-fn">ack</span>(msg)</span>
+<span class="line">        <span class="tk-kw">return</span>                                               <span class="tk-com">// duplicate delivery</span></span>
+<span class="line"></span>
+<span class="line">    step <span class="tk-op">=</span> orders.<span class="tk-fn">nextStep</span>(msg.orderId)</span>
+<span class="line">    <span class="tk-kw">try</span>:</span>
+<span class="line">        <span class="tk-fn">circuitBreaker</span>(step.dependency).<span class="tk-fn">call</span>(                <span class="tk-com">// fail fast if dependency is down</span></span>
+<span class="line">            step.dependency.<span class="tk-fn">execute</span>(msg.payload,</span>
+<span class="line">                                    idempotencyKey <span class="tk-op">=</span> msg.orderId <span class="tk-op">+</span> <span class="tk-str">&#x27;:&#x27;</span> <span class="tk-op">+</span> step.name,</span>
+<span class="line">                                    timeout <span class="tk-op">=</span> <span class="tk-num">2s</span>))</span>
+<span class="line">        transaction:</span>
+<span class="line">            orders.<span class="tk-fn">advance</span>(msg.orderId, step)</span>
+<span class="line">            dedupe.<span class="tk-fn">mark</span>(msg.id)</span>
+<span class="line">        <span class="tk-fn">ack</span>(msg)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">catch</span> Transient:                                         <span class="tk-com">// timeout, 429, 503</span></span>
+<span class="line">        attempts <span class="tk-op">=</span> msg.attempts <span class="tk-op">+</span> <span class="tk-num">1</span></span>
+<span class="line">        <span class="tk-kw">if</span> attempts <span class="tk-op">&gt;=</span> MAX_ATTEMPTS:</span>
+<span class="line">            dlq.<span class="tk-fn">publish</span>(msg, reason <span class="tk-op">=</span> lastError, traceId <span class="tk-op">=</span> msg.traceId)</span>
+<span class="line">        <span class="tk-kw">else</span>:</span>
+<span class="line">            delay <span class="tk-op">=</span> <span class="tk-fn">min</span>(CAP, BASE <span class="tk-op">*</span> <span class="tk-num">2</span>^attempts) <span class="tk-op">+</span> <span class="tk-fn">random</span>(<span class="tk-num">0</span>, JITTER)</span>
+<span class="line">            retryQueue.<span class="tk-fn">publish</span>(msg, attempts <span class="tk-op">=</span> attempts, delay <span class="tk-op">=</span> delay)</span>
+<span class="line">        <span class="tk-fn">ack</span>(msg)                                             <span class="tk-com">// the retry copy now owns the work</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">catch</span> Permanent:                                         <span class="tk-com">// validation or business rejection</span></span>
+<span class="line">        dlq.<span class="tk-fn">publish</span>(msg, reason <span class="tk-op">=</span> lastError, traceId <span class="tk-op">=</span> msg.traceId)</span>
+<span class="line">        <span class="tk-fn">ack</span>(msg)</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Dual write without an outbox:</strong> saving to the DB and publishing in two steps can lose the message if the process dies in between.</li>
+          <li><strong>Non-idempotent consumers:</strong> at-least-once delivery guarantees duplicates, so handlers that are not idempotent double-charge or double-ship.</li>
+          <li><strong>Unbounded immediate retries:</strong> without backoff and jitter, retries create thundering herds that keep a recovering dependency down.</li>
+          <li><strong>One shared queue for all dependencies:</strong> a slow shipping provider then blocks payment and inventory work. Isolate per dependency.</li>
+          <li><strong>A DLQ nobody watches:</strong> without alerts and a redrive process, the DLQ is just a graveyard for lost orders.</li>
+          <li><strong>Poison messages blocking the queue head:</strong> cap attempts and move bad messages aside so healthy ones keep flowing.</li>
+          <li><strong>Telling users the order is complete when it is only accepted:</strong> show a pending state and update it when processing finishes.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams define what accepted means and how long retries may run before they build anything. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Set SLOs and a failure budget:</strong> define what accepted means, the retry window and the maximum acceptable backlog age.</li>
+          <li><strong>Step 1 — Intake:</strong> validate, persist the order and an outbox row in one transaction, and return <code>202</code> with a status link.</li>
+          <li><strong>Step 2 — Queue topology:</strong> separate queues or topics per dependency, partitioned by order id where sequence matters.</li>
+          <li><strong>Step 3 — Idempotent workers:</strong> a deduplication table, idempotency keys on downstream calls and a timeout on every call.</li>
+          <li><strong>Step 4 — Retry tiers:</strong> immediate retry for blips, delayed retry queues with exponential backoff and jitter, then a DLQ after the maximum attempts. Add circuit breakers and bulkheads inside workers.</li>
+          <li><strong>Step 5 — Operations:</strong> DLQ alerts, redrive tooling, runbooks, dashboards for queue age and retry rate, and distributed tracing across API and workers.</li>
+          <li><strong>Step 6 — Safety net:</strong> a periodic reconciliation job that compares order states with downstream systems.</li>
+        </ul>
+        <p>Treat the queue as the system of record for in-flight work, and design every consumer for duplicates.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When downstream dependencies are unreliable, <strong>do not make the user wait for them</strong>. Accept work durably, process it asynchronously with idempotent, retryable handlers, and make failures visible through dead-letter queues, metrics and traces. The price is eventual completion and extra infrastructure, which is far cheaper than lost orders or a broken SLA.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

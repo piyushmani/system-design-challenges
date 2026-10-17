@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Handling Thread Safety in a High-Throughput System — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">05 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Thread Safety</span>
+      <span class="tag tag--green">Throughput</span>
+      <span class="tag tag--amber">Concurrency</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Handling Thread Safety in a High-Throughput System</h1>
+      <p class="q-scenario"><strong>Alex</strong>, a software engineer designing a high-capacity distributed architecture, is tasked with ensuring robust thread safety and data integrity across shared data components. The system handles a massive volume of concurrent incoming requests—exceeding hundreds of thousands of operations per second—with strict sub-millisecond p99 latency targets. Under this extreme concurrency, traditional synchronization mechanisms create severe resource contention, CPU cache line bouncing (false sharing), thread pool starvation, and distributed deadlocks. Alex must establish a concurrency strategy that guarantees memory safety, eliminates race conditions and deadlocks, minimizes context-switching overhead, and scales seamlessly across multi-core compute instances and distributed cluster nodes without sacrificing overall throughput.</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Apply precise locking techniques to ensure exclusive access to critical code sections.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Make use of immutable data structures to permit simultaneous read operations without requiring locks.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Use message passing among components to separate data access and reduce shared state that can be modified.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Implement optimistic concurrency control methods like version tracking to maintain consistent data among threads.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: Message Passing Concurrency with Share-Nothing State Isolation</h3>
+        <p>In high-throughput, high-concurrency systems, shared mutable memory is the primary root cause of contention bottlenecks, race conditions, CPU cache invalidation thrashing, and deadlocks. The foundational concurrency maxim popularized by Go, Erlang, and CSP (Communicating Sequential Processes) is: <em>'Do not communicate by sharing memory; instead, share memory by communicating.'</em> By adopting <strong>message passing among components</strong>, Alex eliminates shared mutable state entirely. Each component (or actor/worker) acts as an isolated, single-threaded state machine with an exclusive message mailbox or lock-free ring buffer. Incoming requests are encapsulated into immutable message envelopes and routed to the authoritative owner of that specific data partition. Because each piece of mutable state is updated sequentially by exactly one thread, <strong>locks, mutexes, and synchronization primitives are completely eliminated</strong> from the critical execution path. Furthermore, message passing provides <em>location transparency</em>, allowing the exact same architecture to scale seamlessly from intra-process lock-free channels (like LMAX Disruptor) to multi-node distributed event streams across network boundaries.</p>
+        <ul>
+          <li><strong>Eliminates synchronization locks and deadlocks:</strong> Because state is never directly exposed to concurrent threads, lock acquisitions, lock convoys, priority inversions, and deadlocks become mathematically impossible by design.</li>
+          <li><strong>Maximizes CPU cache locality and zero bus thrashing:</strong> A single-threaded worker pinned to a CPU core processes messages sequentially, keeping working data resident in L1/L2 caches without triggering cross-core MESI cache invalidation traffic.</li>
+          <li><strong>Native horizontal scalability and location transparency:</strong> Components communicate exclusively via asynchronous message queues, allowing workers to reside on the same thread, across separate CPU cores, or on remote physical cluster nodes without modifying core business logic.</li>
+          <li><strong>Deterministic backpressure and overload protection:</strong> Bounded message queues provide immediate visibility into consumer lag, enabling automated rate limiting, queue shedding, and graceful degradation during traffic surges.</li>
+          <li><strong>Reproducible, deterministic testing:</strong> Because state transitions occur strictly in response to ordered input messages, failure states and edge cases can be reliably diagnosed by replaying recorded message streams without non-deterministic thread interleavings.</li>
+        </ul>
+        <p>High-throughput concurrency is best solved by eliminating shared mutable state rather than attempting to synchronize it. Message passing provides a lock-free, cache-friendly, and horizontally scalable foundation that scales effortlessly from multi-core processors to distributed clusters.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🛑</span>
+            <h4>A — Precise Locking (Fine-Grained Mutexes / Synchronized Sections)</h4>
+          </div>
+          <p>While fine-grained locking narrows critical sections compared to coarse locks, high-throughput systems suffer severe performance collapse under heavy lock contention. Acquiring mutexes forces CPU threads into kernel wait states, inducing massive OS context switching, thread scheduling latency, and CPU cache line invalidation across cores. As concurrent requests surge into the hundreds of thousands, threads spend more time contending for locks than executing business logic, leading to thread pool starvation, convoying, and complex distributed deadlocks.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚠️</span>
+            <h4>B — Immutable Data Structures for Lock-Free Reads</h4>
+          </div>
+          <p>Immutable data structures allow simultaneous read operations without locks, making them suitable for static configurations or reference data. However, the scenario demands handling massive concurrent updates across shared data components. Every write to an immutable data structure requires allocating new persistent tree nodes and atomically updating a root reference (typically via atomic CAS). Under high write concurrency, CAS loops thrash relentlessly, causing severe CPU spin overhead, elevated garbage collection memory pressure, and livelocks, while failing to solve distributed coordination across cluster nodes.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🔄</span>
+            <h4>D — Optimistic Concurrency Control (OCC / Version Tracking)</h4>
+          </div>
+          <p>Optimistic Concurrency Control operates on the assumption that conflicting updates are rare, verifying version tokens at commit time. Under 'a massive number of concurrent incoming requests' competing for shared components, write contention is intense. When dozens or hundreds of concurrent threads attempt to commit mutations to the same state simultaneously, only one succeeds while all others abort and retry. This triggers aggressive retry storms, saturating CPU cycles with repeated aborts and collapsing effective system throughput.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — Message Passing Concurrency with Share-Nothing State Isolation ✓</h4>
+          </div>
+          <p>Use message passing among components to separate data access and reduce shared state that can be modified.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Throughput Under High Concurrency</th><th>Deadlock Immunity</th><th>Write Latency Consistency</th><th>CPU Cache Efficiency</th><th>Distributed Scalability</th><th>Implementation Simplicity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Precise Locking Techniques</td><td>Poor (Convoying) ❌</td><td>Deadlock Prone ❌</td><td>High Jitter (Wait States) ❌</td><td>Poor (Cache Thrashing) ❌</td><td>Single-Node Only ❌</td><td>Moderate ⚠️</td></tr>
+            <tr><td class="tt-option">B — Immutable Data Structures</td><td>Moderate (GC / CAS Churn) ⚠️</td><td>Lock-Free Reads ✅</td><td>Unpredictable on Writes ⚠️</td><td>Moderate (Memory Allocation) ⚠️</td><td>Single-Node Only ❌</td><td>High (Persistent Trees) ⚠️</td></tr>
+            <tr><td class="tt-option">C — Message Passing &amp; Isolated State</td><td>Maximum (Millions/sec) ✅</td><td>Deadlock Free By Design ✅</td><td>Sub-millisecond &amp; Deterministic ✅</td><td>Optimal (Pinned Core L1/L2) ✅</td><td>Native Location Transparency ✅</td><td>Moderate (Async Flow) ⚠️</td></tr>
+            <tr><td class="tt-option">D — Optimistic Concurrency Control (OCC)</td><td>Poor Under High Contention ❌</td><td>Deadlock Free ✅</td><td>Severe Latency Spikes (Retries) ❌</td><td>Moderate ⚠️</td><td>Distributed Supported ⚠️</td><td>Moderate ⚠️</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Precise Locking Techniques</h4>
+          </div>
+          <p>Low-concurrency monolithic services or background batch utilities with simple, non-nested critical sections where thread contention is negligible.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Immutable Data Structures</h4>
+          </div>
+          <p>Read-heavy or read-only operational datasets—such as system feature flags, routing tables, and configuration settings—that update rarely.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — Message Passing &amp; Isolated State</h4>
+          </div>
+          <p>High-throughput, ultra-low-latency distributed platforms—such as trading engines, payment ledgers, gaming state servers, and streaming telemetry pipelines.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Optimistic Concurrency Control (OCC)</h4>
+          </div>
+          <p>Distributed databases or microservices with high read-to-write ratios and low collision probability (e.g., collaborative document editing with distinct field edits).</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Message Passing vs. Shared Memory Contention</h3>
+        <p>Incoming concurrent requests are encapsulated into immutable message envelopes and funneled through a lock-free queue to a single-threaded worker owning the state, eliminating locks and cache contention.</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    autonumber
+    participant T1 as Worker Thread 1
+    participant T2 as Worker Thread 2
+    participant Queue as Lock-Free Ring Buffer (Mailbox)
+    participant Owner as Component State Owner (Single-Threaded)
+    participant State as Private Mutable State
+    T1-&gt;&gt;Queue: Enqueue Immutable Command(Cmd-1, CorrelationID: 101)
+    T2-&gt;&gt;Queue: Enqueue Immutable Command(Cmd-2, CorrelationID: 102)
+    Note over Queue,Owner: Zero Locks: Commands consumed sequentially in FIFO order
+    Owner-&gt;&gt;Queue: Dequeue Next Command (Cmd-1)
+    Owner-&gt;&gt;State: Mutate Local State (In-Memory, Zero Synchronization)
+    Owner--&gt;&gt;T1: Resolve Promise 101: Success(Result-1)
+    Owner-&gt;&gt;Queue: Dequeue Next Command (Cmd-2)
+    Owner-&gt;&gt;State: Mutate Local State (In-Memory, Zero Synchronization)
+    Owner--&gt;&gt;T2: Resolve Promise 102: Success(Result-2)">sequenceDiagram
+    autonumber
+    participant T1 as Worker Thread 1
+    participant T2 as Worker Thread 2
+    participant Queue as Lock-Free Ring Buffer (Mailbox)
+    participant Owner as Component State Owner (Single-Threaded)
+    participant State as Private Mutable State
+    T1-&gt;&gt;Queue: Enqueue Immutable Command(Cmd-1, CorrelationID: 101)
+    T2-&gt;&gt;Queue: Enqueue Immutable Command(Cmd-2, CorrelationID: 102)
+    Note over Queue,Owner: Zero Locks: Commands consumed sequentially in FIFO order
+    Owner-&gt;&gt;Queue: Dequeue Next Command (Cmd-1)
+    Owner-&gt;&gt;State: Mutate Local State (In-Memory, Zero Synchronization)
+    Owner--&gt;&gt;T1: Resolve Promise 101: Success(Result-1)
+    Owner-&gt;&gt;Queue: Dequeue Next Command (Cmd-2)
+    Owner-&gt;&gt;State: Mutate Local State (In-Memory, Zero Synchronization)
+    Owner--&gt;&gt;T2: Resolve Promise 102: Success(Result-2)</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Lock-Free Single-Writer Component Worker</h3>
+        <p>An isolated component worker processing sequential command messages from a bounded lock-free channel, mutating private state with zero locks and deterministic backpressure.</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">class</span> IsolatedComponentWorker:</span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">__init__</span>(self, partition_id, capacity<span class="tk-op">=</span><span class="tk-num">65536</span>):</span>
+<span class="line">        self.partition_id <span class="tk-op">=</span> partition_id</span>
+<span class="line">        self.mailbox <span class="tk-op">=</span> <span class="tk-fn">BoundedLockFreeQueue</span>(capacity<span class="tk-op">=</span>capacity)</span>
+<span class="line">        self.local_state <span class="tk-op">=</span> {}</span>
+<span class="line">        self.running <span class="tk-op">=</span> <span class="tk-lit">True</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">submit_command</span>(self, entity_id, operation, payload, timeout_ms<span class="tk-op">=</span><span class="tk-num">500</span>):</span>
+<span class="line">        promise <span class="tk-op">=</span> <span class="tk-fn">Future</span>()</span>
+<span class="line">        command <span class="tk-op">=</span> <span class="tk-fn">MessageEnvelope</span>(</span>
+<span class="line">            correlation_id<span class="tk-op">=</span><span class="tk-fn">generate_uuid</span>(),</span>
+<span class="line">            entity_id<span class="tk-op">=</span>entity_id,</span>
+<span class="line">            operation<span class="tk-op">=</span>operation,</span>
+<span class="line">            payload<span class="tk-op">=</span>payload,</span>
+<span class="line">            response_future<span class="tk-op">=</span>promise</span>
+<span class="line">        )</span>
+<span class="line">        <span class="tk-com"># Enforce backpressure at ingress boundary</span></span>
+<span class="line">        <span class="tk-kw">if</span> <span class="tk-kw">not</span> self.mailbox.<span class="tk-fn">offer</span>(command, timeout_ms):</span>
+<span class="line">            <span class="tk-kw">raise</span> <span class="tk-fn">CapacityExceededException</span>(<span class="tk-str">&quot;Worker queue saturated - backpressure applied&quot;</span>)</span>
+<span class="line">        <span class="tk-kw">return</span> promise</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">run_event_loop</span>(self):</span>
+<span class="line">        <span class="tk-com"># Pinned dedicated single worker thread; zero mutexes needed</span></span>
+<span class="line">        <span class="tk-kw">while</span> self.running:</span>
+<span class="line">            command <span class="tk-op">=</span> self.mailbox.<span class="tk-fn">poll</span>()</span>
+<span class="line">            <span class="tk-kw">if</span> command is <span class="tk-lit">None</span>:</span>
+<span class="line">                <span class="tk-fn">yield_cpu_pause</span>()</span>
+<span class="line">                <span class="tk-kw">continue</span></span>
+<span class="line">            <span class="tk-kw">try</span>:</span>
+<span class="line">                <span class="tk-com"># Execute mutation sequentially in local thread memory</span></span>
+<span class="line">                result <span class="tk-op">=</span> self.<span class="tk-fn">_apply_mutation</span>(command.entity_id, command.operation, command.payload)</span>
+<span class="line">                command.response_future.<span class="tk-fn">complete</span>(result)</span>
+<span class="line">            <span class="tk-kw">except</span> Exception <span class="tk-kw">as</span> ex:</span>
+<span class="line">                command.response_future.<span class="tk-fn">fail</span>(ex)</span>
+<span class="line"></span>
+<span class="line">    <span class="tk-kw">def</span> <span class="tk-fn">_apply_mutation</span>(self, entity_id, operation, payload):</span>
+<span class="line">        <span class="tk-com"># Exclusive memory ownership: safe from race conditions and deadlocks</span></span>
+<span class="line">        current_val <span class="tk-op">=</span> self.local_state.<span class="tk-fn">get</span>(entity_id, <span class="tk-num">0</span>)</span>
+<span class="line">        <span class="tk-kw">if</span> operation <span class="tk-op">==</span> <span class="tk-str">&quot;INCREMENT&quot;</span>:</span>
+<span class="line">            self.local_state[entity_id] <span class="tk-op">=</span> current_val <span class="tk-op">+</span> payload.<span class="tk-fn">get</span>(<span class="tk-str">&quot;amount&quot;</span>, <span class="tk-num">1</span>)</span>
+<span class="line">        <span class="tk-kw">elif</span> operation <span class="tk-op">==</span> <span class="tk-str">&quot;SET&quot;</span>:</span>
+<span class="line">            self.local_state[entity_id] <span class="tk-op">=</span> payload.<span class="tk-fn">get</span>(<span class="tk-str">&quot;value&quot;</span>)</span>
+<span class="line">        <span class="tk-kw">return</span> self.local_state[entity_id]</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Unbounded queue memory exhaustion:</strong> Permitting incoming request queues to grow without limits during upstream surges, eventually triggering JVM heap exhaustion or OS Out-Of-Memory kills.</li>
+          <li><strong>Leaking mutable state in messages:</strong> Passing mutable object references inside message payloads, allowing the sender and receiver to modify the same memory concurrently and violating thread safety.</li>
+          <li><strong>Blocking within message handlers:</strong> Executing synchronous I/O, database queries, or blocking REST calls inside a single-threaded message consumer, completely stalling all subsequent messages in that queue.</li>
+          <li><strong>Neglecting backpressure propagation:</strong> Failing to signal upstream producers to slow down when queues approach capacity, resulting in catastrophic packet dropouts or client timeouts.</li>
+          <li><strong>Over-partitioning / actor sprawl:</strong> Spawning millions of fine-grained actors for trivial calculations, resulting in scheduling overhead and memory fragmentation that outstrips processing benefits.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>High-scale engineering architectures—such as the LMAX Disruptor (processing over 6 million orders/sec on a single thread), Erlang/OTP telecom systems, Apache Kafka, and Akka actor systems—consistently reject shared-memory locking in favor of single-writer message queues.</p>
+        <ul>
+          <li><strong>Adopt single-writer event loops:</strong> Dedicate an event-driven worker pinned to a specific CPU core (using thread affinity) to own and mutate a partition of data sequentially from an in-memory lock-free ring buffer.</li>
+          <li><strong>Enforce bounded asynchronous channels:</strong> Use bounded lock-free queues (such as MPSC or SPSC ring buffers) and apply backpressure to reject or defer incoming requests at ingress before queues exceed memory budgets.</li>
+          <li><strong>Partition state by domain key:</strong> Shard shared data components deterministically by customer ID or entity hash so that independent workers process distinct partitions in parallel without cross-talk.</li>
+          <li><strong>Pass deeply immutable message envelopes:</strong> Ensure data passed through message queues is deeply frozen or copied by value to prevent multiple threads from mutating the same memory reference behind the scenes.</li>
+          <li><strong>Correlate asynchronous request-reply:</strong> Attach UUID correlation IDs and timeout timers to client requests so API gateways can match asynchronous worker responses without blocking web worker threads.</li>
+          <li><strong>Implement dead-letter queues (DLQs):</strong> Route malformed or poisonous messages that fail processing to an isolated DLQ to prevent individual consumer threads from crashing or entering infinite failure loops.</li>
+        </ul>
+        <p>Eliminate thread locks by design: give each data component a dedicated single-threaded owner, feed it through bounded queues, and let messages handle coordination.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p><strong>Do not communicate by sharing memory; share memory by communicating.</strong> Isolating mutable state behind single-threaded message-passing workers eliminates locks, deadlocks, and race conditions at scale.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

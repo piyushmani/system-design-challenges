@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maya&#x27;s dilemma: selecting a read-versus-write strategy for a read-heavy catalog — System Design Challenges</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=Public+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a href="../index.html" class="topbar-brand">
+        <span class="logo">SD</span>
+        System Design Challenges
+      </a>
+      <div class="topbar-right">
+        <span class="topbar-date">01 APR 2026</span>
+                <button class="theme-toggle" aria-label="Toggle Theme">
+          <span class="sun-icon">☀️</span>
+          <span class="moon-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="question-nav-row">
+      <a href="../index.html" class="back-link">
+        <span class="arrow">←</span> All Problems
+      </a>
+      <div class="tags">
+        <span class="tag tag--purple">Read vs Write Optimization</span>
+      <span class="tag tag--green">Caching</span>
+      <span class="tag tag--amber">Architecture</span>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="q-label">Challenge</div>
+      <h1 class="q-title">Maya&#x27;s dilemma: selecting a read-versus-write strategy for a read-heavy catalog</h1>
+      <p class="q-scenario"><strong>Maya</strong> is a backend architect for an <strong>international e-commerce catalog</strong>. The workload is heavily read-skewed: about <strong>150k reads/second</strong> (product pages, personalization, search) against roughly <strong>100 writes/second</strong> (product edits, inventory, price changes). Reads run <strong>intricate, denormalized queries</strong> (aggregations and joins) and need <strong>sub-100 ms p99 latency worldwide</strong>. <strong>Price and inventory</strong> writes must be strict to prevent overselling, while tags and descriptions tolerate brief UI delay. The team needs <strong>horizontal read scaling across regions</strong>, high availability, acceptable write latency and <strong>visible data staleness</strong>. Which primary strategy fits best?</p>
+    </div>
+
+    <div class="options-list" id="optionsList" data-correct="2">
+      <div class="option" data-idx="0">
+        <div class="opt-letter">A</div>
+        <div class="opt-text">Send reads to asynchronous database replicas (one primary, many followers) and add followers in each region. Rely on replication lag being eventually consistent, with no dedicated cache or separate read models.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="1">
+        <div class="opt-letter">B</div>
+        <div class="opt-text">Put a centralized write-through cache (for example a global Redis cluster) in front of the primary database. Every write updates both the DB and the cache synchronously, and all reads go to the cache, which is treated as the sole authoritative read source.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+      <div class="option" data-idx="2">
+        <div class="opt-letter">C</div>
+        <div class="opt-text">Use CQRS: a single authoritative write service handles transactional updates and appends events to a durable log. Build denormalized, regional read models (materialized views) asynchronously from those events and serve queries from them and local caches. Monitor lag and add compensations for critical writes.</div>
+        <div class="opt-badge">✓ Best Answer</div>
+      </div>
+      <div class="option" data-idx="3">
+        <div class="opt-letter">D</div>
+        <div class="opt-text">Keep a single SQL cluster but partition it by product ID across multiple primary shards. Route all reads and writes to the owning shard leader for strict consistency and scale reads and writes by adding shard leaders.</div>
+        <div class="opt-badge">✗ Not Best</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn--primary" id="btnSubmit" disabled>
+        <span class="icon">⚡</span> Reveal Answer
+      </button>
+    </div>
+
+    <section class="answer-section" id="answerSection">
+
+      <div class="answer-header">
+        <div class="answer-icon">✅</div>
+        <h2>Answer &amp; In-Depth Explanation</h2>
+      </div>
+
+      <div class="explanation-card best">
+        <h3><span class="emoji">🏆</span> Best Answer — C: CQRS with Event Log and Regional Read Models</h3>
+        <p>Option C is the best fit. With roughly 1,500 reads for every write, the right move is to separate the two models: keep a small, strongly consistent write path and <strong>pre-compute the answers to the expensive read queries</strong> into regional materialized views fed from a durable event log. Here's why it stands out:</p>
+        <ul>
+          <li><strong>Moves expensive work to write time:</strong> joins and aggregations are computed once per change by projectors, not 150k times per second at read time. Read stores hold query-shaped documents, so most reads become key lookups.</li>
+          <li><strong>Reads scale horizontally and regionally:</strong> each region consumes the event log into its own read store and cache, so users hit a nearby copy and the p99 target is not at the mercy of cross-ocean round trips.</li>
+          <li><strong>The write path stays small and strict:</strong> 100 writes/s fits comfortably on one transactional store. Price and inventory are validated against this authoritative store, which prevents overselling without distributing the write path.</li>
+          <li><strong>Staleness becomes observable:</strong> every event carries a commit timestamp and a version, so projection lag per region is a metric with an alert threshold. Replica lag in Option A exists too, but it is rarely measured per query.</li>
+          <li><strong>Different consistency per field:</strong> tags and descriptions can be shown from the read model as is. For price and inventory, the cart and checkout re-validate against the write service, with compensation (reprice or cancel) as a rare fallback.</li>
+          <li><strong>Resilient and rebuildable:</strong> a region that falls behind or loses its store can rebuild from the log, and regions keep serving reads while the write region is briefly unavailable.</li>
+        </ul>
+        <p>Keep one authoritative write store, publish changes through an <strong>outbox</strong> to a durable log, build <strong>query-shaped read models per region</strong>, and track <strong>projection lag per region</strong> against a freshness SLO. Re-validate price and inventory at checkout.</p>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🔍</span> Why Not the Other Options?</h3>
+        <p>Each alternative is a valid technique — but none addresses the core problem as directly:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🪞</span>
+            <h4>A — Async Read Replicas</h4>
+          </div>
+          <p>Replicas copy the normalized schema, so every replica still executes the expensive joins and aggregations. More replicas add capacity but do not make each query faster, and hitting a worldwide p99 of 100 ms on intricate queries is hard. Replication lag is unbounded unless someone monitors it, and there is nowhere to put search or personalized views. <strong>Caveat:</strong> replicas are a fine, simple fix for moderate read loads with simple queries, and they are still useful for reporting inside Option C.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>B — Central Write-Through Cache as Sole Read Source</h4>
+          </div>
+          <p>A cache is a performance layer, not a system of record. A single global cluster means distant regions pay cross-ocean latency, and an outage or mass eviction would take reads down or push them onto the database. Updating the DB and the cache synchronously is a <strong>dual write</strong> that can fail halfway, and a key-value cache cannot answer joins, aggregations or search unless the values are pre-computed, which is Option C's materialized-view idea without the durable log. <strong>Caveat:</strong> regional caches in front of read models are very useful, just not as the authority.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">🧩</span>
+            <h4>D — Shard by Product ID</h4>
+          </div>
+          <p>Sharding scales <em>writes</em> and storage, but writes are only about 100/s here. The read queries aggregate and join across products (categories, search, personalization), so they turn into scatter-gather requests across shards, which raises latency. Shard leaders sit in specific places, so global read latency is not fixed, and cross-shard consistency and rebalancing add operational load. It solves a problem this workload does not have.</p>
+        </div>
+        <div class="strategy-item" style="border-color:#34d39940;">
+          <div class="strategy-header">
+            <span class="s-icon">⚡</span>
+            <h4>C — CQRS with Event Log and Regional Read Models ✓</h4>
+          </div>
+          <p>Use CQRS: a single authoritative write service handles transactional updates and appends events to a durable log. Build denormalized, regional read models (materialized views) asynchronously from thos</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">⚖️</span> Trade-off Comparison</h3>
+        <p>How each approach stacks up across key engineering dimensions:</p>
+        <div class="tt-wrap">
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Approach</th><th>Global Read Scalability</th><th>p99 Read Latency</th><th>Critical-Write Consistency</th><th>Query Flexibility (joins, aggregates)</th><th>Staleness Observability</th><th>Operational Complexity</th></tr>
+            </thead>
+            <tbody>
+            <tr><td class="tt-option">A — Async Read Replicas</td><td>Linear but costly ⚠</td><td>Moderate ⚠ (heavy queries)</td><td>Strong on primary ✅</td><td>High but slow ⚠</td><td>Weak ❌ (lag rarely tracked)</td><td>Low ✅</td></tr>
+            <tr><td class="tt-option">B — Central Write-Through Cache</td><td>High near the cache ⚠</td><td>Good in one region only ⚠</td><td>Risky ❌ (dual write)</td><td>Poor ❌</td><td>Weak ⚠</td><td>Medium ⚠</td></tr>
+            <tr class="tt-best"><td class="tt-option">C — CQRS + Regional Read Models ✓</td><td>Very high ✅</td><td>Low ✅ (local lookups)</td><td>Strong on write path ✅</td><td>Excellent ✅ (pre-computed)</td><td>Strong ✅</td><td>High ❌</td></tr>
+            <tr><td class="tt-option">D — Shard by Product ID</td><td>Limited for cross-shard reads ❌</td><td>Poor ❌ (scatter-gather)</td><td>Strong per shard ✅</td><td>Poor ❌</td><td>Weak ⚠</td><td>High ❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🎯</span> When Would You Pick Each?</h3>
+        <p>Every option is the <strong>right answer</strong> in a specific context:</p>
+      </div>
+
+      <div class="strategy-grid">
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>A — Async Read Replicas</h4>
+          </div>
+          <p>Moderate read load, simple queries that run fast on a normalized schema, one or few regions, and replica lag that users and business rules can tolerate.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>B — Central Write-Through Cache</h4>
+          </div>
+          <p>As an accelerator in front of an authoritative store for hot keys, ideally regional and combined with Option C. Not as the sole source for reads.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>C — CQRS + Regional Read Models</h4>
+          </div>
+          <p>Heavy read skew, complex or aggregated queries, multi-region low-latency requirements and mixed consistency needs across fields.</p>
+        </div>
+        <div class="strategy-item">
+          <div class="strategy-header">
+            <span class="s-icon">📌</span>
+            <h4>D — Shard by Product ID</h4>
+          </div>
+          <p>Write volume or data size exceeds one node and most queries naturally key by the shard key. Not for read-heavy workloads with cross-entity queries.</p>
+        </div>
+
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🗺️</span> Regional Read Path</h3>
+        <p>Reads are served from the nearest edge, cache or regional read model and never touch the write database:</p>
+        <figure class="viz-window diagram-window">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">diagram · sequenceDiagram</span>
+            <button class="viz-btn diagram-expand" type="button" aria-label="Toggle fullscreen">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span>Expand</span>
+            </button>
+          </div>
+          <div class="diagram-canvas">
+            <pre class="mermaid" data-source="sequenceDiagram
+    participant C as Client
+    participant E as Regional Edge Cache
+    participant R as Regional Read API
+    participant K as Regional Cache
+    participant S as Regional Read Store
+    C-&gt;&gt;E: GET /products/42
+    alt Edge hit
+        E--&gt;&gt;C: Cached page
+    else Edge miss
+        E-&gt;&gt;R: Forward
+        R-&gt;&gt;K: Get product:42
+        alt Cache hit
+            K--&gt;&gt;R: View v18
+        else Cache miss
+            R-&gt;&gt;S: Query denormalized view
+            S--&gt;&gt;R: View v18
+            R-&gt;&gt;K: Set with short TTL
+        end
+        R--&gt;&gt;E: 200 with ETag v18
+        E--&gt;&gt;C: Response
+    end">sequenceDiagram
+    participant C as Client
+    participant E as Regional Edge Cache
+    participant R as Regional Read API
+    participant K as Regional Cache
+    participant S as Regional Read Store
+    C-&gt;&gt;E: GET /products/42
+    alt Edge hit
+        E--&gt;&gt;C: Cached page
+    else Edge miss
+        E-&gt;&gt;R: Forward
+        R-&gt;&gt;K: Get product:42
+        alt Cache hit
+            K--&gt;&gt;R: View v18
+        else Cache miss
+            R-&gt;&gt;S: Query denormalized view
+            S--&gt;&gt;R: View v18
+            R-&gt;&gt;K: Set with short TTL
+        end
+        R--&gt;&gt;E: 200 with ETag v18
+        E--&gt;&gt;C: Response
+    end</pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🧑‍💻</span> Versioned Projection and Authoritative Checkout Check</h3>
+        <p>The projector builds query-shaped views and reports lag, while checkout re-validates price and stock against the write service:</p>
+        <figure class="viz-window code-block">
+          <div class="viz-bar">
+            <span class="viz-dots"><i></i><i></i><i></i></span>
+            <span class="viz-label">pseudocode</span>
+            <button class="viz-btn code-copy" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code><span class="line"><span class="tk-kw">function</span> <span class="tk-fn">projectProductChanged</span>(event, region):           <span class="tk-com">// partition key = productId</span></span>
+<span class="line">    current <span class="tk-op">=</span> readStore.<span class="tk-fn">get</span>(event.productId)</span>
+<span class="line">    <span class="tk-kw">if</span> current <span class="tk-op">!=</span> <span class="tk-lit">null</span> <span class="tk-kw">and</span> event.version <span class="tk-op">&lt;=</span> current.version:</span>
+<span class="line">        <span class="tk-kw">return</span>                                           <span class="tk-com">// duplicate or out-of-order event</span></span>
+<span class="line"></span>
+<span class="line">    view <span class="tk-op">=</span> <span class="tk-fn">buildProductView</span>(event)                       <span class="tk-com">// denormalize: category, brand, aggregates</span></span>
+<span class="line">    readStore.<span class="tk-fn">put</span>(event.productId, view, version <span class="tk-op">=</span> event.version)</span>
+<span class="line">    cache.<span class="tk-fn">delete</span>(<span class="tk-str">&#x27;product:&#x27;</span> <span class="tk-op">+</span> event.productId)</span>
+<span class="line">    metrics.<span class="tk-fn">gauge</span>(<span class="tk-str">&#x27;projection_lag_seconds&#x27;</span>, <span class="tk-fn">now</span>() <span class="tk-op">-</span> event.committedAt, region)</span>
+<span class="line"></span>
+<span class="line"><span class="tk-kw">function</span> <span class="tk-fn">validateCheckout</span>(cart):</span>
+<span class="line">    <span class="tk-kw">for</span> item <span class="tk-kw">in</span> cart.items:</span>
+<span class="line">        truth <span class="tk-op">=</span> writeService.<span class="tk-fn">getPriceAndStock</span>(item.sku)  <span class="tk-com">// strong read from the authoritative store</span></span>
+<span class="line">        <span class="tk-kw">if</span> truth.price <span class="tk-op">!=</span> item.displayedPrice:</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">Repriced</span>(item.sku, truth.price)       <span class="tk-com">// page data was stale</span></span>
+<span class="line">        <span class="tk-kw">if</span> truth.available <span class="tk-op">&lt;</span> item.qty:</span>
+<span class="line">            <span class="tk-kw">return</span> <span class="tk-fn">OutOfStock</span>(item.sku)</span>
+<span class="line">    <span class="tk-kw">return</span> Ok</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="explanation-card" style="border-color:#f8717130;">
+        <h3><span class="emoji">⚠️</span> Common Mistakes to Avoid</h3>
+        <ul class="mistakes-list">
+          <li><strong>Using the read model for strict decisions:</strong> price at checkout and stock decrements must go to the authoritative store, never to a projection.</li>
+          <li><strong>Events without versions:</strong> duplicates and out-of-order deliveries then overwrite newer data. Carry a version and ignore anything not newer.</li>
+          <li><strong>Dual write instead of an outbox:</strong> committing to the DB and publishing separately can lose or duplicate events.</li>
+          <li><strong>No lag metrics:</strong> staleness stays unknown until customers complain. Alert on per-region projection lag.</li>
+          <li><strong>No rebuild plan:</strong> without replay tooling you cannot change a read model or recover a lost one.</li>
+          <li><strong>CQRS everywhere:</strong> applying it to simple CRUD areas adds cost without benefit. Use it where the read and write shapes really differ.</li>
+        </ul>
+      </div>
+
+      <div class="explanation-card">
+        <h3><span class="emoji">🌍</span> Real-World Best Practice</h3>
+        <p>In practice, teams find where the time goes and which fields really need strict consistency before splitting models. A typical sequence looks like this:</p>
+        <ul>
+          <li><strong>Step 0 — Profile and classify:</strong> identify the slowest read queries, and which fields need strict consistency (price, inventory) versus loose (tags, content).</li>
+          <li><strong>Step 1 — CDN and cache for hot pages:</strong> edge caching with short TTLs and stale-while-revalidate removes a large share of load cheaply.</li>
+          <li><strong>Step 2 — Outbox and event log:</strong> publish versioned <code>ProductChanged</code> events from the write store.</li>
+          <li><strong>Step 3 — Regional read models:</strong> choose the store per query type, for example a document store for product pages, a search engine for search and a key-value store for personalization features.</li>
+          <li><strong>Step 4 — Staleness SLOs:</strong> per-region lag metrics, alert thresholds and a documented degraded mode.</li>
+          <li><strong>Step 5 — Authoritative checks:</strong> cart and checkout re-validate price and inventory against the write service or a strongly consistent inventory service.</li>
+          <li><strong>Step 6 — Rebuild and backfill tooling:</strong> replay from the log and rebuild read models blue/green when schemas change.</li>
+        </ul>
+        <p>Add the read-model layer where profiling shows joins and aggregations dominate, not by default.</p>
+      </div>
+
+      <div class="verdict">
+        <div class="v-emoji">💡</div>
+        <h3>Key Takeaway</h3>
+        <p>When reads outnumber writes by orders of magnitude and the queries are expensive, <strong>stop recomputing answers at read time</strong>. Keep a small authoritative write path, project changes into regional, query-shaped read models, and measure staleness explicitly. Re-check the few fields that must be exact (price and inventory) at the moment of purchase.</p>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Made with ☕ · System Design Challenges
+    </footer>
+  </div>
+  <script src="../js/main.js"></script>
+</body>
+</html>

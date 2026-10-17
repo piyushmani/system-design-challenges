@@ -12,6 +12,19 @@ const STYLE_MAP = {
 const ACTIVE_STYLE_ID = 5;
 document.documentElement.setAttribute('data-style', STYLE_MAP[ACTIVE_STYLE_ID] || 'default');
 
+const themeToggleBtn = document.querySelector('.theme-toggle');
+
+themeToggleBtn.addEventListener('auxclick', (event) => {
+  event.preventDefault();
+  function getRandomKey(map) {
+    const keys = Object.keys(map);
+    const randomIndex = Math.floor(Math.random() * keys.length);
+    return Number(keys[randomIndex]);
+  }
+  const newId = getRandomKey(STYLE_MAP);
+  document.documentElement.setAttribute('data-style', STYLE_MAP[newId]);
+});
+
 /* ══════════════════════════════════════════════════
    Daily Dev Quiz — Shared Quiz Interaction Logic
    ══════════════════════════════════════════════════ */

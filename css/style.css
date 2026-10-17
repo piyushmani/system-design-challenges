@@ -2787,17 +2787,42 @@ body.no-scroll {
 
 .problem-card .card-tags {
   display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  margin-top: auto;
+  width: 100%;
+}
+
+.problem-card .card-tags-top {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: .35rem;
 }
 
+.problem-card .card-tags-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .35rem;
+  width: 100%;
+}
+
+.problem-card .card-tags-bottom .tag {
+  max-width: calc(100% - 85px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 .problem-card .card-date {
-  font-size: .65rem;
+  font-size: .75rem;
   color: var(--text-dim);
   font-family: var(--font-mono);
   margin-left: auto;
-  /* Pushes date to the right */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .problem-card .card-arrow {
